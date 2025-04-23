@@ -129,7 +129,7 @@ export default defineConfig((config) => {
       }),
       UnoCSS(),
       tsconfigPaths(),
-      chrome129IssuePlugin(),
+      crossOriginIsolationPlugin(),
       config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
     ],
     envPrefix: [
@@ -148,6 +148,21 @@ export default defineConfig((config) => {
     },
   };
 });
+
+function crossOriginIsolationPlugin() {
+  return {
+    name: 'cross-origin-isolation',
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((req: any, res: any, next: any) => {
+        // Add Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy headers
+        res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
+        res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        next();
+      });
+    },
+  };
+}
 
 function chrome129IssuePlugin() {
   return {
