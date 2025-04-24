@@ -158,6 +158,12 @@ function crossOriginIsolationPlugin() {
         res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
         res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        
+        // Add CORS headers to allow iframe embedding from any origin
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+        
         next();
       });
     },

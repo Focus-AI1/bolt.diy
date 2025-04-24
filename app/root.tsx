@@ -62,6 +62,7 @@ export const Head = createHead(() => (
     <Meta />
     <Links />
     <script dangerouslySetInnerHTML={{ __html: inlineThemeCode }} />
+    <script src="/integration/iframe-handler.js" defer></script>
   </>
 ));
 

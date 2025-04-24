@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "integrationPoints": [
+    {
+      "file": "public/integration/iframe-handler.js",
+      "purpose": "Enables communication between the ironman application and bolt.diy iframe",
+      "lastModified": "2025-04-24"
+    },
+    {
+      "file": "app/root.tsx",
+      "purpose": "Updated to reference the integration/iframe-handler.js file",
+      "lastModified": "2025-04-24"
+    },
+    {
+      "file": "vite.config.ts",
+      "purpose": "Configured for proper CORS and iframe embedding",
+      "lastModified": "2025-04-24"
+    }
+  ],
+  "maintainedBy": "Focus-AI"
+}
