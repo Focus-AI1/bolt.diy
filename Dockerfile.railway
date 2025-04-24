@@ -1,10 +1,14 @@
 FROM ghcr.io/stackblitz-labs/bolt.diy:latest
 
+WORKDIR /app
+
 ENV NODE_ENV=production \
     COMPOSE_PROFILES=production \
     PORT=5173 \
     RUNNING_IN_DOCKER=true
 
+RUN which npm
+RUN echo 'hi there'
 RUN npm install -g pnpm
 RUN pnpm install
 
