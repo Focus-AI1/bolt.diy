@@ -1,0 +1,19 @@
+[build]
+serviceName = "bolt-dev"
+dockerfilePath = "bolt.diy/Dockerfile"
+
+[deploy]
+startCommand = "pnpm install && pnpm run dev --host 0.0.0.0"
+
+[env]
+NODE_ENV = "development"
+VITE_HMR_PROTOCOL = "ws"
+VITE_HMR_HOST = "0.0.0.0"
+VITE_HMR_PORT = "5173"
+CHOKIDAR_USEPOLLING = "true"
+WATCHPACK_POLLING = "true"
+RUNNING_IN_DOCKER = "true"
+NEXT_PUBLIC_API_URL = "http://localhost:8000"
+
+[[ports]]
+port = 5173
