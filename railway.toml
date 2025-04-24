@@ -1,6 +1,6 @@
 [build]
 serviceName = "bolt-dev"
-dockerfilePath = "bolt.diy/Dockerfile"
+dockerfilePath = "bolt.diy/Dockerfile.railway"
 
 [deploy]
 startCommand = "pnpm install && pnpm run dev --host 0.0.0.0"
