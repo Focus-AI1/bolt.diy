@@ -18,8 +18,10 @@
       textarea.value = prompt;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       
-      // If autoSubmit is true, find and click the send button
+      // URL parameter autoSubmit is deprecated - we now use postMessage
+      // Keeping this for backward compatibility
       if (autoSubmit) {
+        console.log('WARNING: Using deprecated URL parameter for autoSubmit');
         setTimeout(() => {
           const sendButton = document.querySelector('button[type="submit"]') || 
                             document.querySelector('button.send-button') ||
@@ -30,7 +32,7 @@
                             );
           
           if (sendButton) {
-            console.log('Auto-submitting prompt');
+            console.log('Auto-submitting prompt via URL parameter');
             sendButton.click();
           }
         }, 1000);
@@ -46,13 +48,32 @@
     // Process messages from the parent window
     if (event.data && event.data.type === 'SET_PROMPT') {
       const newPrompt = event.data.prompt;
-      console.log('Received SET_PROMPT message:', newPrompt);
+      const shouldAutoSubmit = event.data.autoSubmit === true;
+      console.log('Received SET_PROMPT message:', newPrompt, 'autoSubmit:', shouldAutoSubmit);
       
       // Set the prompt in the textarea
       const textarea = document.querySelector('textarea');
       if (textarea) {
         textarea.value = newPrompt;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // If autoSubmit is true, find and click the send button
+        if (shouldAutoSubmit) {
+          setTimeout(() => {
+            const sendButton = document.querySelector('button[type="submit"]') || 
+                              document.querySelector('button.send-button') ||
+                              Array.from(document.querySelectorAll('button')).find(btn => 
+                                btn.textContent?.includes('Send') || 
+                                btn.innerHTML.includes('send') ||
+                                btn.innerHTML.includes('paper-plane')
+                              );
+            
+            if (sendButton) {
+              console.log('Auto-submitting prompt via postMessage');
+              sendButton.click();
+            }
+          }, 500);
+        }
       }
     } else if (event.data && event.data.type === 'SUBMIT_PROMPT') {
       console.log('Received SUBMIT_PROMPT message');
