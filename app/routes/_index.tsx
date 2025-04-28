@@ -19,10 +19,12 @@ export const loader = () => json({});
  */
 export default function Index() {
   return (
-    <div className="flex flex-col h-full w-full bg-bolt-elements-background-depth-1">
+    <div className="flex flex-col min-h-screen w-full bg-bolt-elements-background-depth-1 overflow-x-hidden">
       <BackgroundRays />
       <Header />
-      <ClientOnly fallback={<BaseChat />}>{() => <Chat />}</ClientOnly>
+      <div className="flex-1 flex flex-col overflow-y-auto">
+        <ClientOnly fallback={<BaseChat />}>{() => <Chat />}</ClientOnly>
+      </div>
     </div>
   );
 }
