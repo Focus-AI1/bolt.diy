@@ -465,6 +465,9 @@ export const ChatImpl = memo(
       resetEnhancer();
 
       textareaRef.current?.blur();
+      
+      // Make sure we stay in chat mode even if PRD is running in background
+      chatType.set('chat');
     };
 
     /**

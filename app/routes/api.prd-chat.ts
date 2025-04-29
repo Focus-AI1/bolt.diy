@@ -1,5 +1,3 @@
-//Cannot find module 'openai' imported from '/app/app/routes/api.prd-chat.ts'
-//please... always refer to api.chat.ts!
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { createDataStream } from 'ai';
 import { streamText, type Messages, type StreamingOptions } from '~/lib/.server/llm/stream-text';
@@ -8,7 +6,7 @@ import type { IProviderSetting } from '~/types/model';
 import { createScopedLogger } from '~/utils/logger';
 
 // Basic structure adapted from api.chat.ts for PRD-specific chat
-// TODO: Implement PRD-specific logic if needed beyond standard chat streaming
+// Using specialized PRD prompt for Product Requirements Document creation
 
 export async function action(args: ActionFunctionArgs) {
   return prdChatAction(args);
@@ -100,7 +98,7 @@ async function prdChatAction({ context, request }: ActionFunctionArgs) {
            options,
            apiKeys,
            providerSettings,
-           promptId,
+           promptId: promptId || 'prd', // Default to PRD prompt if none specified
         });
 
         if (!result) {

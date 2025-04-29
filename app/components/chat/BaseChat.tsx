@@ -43,6 +43,7 @@ import { SupabaseConnection } from './SupabaseConnection';
 import PRDChat from './PRDChat.client';
 import PRDWorkbench from '../workbench/PRDWorkbench.client';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { atom } from 'nanostores';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -84,6 +85,18 @@ interface BaseChatProps {
   data?: JSONValue[] | undefined;
   actionRunner?: ActionRunner;
 }
+
+export const initialPrdMessageStore = atom<{
+  text: string;
+  files: File[];
+  imageDataList: string[];
+  autoSubmit: boolean;
+}>({
+  text: '',
+  files: [],
+  imageDataList: [],
+  autoSubmit: false,
+});
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
@@ -148,9 +161,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         setProgressAnnotations(progressList);
       }
     }, [data]);
-    useEffect(() => {
-      console.log(transcript);
-    }, [transcript]);
 
     useEffect(() => {
       onStreamingChange?.(isStreaming);
@@ -264,49 +274,51 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         return;
       }
 
-      // Logic for switching to PRD mode based on toggle state on first message
+      // Logic for handling the first message
       if (!chatStarted && triggerChatStart) {
         triggerChatStart(); // Mark chat as started regardless of mode
+        
+        // If PRD mode is on, store the message for PRD processing but don't switch UI
         if (isPrdModeToggleOn) {
-            setChatMode('prd');
-            // Clear input when switching to PRD mode
-            if (handleInputChange) {
-              const syntheticEvent = {
-                target: { value: '' },
-              } as React.ChangeEvent<HTMLTextAreaElement>;
-              handleInputChange(syntheticEvent);
-            }
-            // Optionally clear files/images for PRD mode start
-            setUploadedFiles?.([]);
-            setImageDataList?.([]);
-            console.log("Switching to PRD mode based on toggle.");
-            // If we switch to PRD mode here, we don't proceed to send a message from BaseChat.
-            return;
+          // First reset the store to clear any previous data
+          initialPrdMessageStore.set({
+            text: '',
+            files: [],
+            imageDataList: [],
+            autoSubmit: false
+          });
+          
+          // Then store the message content and files in the store for PRDChat to use in background
+          initialPrdMessageStore.set({
+            text: messageContent,
+            files: uploadedFiles || [],
+            imageDataList: imageDataList || [],
+            autoSubmit: true
+          });
+          
+          // Don't switch to PRD mode UI, but still process in background
+          // Keep the regular chat UI visible
         }
       }
 
-      // Only proceed with sending the message if we're in chat mode.
-      // The check for isPrdModeToggleOn is removed here as it's only relevant for the *initial* mode setting.
-      if (chatMode === 'chat') {
-        if (sendMessage) {
-          sendMessage(event, messageInput);
+      // Always proceed with sending the message to the regular chat endpoint
+      if (sendMessage) {
+        sendMessage(event, messageInput);
 
-          if (recognition && isListening) {
-            recognition.abort();
-            setTranscript('');
-            setIsListening(false);
+        if (recognition && isListening) {
+          recognition.abort();
+          setTranscript('');
+          setIsListening(false);
 
-            // Clear the input by triggering handleInputChange with empty value
-            if (handleInputChange) {
-              const syntheticEvent = {
-                target: { value: '' },
-              } as React.ChangeEvent<HTMLTextAreaElement>;
-              handleInputChange(syntheticEvent);
-            }
+          // Clear the input by triggering handleInputChange with empty value
+          if (handleInputChange) {
+            const syntheticEvent = {
+              target: { value: '' },
+            } as React.ChangeEvent<HTMLTextAreaElement>;
+            handleInputChange(syntheticEvent);
           }
         }
       }
-      // Note: If chatMode is 'prd', the PRDChat component handles its own message sending logic.
     };
 
     const handleFileUpload = () => {
@@ -370,6 +382,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div ref={scrollRef} className="flex flex-col lg:flex-row w-full h-full overflow-hidden">
           <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full overflow-hidden')}>
+            {/* Hidden PRDChat component that runs in the background when isPrdModeToggleOn is true */}
+            {isPrdModeToggleOn && chatStarted && chatMode === 'chat' && (
+              <div className="hidden">
+                <ClientOnly>{() => <PRDChat backgroundMode={true} />}</ClientOnly>
+              </div>
+            )}
+            
             {!chatStarted && chatMode === 'chat' && (
               <div id="intro" className="mt-[5vh] max-w-chat mx-auto text-center px-4 lg:px-0 flex-shrink-0">
                 <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
@@ -654,12 +673,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
                             <IconButton
                               title="Model Settings"
-                              className={classNames('transition-all flex items-center gap-1', {
-                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                  isModelSettingsCollapsed,
-                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                  !isModelSettingsCollapsed,
-                              })}
+                              className={classNames(
+                                'transition-all flex items-center gap-1',
+                                {
+                                  'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
+                                    isModelSettingsCollapsed,
+                                  'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
+                                    !isModelSettingsCollapsed,
+                                })}
                               onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
                               disabled={!providerList || providerList.length === 0}
                             >
