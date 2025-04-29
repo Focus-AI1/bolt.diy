@@ -9,8 +9,9 @@ import { Checkbox } from '~/components/ui/Checkbox';
 interface HistoryItemProps {
   item: ChatHistoryItem;
   onDelete?: (event: React.UIEvent) => void;
-  onDuplicate?: (id: string) => void;
-  exportChat: (id?: string) => void;
+  onDuplicate?: (event: React.MouseEvent) => void;
+  onExport?: (event: React.MouseEvent) => void;
+  onClick?: () => void;
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: (id: string) => void;
@@ -20,13 +21,15 @@ export function HistoryItem({
   item,
   onDelete,
   onDuplicate,
-  exportChat,
+  onExport,
+  onClick,
   selectionMode = false,
   isSelected = false,
   onToggleSelection,
 }: HistoryItemProps) {
   const { id: urlId } = useParams();
   const isActiveChat = urlId === item.urlId;
+  const chatType = item.type || 'chat'; // Default to 'chat' for backward compatibility
 
   const { editing, handleChange, handleBlur, handleSubmit, handleKeyDown, currentDescription, toggleEditMode } =
     useEditChatDescription({
@@ -42,9 +45,12 @@ export function HistoryItem({
         e.stopPropagation();
         console.log('Item clicked in selection mode:', item.id);
         onToggleSelection?.(item.id);
+      } else if (onClick) {
+        e.preventDefault();
+        onClick();
       }
     },
-    [selectionMode, item.id, onToggleSelection],
+    [selectionMode, item.id, onToggleSelection, onClick],
   );
 
   const handleCheckboxChange = useCallback(() => {
@@ -65,14 +71,17 @@ export function HistoryItem({
     [onDelete, item.id],
   );
 
+  // Determine the correct route based on chat type
+  const chatRoute = chatType === 'prd' ? `/prd/${item.urlId}` : `/chat/${item.urlId}`;
+
   return (
     <div
       className={classNames(
         'group rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50/80 dark:hover:bg-gray-800/30 overflow-hidden flex justify-between items-center px-3 py-2 transition-colors',
         { 'text-gray-900 dark:text-white bg-gray-50/80 dark:bg-gray-800/30': isActiveChat },
-        { 'cursor-pointer': selectionMode },
+        { 'cursor-pointer': selectionMode || !!onClick },
       )}
-      onClick={selectionMode ? handleItemClick : undefined}
+      onClick={handleItemClick}
     >
       {selectionMode && (
         <div className="flex items-center mr-2" onClick={(e) => e.stopPropagation()}>
@@ -104,12 +113,16 @@ export function HistoryItem({
         </form>
       ) : (
         <a
-          href={`/chat/${item.urlId}`}
+          href={chatRoute}
           className="flex w-full relative truncate block"
-          onClick={selectionMode ? handleItemClick : undefined}
+          onClick={handleItemClick}
         >
           <WithTooltip tooltip={currentDescription}>
-            <span className="truncate pr-24">{currentDescription}</span>
+            <div className="flex items-center space-x-2 truncate pr-24">
+              {/* Add an icon to indicate chat type */}
+              <span className={chatType === 'prd' ? 'i-ph:note-pencil h-4 w-4 text-blue-500' : 'i-ph:chat-circle h-4 w-4 text-green-500'} />
+              <span className="truncate">{currentDescription}</span>
+            </div>
           </WithTooltip>
           <div
             className={classNames(
@@ -122,7 +135,7 @@ export function HistoryItem({
                 icon="i-ph:download-simple h-4 w-4"
                 onClick={(event) => {
                   event.preventDefault();
-                  exportChat(item.id);
+                  if (onExport) onExport(event);
                 }}
               />
               {onDuplicate && (
@@ -131,7 +144,7 @@ export function HistoryItem({
                   icon="i-ph:copy h-4 w-4"
                   onClick={(event) => {
                     event.preventDefault();
-                    onDuplicate?.(item.id);
+                    onDuplicate(event);
                   }}
                 />
               )}

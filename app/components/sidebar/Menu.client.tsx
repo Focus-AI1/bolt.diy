@@ -322,6 +322,59 @@ export const Menu = () => {
     setDialogContent(content);
   }, []);
 
+  // Function to navigate to the correct route based on chat type
+  const navigateToChatById = useCallback((item: ChatHistoryItem) => {
+    // Check if the chat has a type field, if not, default to 'chat' for backward compatibility
+    const chatType = item.type || 'chat';
+    
+    // Navigate to the appropriate route based on chat type
+    if (chatType === 'prd') {
+      window.location.href = `/prd/${item.urlId}`;
+    } else {
+      window.location.href = `/chat/${item.urlId}`;
+    }
+  }, []);
+
+  // Render the chat history items
+  const renderHistoryItems = useCallback(
+    (items: ChatHistoryItem[]) => {
+      return items.map((item) => (
+        <HistoryItem
+          key={item.id}
+          item={item}
+          selectionMode={selectionMode}
+          isSelected={selectedItems.includes(item.id)}
+          onToggleSelection={(id: string) => {
+            if (selectedItems.includes(id)) {
+              setSelectedItems(selectedItems.filter((itemId) => itemId !== id));
+            } else {
+              setSelectedItems([...selectedItems, id]);
+            }
+          }}
+          onClick={() => {
+            if (!selectionMode) {
+              // Use the new navigation function based on chat type
+              navigateToChatById(item);
+            }
+          }}
+          onDelete={(event) => {
+            setDialogContent({ type: 'delete', item });
+            event.stopPropagation();
+          }}
+          onDuplicate={(event) => {
+            handleDuplicate(item.id);
+            event.stopPropagation();
+          }}
+          onExport={(event) => {
+            exportChat(item.urlId);
+            event.stopPropagation();
+          }}
+        />
+      ));
+    },
+    [exportChat, handleDuplicate, navigateToChatById, selectedItems, selectionMode],
+  );
+
   return (
     <>
       <motion.div
@@ -426,23 +479,7 @@ export const Menu = () => {
                     {category}
                   </div>
                   <div className="space-y-0.5 pr-1">
-                    {items.map((item) => (
-                      <HistoryItem
-                        key={item.id}
-                        item={item}
-                        exportChat={exportChat}
-                        onDelete={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          console.log('Delete triggered for item:', item);
-                          setDialogContentWithLogging({ type: 'delete', item });
-                        }}
-                        onDuplicate={() => handleDuplicate(item.id)}
-                        selectionMode={selectionMode}
-                        isSelected={selectedItems.includes(item.id)}
-                        onToggleSelection={toggleItemSelection}
-                      />
-                    ))}
+                    {renderHistoryItems(items)}
                   </div>
                 </div>
               ))}

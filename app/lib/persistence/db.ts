@@ -60,6 +60,7 @@ export async function setMessages(
   description?: string,
   timestamp?: string,
   metadata?: IChatMetadata,
+  type: 'chat' | 'prd' = 'chat',
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readwrite');
@@ -77,6 +78,7 @@ export async function setMessages(
       description,
       timestamp: timestamp ?? new Date().toISOString(),
       metadata,
+      type,
     });
 
     request.onsuccess = () => resolve();
@@ -195,7 +197,7 @@ export async function forkChat(db: IDBDatabase, chatId: string, messageId: strin
   // Get messages up to and including the selected message
   const messages = chat.messages.slice(0, messageIndex + 1);
 
-  return createChatFromMessages(db, chat.description ? `${chat.description} (fork)` : 'Forked chat', messages);
+  return createChatFromMessages(db, chat.description ? `${chat.description} (fork)` : 'Forked chat', messages, chat.metadata, chat.type);
 }
 
 export async function duplicateChat(db: IDBDatabase, id: string): Promise<string> {
@@ -205,7 +207,7 @@ export async function duplicateChat(db: IDBDatabase, id: string): Promise<string
     throw new Error('Chat not found');
   }
 
-  return createChatFromMessages(db, `${chat.description || 'Chat'} (copy)`, chat.messages);
+  return createChatFromMessages(db, `${chat.description || 'Chat'} (copy)`, chat.messages, chat.metadata, chat.type);
 }
 
 export async function createChatFromMessages(
@@ -213,6 +215,7 @@ export async function createChatFromMessages(
   description: string,
   messages: Message[],
   metadata?: IChatMetadata,
+  type: 'chat' | 'prd' = 'chat',
 ): Promise<string> {
   const newId = await getNextId(db);
   const newUrlId = await getUrlId(db, newId); // Get a new urlId for the duplicated chat
@@ -225,6 +228,7 @@ export async function createChatFromMessages(
     description,
     undefined, // Use the current timestamp
     metadata,
+    type, // Pass the type parameter
   );
 
   return newUrlId; // Return the urlId instead of id for navigation
@@ -241,7 +245,7 @@ export async function updateChatDescription(db: IDBDatabase, id: string, descrip
     throw new Error('Description cannot be empty');
   }
 
-  await setMessages(db, id, chat.messages, chat.urlId, description, chat.timestamp, chat.metadata);
+  await setMessages(db, id, chat.messages, chat.urlId, description, chat.timestamp, chat.metadata, chat.type);
 }
 
 export async function updateChatMetadata(
@@ -255,5 +259,5 @@ export async function updateChatMetadata(
     throw new Error('Chat not found');
   }
 
-  await setMessages(db, id, chat.messages, chat.urlId, chat.description, chat.timestamp, metadata);
+  await setMessages(db, id, chat.messages, chat.urlId, chat.description, chat.timestamp, metadata, chat.type);
 }

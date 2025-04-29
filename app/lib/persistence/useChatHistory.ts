@@ -28,6 +28,7 @@ export interface ChatHistoryItem {
   messages: Message[];
   timestamp: string;
   metadata?: IChatMetadata;
+  type?: 'chat' | 'prd'; // Add type field with 'chat' or 'prd' options
 }
 
 const persistenceEnabled = !import.meta.env.VITE_DISABLE_PERSISTENCE;
@@ -37,15 +38,20 @@ export const db = persistenceEnabled ? await openDatabase() : undefined;
 export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
+export const chatType = atom<'chat' | 'prd'>('chat'); // Add a store for the current chat type
+
 export function useChatHistory() {
   const navigate = useNavigate();
   const { id: mixedId } = useLoaderData<{ id?: string }>();
   const [searchParams] = useSearchParams();
+  const location = window.location.pathname;
+  const isInPRDRoute = location.startsWith('/prd/');
 
   const [archivedMessages, setArchivedMessages] = useState<Message[]>([]);
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
+  const [currentType, setCurrentType] = useState<'chat' | 'prd'>(isInPRDRoute ? 'prd' : 'chat');
 
   useEffect(() => {
     if (!db) {
@@ -64,6 +70,20 @@ export function useChatHistory() {
       getMessages(db, mixedId)
         .then(async (storedMessages) => {
           if (storedMessages && storedMessages.messages.length > 0) {
+            // Set the chat type from stored messages or default to 'chat' for backward compatibility
+            const type = storedMessages.type || 'chat';
+            
+            // Check if the chat type matches the current route
+            // If we're in a PRD route but the chat is a regular chat, or vice versa, redirect to the correct route
+            if ((isInPRDRoute && type === 'chat') || (!isInPRDRoute && type === 'prd')) {
+              const correctPath = type === 'prd' ? `/prd/${mixedId}` : `/chat/${mixedId}`;
+              window.location.href = correctPath;
+              return;
+            }
+            
+            setCurrentType(type);
+            chatType.set(type);
+            
             const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`);
             const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} };
             const summary = snapshot.summary;
@@ -258,6 +278,12 @@ ${value.content}
   return {
     ready: !mixedId || ready,
     initialMessages,
+    urlId,
+    chatType: currentType,
+    setChatType: (type: 'chat' | 'prd') => {
+      setCurrentType(type);
+      chatType.set(type);
+    },
     updateChatMestaData: async (metadata: IChatMetadata) => {
       const id = chatId.get();
 
@@ -321,6 +347,9 @@ ${value.content}
         }
       }
 
+      // Get the current chat type from the store
+      const type = currentType;
+      
       await setMessages(
         db,
         chatId.get() as string,
@@ -329,6 +358,7 @@ ${value.content}
         description.get(),
         undefined,
         chatMetadata.get(),
+        type, // Pass the current chat type
       );
     },
     duplicateCurrentChat: async (listItemId: string) => {
@@ -345,14 +375,14 @@ ${value.content}
         console.log(error);
       }
     },
-    importChat: async (description: string, messages: Message[], metadata?: IChatMetadata) => {
+    importChat: async (description: string, messages: Message[], metadata?: IChatMetadata, type: 'chat' | 'prd' = 'chat') => {
       if (!db) {
         return;
       }
 
       try {
-        const newId = await createChatFromMessages(db, description, messages, metadata);
-        window.location.href = `/chat/${newId}`;
+        const newId = await createChatFromMessages(db, description, messages, metadata, type);
+        window.location.href = type === 'prd' ? `/prd/${newId}` : `/chat/${newId}`;
         toast.success('Chat imported successfully');
       } catch (error) {
         if (error instanceof Error) {

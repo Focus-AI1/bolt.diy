@@ -9,7 +9,7 @@ import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts, useSnapScroll } from '~/lib/hooks';
-import { description, useChatHistory } from '~/lib/persistence';
+import { description, useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
@@ -38,11 +38,17 @@ const logger = createScopedLogger('Chat');
 export function Chat() {
   renderLogger.trace('Chat');
 
-  const { ready, initialMessages, storeMessageHistory, importChat, exportChat } = useChatHistory();
+  const { ready, initialMessages, storeMessageHistory, importChat, exportChat, setChatType } = useChatHistory();
   const title = useStore(description);
+  
   useEffect(() => {
     workbenchStore.setReloadedMessages(initialMessages.map((m) => m.id));
-  }, [initialMessages]);
+    
+    // Set the chat type to 'chat' when the regular chat component is active
+    setChatType('chat');
+    chatType.set('chat');
+    logger.debug('Chat type set to regular chat');
+  }, [initialMessages, setChatType]);
 
   return (
     <>
@@ -310,8 +316,6 @@ export const ChatImpl = memo(
         return;
       }
 
-      runAnimation();
-
       if (!chatStarted) {
         setFakeLoading(true);
 
@@ -517,6 +521,7 @@ export const ChatImpl = memo(
         enhancingPrompt={enhancingPrompt}
         promptEnhanced={promptEnhanced}
         sendMessage={sendMessage}
+        triggerChatStart={runAnimation}
         model={model}
         setModel={handleModelChange}
         provider={provider}
