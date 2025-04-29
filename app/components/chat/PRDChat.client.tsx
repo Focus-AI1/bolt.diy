@@ -175,7 +175,7 @@ const PRDChat = () => {
     isLoading,
     error,
   } = useChat({
-    api: '/api/prd-chat',
+    api: '/api/prd-chat', // Ensure this matches exactly with your API route
     initialMessages: initialMessages, // Use the initialMessages from useChatHistory
     id: 'prd-chat', // Set a unique ID for the PRD chat
     onFinish: (message) => {
@@ -184,6 +184,7 @@ const PRDChat = () => {
     onError: (error) => {
       streamingState.set(false);
       toast.error(`Error: ${error.message}`);
+      console.error('PRD Chat API error:', error);
     },
   });
 
@@ -368,9 +369,20 @@ const PRDChat = () => {
       workbenchStore.showWorkbench.set(true);
     }
     
-    // TODO: Handle file uploads by appending to the message or sending separately
-    // For now, just submit the text input
-    handleSubmit(event as any); // Cast to any to bypass type checking for the ai package
+    // Create message content array with text and images
+    const messageContent: Array<{ type: string; text?: string; image?: string }> = [
+      { type: 'text', text: chatInput }
+    ];
+    
+    // Add images to message content if present
+    if (imageDataList.length > 0) {
+      imageDataList.forEach(imageData => {
+        messageContent.push({ type: 'image', image: imageData });
+      });
+    }
+    
+    // Submit the message with proper content formatting
+    handleSubmit(event as any, { data: { messages: messageContent } });
     
     // Clear uploaded files after sending
     setUploadedFiles([]);
