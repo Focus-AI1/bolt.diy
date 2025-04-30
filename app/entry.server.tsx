@@ -1,3 +1,14 @@
+
+
+if (typeof BroadcastChannel === 'undefined') {
+  (globalThis as any).BroadcastChannel = class {
+    constructor(_name: string) {}
+    postMessage(_msg: any) {}
+    close() {}
+  };
+}
+
+
 import type { AppLoadContext } from '@remix-run/cloudflare';
 import { RemixServer } from '@remix-run/react';
 import { isbot } from 'isbot';
