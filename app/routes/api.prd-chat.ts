@@ -50,6 +50,8 @@ async function prdChatAction({ context, request }: ActionFunctionArgs) {
     promptTokens: 0,
     totalTokens: 0,
   };
+  
+  let lastChunk: string | undefined = undefined;
 
   try {
     const dataStreamResult = createDataStream({
@@ -127,31 +129,68 @@ async function prdChatAction({ context, request }: ActionFunctionArgs) {
         });
 
       },
-       onError(error: unknown): string {
-        logger.error('Error in PRD data stream:', error);
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred in the stream.';
-        // Return JSON string for client
-        return JSON.stringify({ error: errorMessage });
-      },
-    });
+      onError: (error: any) => `Custom error: ${error.message}`,
+    }).pipeThrough(
+      new TransformStream({
+        transform: (chunk, controller) => {
+          if (!lastChunk) {
+            lastChunk = ' ';
+          }
 
-    // Pipe through a simple TransformStream like in api.chat.ts
-    const responseStream = dataStreamResult.pipeThrough(new TransformStream());
+          if (typeof chunk === 'string') {
+            if (chunk.startsWith('g') && !lastChunk.startsWith('g')) {
+              controller.enqueue(encoder.encode(`0: "<div class=\\"__boltThought__\\">"\n`));
+            }
 
-     // Return the result of pipeThrough
-    return new Response(responseStream, { 
-      headers: {
-         'Content-Type': 'text/event-stream; charset=utf-8',
-         Connection: 'keep-alive',
-         'Cache-Control': 'no-cache',
+            if (lastChunk.startsWith('g') && !chunk.startsWith('g')) {
+              controller.enqueue(encoder.encode(`0: "</div>\\n"\n`));
+            }
+          }
+
+          lastChunk = chunk;
+
+          let transformedChunk = chunk;
+
+          if (typeof chunk === 'string' && chunk.startsWith('g')) {
+            let content = chunk.split(':').slice(1).join(':');
+
+            if (content.endsWith('\n')) {
+              content = content.slice(0, content.length - 1);
+            }
+
+            transformedChunk = `0:${content}\n`;
+          }
+
+          // Convert the string stream to a byte stream
+          const str = typeof transformedChunk === 'string' ? transformedChunk : JSON.stringify(transformedChunk);
+          controller.enqueue(encoder.encode(str));
         },
+      }),
+    );
+
+    return new Response(dataStreamResult, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        Connection: 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Text-Encoding': 'chunked',
+      },
     });
 
   } catch (error: any) {
     logger.error('Error in PRD chat action:', error);
-    return new Response(JSON.stringify({ error: error.message || 'An unexpected error occurred' }), {
+    
+    if (error.message?.includes('API key')) {
+      throw new Response('Invalid or missing API key', {
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+    }
+
+    throw new Response(null, {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      statusText: 'Internal Server Error',
     });
   }
 }
