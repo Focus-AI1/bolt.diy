@@ -72,7 +72,10 @@ export function HistoryItem({
   );
 
   // Determine the correct route based on chat type
-  const chatRoute = chatType === 'prd' ? `/prd/${item.urlId}` : `/chat/${item.urlId}`;
+  const chatRoute =
+    chatType === 'prd' ? `/prd/${item.urlId}` :
+    chatType === 'ticket' ? `/ticket/${item.urlId}` :
+    `/chat/${item.urlId}`;
 
   return (
     <div
@@ -120,7 +123,11 @@ export function HistoryItem({
           <WithTooltip tooltip={currentDescription}>
             <div className="flex items-center space-x-2 truncate pr-24">
               {/* Add an icon to indicate chat type */}
-              <span className={chatType === 'prd' ? 'i-ph:note-pencil h-4 w-4 text-blue-500' : 'i-ph:chat-circle h-4 w-4 text-green-500'} />
+              <span className={
+                chatType === 'prd' ? 'i-ph:note-pencil h-4 w-4 text-blue-500' :
+                chatType === 'ticket' ? 'i-ph:ticket h-4 w-4 text-amber-500' :
+                'i-ph:chat-circle h-4 w-4 text-green-500'
+              } />
               <span className="truncate">{currentDescription}</span>
             </div>
           </WithTooltip>

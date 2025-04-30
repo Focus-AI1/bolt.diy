@@ -60,7 +60,7 @@ export async function setMessages(
   description?: string,
   timestamp?: string,
   metadata?: IChatMetadata,
-  type: 'chat' | 'prd' = 'chat',
+  type: 'chat' | 'prd' | 'ticket' = 'chat',
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('chats', 'readwrite');
@@ -215,7 +215,7 @@ export async function createChatFromMessages(
   description: string,
   messages: Message[],
   metadata?: IChatMetadata,
-  type: 'chat' | 'prd' = 'chat',
+  type: 'chat' | 'prd' | 'ticket' = 'chat',
 ): Promise<string> {
   const newId = await getNextId(db);
   const newUrlId = await getUrlId(db, newId); // Get a new urlId for the duplicated chat

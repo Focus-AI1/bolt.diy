@@ -330,6 +330,8 @@ export const Menu = () => {
     // Navigate to the appropriate route based on chat type
     if (chatType === 'prd') {
       window.location.href = `/prd/${item.urlId}`;
+    } else if (chatType === 'ticket') {
+      window.location.href = `/ticket/${item.urlId}`;
     } else {
       window.location.href = `/chat/${item.urlId}`;
     }

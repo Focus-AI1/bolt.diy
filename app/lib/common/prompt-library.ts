@@ -1,6 +1,7 @@
 import { getSystemPrompt } from './prompts/prompts';
 import optimized from './prompts/optimized';
 import prdPrompt from './prompts/prd-prompt';
+import ticketPrompt from './prompts/ticket-prompt';
 
 export interface PromptOptions {
   cwd: string;
@@ -39,6 +40,11 @@ export class PromptLibrary {
       label: 'PRD Prompt',
       description: 'Specialized prompt for creating Product Requirements Documents',
       get: (options) => prdPrompt(options),
+    },
+    ticket: {
+      label: 'Ticket Prompt',
+      description: 'Specialized prompt for analyzing and managing software development tickets',
+      get: (options) => ticketPrompt(options),
     },
   };
   static getList() {

@@ -44,6 +44,8 @@ import PRDChat from './PRDChat.client';
 import PRDWorkbench from '../workbench/PRDWorkbench.client';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { atom } from 'nanostores';
+import TicketChat from './TicketChat.client';
+import TicketWorkbench from '../workbench/TicketWorkbench.client';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -98,6 +100,20 @@ export const initialPrdMessageStore = atom<{
   autoSubmit: false,
 });
 
+export const initialTicketMessageStore = atom<{
+  text: string;
+  files: File[];
+  imageDataList: string[];
+  autoSubmit: boolean;
+}>({
+  text: '',
+  files: [],
+  imageDataList: [],
+  autoSubmit: false,
+});
+
+type ChatMode = 'chat' | 'prd' | 'ticket';
+
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
     {
@@ -149,8 +165,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [transcript, setTranscript] = useState('');
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
-    const [chatMode, setChatMode] = useState<'chat' | 'prd'>('chat');
+    const [chatMode, setChatMode] = useState<ChatMode>('chat');
     const [isPrdModeToggleOn, setIsPrdModeToggleOn] = useState(true);
+    const [isTicketModeToggleOn, setIsTicketModeToggleOn] = useState(true);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
 
     useEffect(() => {
@@ -299,6 +316,28 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           // Don't switch to PRD mode UI, but still process in background
           // Keep the regular chat UI visible
         }
+        
+        // If Ticket mode is on, store the message for Ticket processing but don't switch UI
+        if (isTicketModeToggleOn) {
+          // First reset the store to clear any previous data
+          initialTicketMessageStore.set({
+            text: '',
+            files: [],
+            imageDataList: [],
+            autoSubmit: false
+          });
+          
+          // Then store the message content and files in the store for TicketChat to use in background
+          initialTicketMessageStore.set({
+            text: messageContent,
+            files: uploadedFiles || [],
+            imageDataList: imageDataList || [],
+            autoSubmit: true
+          });
+          
+          // Don't switch to Ticket mode UI, but still process in background
+          // Keep the regular chat UI visible
+        }
       }
 
       // Always proceed with sending the message to the regular chat endpoint
@@ -403,7 +442,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               <div className={classNames(
                 "sticky top-0 z-10 bg-bolt-elements-background-default border-b border-bolt-elements-borderColor flex-shrink-0 transition-all duration-200 ease-in-out",
                 {
-                  "mr-[var(--workbench-width)]": showWorkbench && chatMode === 'prd'
+                  "mr-[var(--workbench-width)]": showWorkbench && (chatMode === 'prd' || chatMode === 'ticket') 
                 }
               )}>
                 <div className="flex items-center justify-center px-6 py-3">
@@ -429,6 +468,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       )}
                     >
                       PRD
+                    </button>
+                    <button
+                      onClick={() => setChatMode('ticket')}
+                      className={classNames(
+                        'px-3 py-1.5 text-sm rounded transition-all',
+                        chatMode === 'ticket'
+                          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
+                          : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
+                      )}
+                    >
+                      Ticket
                     </button>
                   </div>
                 </div>
@@ -720,7 +770,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                   disabled={chatStarted}
                                 >
                                   <span style={{}}>
-                                    PRD & Tickets:
+                                    PRD:
                                   </span>
                                   <span style={{ fontWeight: 600 }}>
                                     {isPrdModeToggleOn ? 'ON' : 'OFF'}
@@ -732,7 +782,55 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                   className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
                                   sideOffset={5}
                                 >
-                                  Generate PRD and Tickets first!
+                                  Generate PRD first!
+                                  <Tooltip.Arrow className="fill-gray-800" />
+                                </Tooltip.Content>
+                              </Tooltip.Portal>
+                            </Tooltip.Root>
+                            <Tooltip.Root>
+                              <Tooltip.Trigger asChild>
+                                <button
+                                  title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    lineHeight: 1.2,
+                                    cursor: chatStarted ? 'not-allowed' : 'pointer',
+                                    opacity: chatStarted ? 0.5 : 1,
+                                    transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
+                                    backgroundColor: isTicketModeToggleOn
+                                      ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
+                                      : 'var(--bolt-elements-background-depth-3, #f9fafb)',
+                                    color: isTicketModeToggleOn
+                                      ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
+                                      : 'var(--bolt-elements-textSecondary, #6b7280)',
+                                    borderColor: isTicketModeToggleOn
+                                      ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
+                                      : 'var(--bolt-elements-borderColor, #e5e7eb)',
+                                  }}
+                                  onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
+                                  disabled={chatStarted}
+                                >
+                                  <span style={{}}>
+                                    Ticket:
+                                  </span>
+                                  <span style={{ fontWeight: 600 }}>
+                                    {isTicketModeToggleOn ? 'ON' : 'OFF'}
+                                  </span>
+                                </button>
+                              </Tooltip.Trigger>
+                              <Tooltip.Portal>
+                                <Tooltip.Content
+                                  className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                  sideOffset={5}
+                                >
+                                  Generate Tickets first!
                                   <Tooltip.Arrow className="fill-gray-800" />
                                 </Tooltip.Content>
                               </Tooltip.Portal>
@@ -751,11 +849,15 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : chatMode === 'prd' ? (
                 <div className="flex-1 flex h-full overflow-hidden justify-center items-center">
                   <ClientOnly>{() => <PRDChat />}</ClientOnly>
                 </div>
-              )}
+              ) : chatMode === 'ticket' ? (
+                <div className="flex-1 flex h-full overflow-hidden justify-center items-center">
+                  <ClientOnly>{() => <TicketChat />}</ClientOnly>
+                </div>
+              ) : null}
             </div>
             {chatMode === 'chat' && !chatStarted && (
               <div id="examples" className="flex flex-col justify-center gap-2 mt-auto pb-4 flex-shrink-0 px-2 sm:px-6">
@@ -780,9 +882,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   chatStarted={chatStarted}
                   isStreaming={isStreaming}
                 />
-              ) : (
+              ) : chatMode === 'prd' ? (
                 <PRDWorkbench />
-              )
+              ) : chatMode === 'ticket' ? (
+                <TicketWorkbench />
+              ) : null
             }
           </ClientOnly>
         </div>
