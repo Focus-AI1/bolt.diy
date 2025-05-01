@@ -462,14 +462,14 @@ Description: ${ticket.description.substring(0, 100)}...`
     }
 
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-    const updatePrompt = `Tickets have been updated. Please update the PRD considering these changes.
+    const updatePrompt = `Tickets have been updated. Please update the PRD considering these changes, ensuring the entire document is returned.
 
-IMPORTANT: The PRD has been manually edited by the user. For sections that need to be updated based on ticket changes:
-1. DO NOT append to existing content - completely REPLACE the old content with new content
-2. When updating a section, replace its ENTIRE content
-3. Keep the section titles and structure exactly as they are
-4. Only update sections that are directly affected by the ticket changes
-5. Do not regenerate the entire PRD; only update specific sections that need changing
+IMPORTANT: The existing PRD may have been manually edited by the user. When generating the updated PRD:
+1. Identify sections directly affected by the ticket changes.
+2. For affected sections, completely REPLACE the old content with the new, updated content reflecting the ticket changes. DO NOT append.
+3. Preserve the exact titles and content of all sections NOT affected by the ticket changes.
+4. Ensure ALL standard PRD sections (Executive Summary, Problem Statement, User Requirements, etc.) are present in the output. If a standard section was not affected by tickets and has existing content, preserve it. If it was affected, update it. If it's a standard section not previously present or without relevant updates, include its title and a brief note like 'No updates based on current context.' DO NOT OMIT ANY STANDARD SECTION.
+5. Return the COMPLETE PRD document, including ALL standard sections (updated, preserved, or with notes), wrapped in <prd_document> tags.
 
 ${prdContext}
 
@@ -780,46 +780,10 @@ ${ticketsContext}
     <div className={classNames(
       "flex flex-col h-full transition-all duration-200 ease-in-out",
       {
-        "mr-[var(--workbench-width)]": showWorkbench,
+        "mr-[calc(var(--workbench-width)_+_3rem)]": showWorkbench,
         "hidden": backgroundMode // Hide the UI when in background mode
       }
     )}>
-      {/* PRD Update Notification - Renders based on showUpdateNotification state */}
-      {showUpdateNotification && (
-        <div className="bg-bolt-elements-background-accent/10 border border-bolt-elements-background-accent/30 rounded-md p-3 m-3 flex justify-between items-center">
-          <span className="text-bolt-elements-textPrimary">
-            <span className="i-ph:info mr-2"></span>
-            Tickets have been updated. Would you like to regenerate the PRD?
-          </span>
-          <button
-            onClick={handleRegeneratePRD}
-            className="px-3 py-1 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm transition-colors"
-            // disabled={isLoading} // Good practice
-          >
-            Regenerate PRD
-          </button>
-        </div>
-      )}
-      {/* Chat header */}
-      <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-3 flex justify-between items-center flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="i-ph:clipboard-text text-xl text-bolt-elements-textSecondary"></div>
-          <h2 className="text-lg font-medium text-bolt-elements-textPrimary">PRD Assistant</h2>
-        </div>
-        <div className="flex items-center gap-1">
-          <IconButton
-            title="Toggle Workbench"
-            onClick={() => workbenchStore.showWorkbench.set(!workbenchStore.showWorkbench.get())}
-            className={classNames(
-              "text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary",
-              { "bg-bolt-elements-background-depth-3": workbenchStore.showWorkbench.get() }
-            )}
-          >
-            <div className="i-ph:layout-right"></div>
-          </IconButton>
-        </div>
-      </div>
-
       {/* Main chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* PRD Tips Modal */}
@@ -871,7 +835,7 @@ ${ticketsContext}
           className="flex-1 overflow-y-auto px-4 py-2 scroll-smooth"
           // Add a ref maybe for scrolling? let messagesRef = useRef<HTMLDivElement>(null);
         >
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-1xl mx-auto">
             {!chatStarted && messagesForDisplay.length === 0 ? ( // Check messages length too
               <div className="h-full flex flex-col items-center justify-center text-center p-6">
                 <div className="i-ph:clipboard-text text-6xl text-bolt-elements-textTertiary mb-6"></div>
@@ -907,9 +871,29 @@ ${ticketsContext}
           </div>
         </div>
 
+        {/* PRD Update Notification - Placed above input area */}
+        {showUpdateNotification && (
+          <div className="px-4 pb-3 flex-shrink-0"> {/* Container to align with input padding */}
+             <div className="max-w-1xl mx-auto bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3">
+               <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
+                 <span className="i-ph:info text-lg text-bolt-elements-background-accent"></span>
+                 <span>Tickets updated. Regenerate PRD to reflect changes?</span>
+               </div>
+               <button
+                 onClick={handleRegeneratePRD}
+                 className="flex items-center gap-1.5 px-3 py-1.5 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bolt-elements-background-depth-1 focus:ring-bolt-elements-background-accent"
+                 disabled={isLoading}
+               >
+                 <span className="i-ph:arrows-clockwise text-base"></span>
+                 Regenerate
+               </button>
+             </div>
+           </div>
+        )}
+
         {/* Input area */}
         <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-0 p-4 flex-shrink-0">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-1xl mx-auto">
             <form
               onSubmit={handleSendMessage} // Use the combined handler
               className="flex flex-col gap-3"

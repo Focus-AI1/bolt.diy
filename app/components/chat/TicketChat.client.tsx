@@ -402,6 +402,10 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
       setImageDataList(initialMessage.imageDataList);
 
       setTimeout(() => {
+        // Clear previous tickets before auto-submitting the first message
+        logger.debug('Initial auto-submit: Clearing previous tickets from sessionStorage.');
+        sessionStorage.removeItem('tickets');
+
         const messageContent: Array<MessageContent> = [
           { type: 'text', text: initialMessage.text }
         ];
@@ -644,6 +648,12 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
       return;
     }
 
+    // If this is the very first message manually sent, clear old tickets
+    if (!chatStarted) {
+      logger.debug('Manual first message send: Clearing previous tickets from sessionStorage.');
+      sessionStorage.removeItem('tickets');
+    }
+
     // Show workbench when sending first message if not already shown
     if (!chatStarted && !workbenchStore.showWorkbench.get() && !backgroundMode) {
         workbenchStore.showWorkbench.set(true);
@@ -727,49 +737,31 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
   return (
     // Main container styling aligned with PRDChat
     <div className={classNames(
-      "flex flex-col h-full transition-all duration-200 ease-in-out bg-bolt-elements-background-depth-1", // Added bg color here
+      "flex flex-col h-full transition-all duration-200 ease-in-out", // Removed bg color here
       {
-        "mr-[var(--workbench-width)]": showWorkbench, // Add margin when workbench is open
+        "mr-[calc(var(--workbench-width)_+_3rem)]": showWorkbench, // Add margin when workbench is open
         "hidden": backgroundMode
       }
     )}>
-      {/* Tickets Update Notification - Renders based on showUpdateNotification state */}
+      {/* Tickets Update Notification - Placed above input area */}
       {showUpdateNotification && (
-        <div className="bg-bolt-elements-background-accent/10 border border-bolt-elements-background-accent/30 rounded-md p-3 m-3 flex justify-between items-center">
-          <span className="text-bolt-elements-textPrimary">
-            <span className="i-ph:info mr-2"></span>
-            The PRD has been updated. Would you like to regenerate the tickets?
-          </span>
-          <button
-            onClick={handleRegenerateTickets}
-            className="px-3 py-1 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm transition-colors"
-            // disabled={isLoading} // Disable button if somehow clicked while loading starts again? Good practice.
-          >
-            Regenerate Tickets
-          </button>
-        </div>
+         <div className="px-4 pb-3 flex-shrink-0"> {/* Container to align with input padding */}
+           <div className="max-w-3xl mx-auto bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3"> {/* Match max-width */}
+             <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
+               <span className="i-ph:info text-lg text-bolt-elements-background-accent"></span>
+               <span>PRD updated. Regenerate tickets to reflect changes?</span>
+             </div>
+             <button
+               onClick={handleRegenerateTickets}
+               className="flex items-center gap-1.5 px-3 py-1.5 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bolt-elements-background-depth-1 focus:ring-bolt-elements-background-accent"
+               disabled={isLoading}
+             >
+               <span className="i-ph:arrows-clockwise text-base"></span>
+               Regenerate
+             </button>
+           </div>
+         </div>
       )}
-      
-      {/* Chat header - Aligned with PRDChat */}
-      <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-3 flex justify-between items-center flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="i-ph:ticket text-xl text-bolt-elements-textSecondary"></div>
-          <h2 className="text-lg font-medium text-bolt-elements-textPrimary">Ticket Generator</h2>
-        </div>
-        <div className="flex items-center gap-1">
-           {/* Workbench Toggle Button - Added */}
-          <IconButton
-            title="Toggle Workbench"
-            onClick={() => workbenchStore.showWorkbench.set(!workbenchStore.showWorkbench.get())}
-            className={classNames(
-              "text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary",
-              { "bg-bolt-elements-background-depth-3": workbenchStore.showWorkbench.get() }
-            )}
-          >
-            <div className="i-ph:layout-right"></div>
-          </IconButton>
-        </div>
-      </div>
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -785,7 +777,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                 <div className="i-ph:ticket text-6xl text-bolt-elements-textTertiary mb-6"></div>
                 <h3 className="text-2xl font-semibold text-bolt-elements-textPrimary mb-3">Ticket Generator</h3>
                 <p className="text-bolt-elements-textSecondary max-w-md mb-8">
-                  Describe your project, feature, or bug to generate well-structured tickets for your team. Upload documents or images for context.
+                  Update tickets or regenerate based on the PRD...
                 </p>
 
                 {/* Templates - Use PRDChat's grid layout */}
@@ -897,7 +889,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                        handleSendMessage(event);
                      }
                    }}
-                  placeholder="Describe your project or feature to generate tickets..."
+                  placeholder="Update tickets or regenerate based on the PRD..."
                   style={{
                     minHeight: TEXTAREA_MIN_HEIGHT,
                     maxHeight: TEXTAREA_MAX_HEIGHT,
