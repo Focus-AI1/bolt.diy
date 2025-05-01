@@ -60,9 +60,9 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
   const closeList = () => {
     if (listItems.length > 0) {
       if (listType === 'ul') {
-        elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-6 mb-3 space-y-1">{listItems}</ul>);
+        elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-5 mb-2 space-y-0.5">{listItems}</ul>);
       } else if (listType === 'ol') {
-        elements.push(<ol key={`list-${elements.length}`} className="list-decimal pl-6 mb-3 space-y-1">{listItems}</ol>);
+        elements.push(<ol key={`list-${elements.length}`} className="list-decimal pl-5 mb-2 space-y-0.5">{listItems}</ol>);
       }
     }
     listItems = [];
@@ -120,16 +120,16 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
     // Headings within content (less common, but handle basic ###)
     else if (trimmedLine.startsWith('### ')) {
       closeList();
-      elements.push(<h3 key={index} className="text-lg font-semibold mt-4 mb-2">{renderLine(trimmedLine.substring(4))}</h3>);
+      elements.push(<h3 key={index} className="text-base font-semibold mt-3 mb-1">{renderLine(trimmedLine.substring(4))}</h3>);
     }
      else if (trimmedLine.startsWith('## ')) { // Handle ## if used within section content
       closeList();
-      elements.push(<h2 key={index} className="text-xl font-semibold mt-5 mb-3">{renderLine(trimmedLine.substring(3))}</h2>);
+      elements.push(<h2 key={index} className="text-lg font-semibold mt-4 mb-2">{renderLine(trimmedLine.substring(3))}</h2>);
      }
     // Paragraphs (non-empty lines that are not lists or headings)
     else if (trimmedLine !== '') {
       closeList();
-      elements.push(<p key={index} className="mb-3">{renderLine(line)}</p>); // Render original line to preserve indentation if needed, or use trimmedLine
+      elements.push(<p key={index} className="mb-2 text-sm">{renderLine(line)}</p>);
     }
      // Empty line - potentially signifies paragraph break, handled by default spacing or explicit <br> if needed
      else {
@@ -571,31 +571,31 @@ const PRDWorkbench = () => {
           {/* Document viewer */}
           <div
               ref={contentRef} // Ref for the scrollable container
-              className="flex-1 flex flex-col overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6 lg:p-8" // Added padding, overflow-auto
+              className="flex-1 flex flex-col overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6" // Reduced padding (removed lg:p-8)
            >
              {prdDocument ? (
                <div
-                 className="bg-white rounded-lg shadow-lg transition-transform w-full max-w-4xl mx-auto" // Use max-width, remove fixed width
+                 className="bg-white rounded-lg shadow-lg transition-transform w-full max-w-4xl mx-auto mb-6" // Use max-width, add mb for bottom spacing
                  style={{
                    transform: `scale(${zoomLevel})`,
                    transformOrigin: 'top center',
                  }}
                >
                  {/* Single page PRD document */}
-                 <div className="p-6 md:p-8 lg:p-12"> {/* Added responsive padding */}
+                 <div className="p-4 md:p-6 lg:p-8"> {/* Reduced base padding, kept larger screen padding */}
                    {/* Title and description */}
-                   <div id="title" className="mb-8 lg:mb-12 border-b border-gray-200 pb-6 lg:pb-8">
-                     <div className="flex justify-between items-center mb-4">
-                         <span className="text-sm font-medium text-bolt-elements-textSecondary">
+                   <div id="title" className="mb-6 lg:mb-8 border-b border-gray-200 pb-4 lg:pb-6"> {/* Reduced mb, pb */}
+                     <div className="flex justify-between items-center mb-2"> {/* Reduced mb */}
+                         <span className="text-xs font-medium text-bolt-elements-textSecondary"> {/* Reduced size */}
                             Product Requirements Document
                          </span>
                          <div className="text-xs text-bolt-elements-textTertiary">
-                           Last updated: {new Date(prdDocument.lastUpdated).toLocaleString()}
+                           Updated: {new Date(prdDocument.lastUpdated).toLocaleDateString()} {/* Shortened label */}
                          </div>
                      </div>
-                     <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-bolt-elements-textPrimary mb-3 text-center">{prdDocument.title}</h1>
+                     <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-bolt-elements-textPrimary mb-2 text-center">{prdDocument.title}</h1> {/* Reduced size, mb */}
                      {prdDocument.description && (
-                         <div className="prose prose-bolt max-w-none text-bolt-elements-textSecondary text-center mt-4">
+                         <div className="prose prose-bolt max-w-none text-bolt-elements-textSecondary text-center mt-2 text-sm"> {/* Reduced mt, text size */}
                             <SimpleMarkdownRenderer content={prdDocument.description} />
                          </div>
                      )}
@@ -603,11 +603,11 @@ const PRDWorkbench = () => {
 
                    {/* Sections */}
                    {prdDocument.sections.map((section, index) => (
-                     <div key={section.id} id={section.id} className="mb-8 lg:mb-10">
-                       <div className="flex justify-between items-center mb-4 group">
-                         <h2 className="text-xl md:text-2xl font-semibold text-bolt-elements-textPrimary flex items-center">
+                     <div key={section.id} id={section.id} className="mb-6 lg:mb-8"> {/* Reduced mb */}
+                       <div className="flex justify-between items-center mb-2 group"> {/* Reduced mb */}
+                         <h2 className="text-lg md:text-xl font-semibold text-bolt-elements-textPrimary flex items-center"> {/* Reduced size */}
                            {/* Optional section numbering */}
-                            {/* <span className="inline-flex justify-center items-center w-7 h-7 rounded-full bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary mr-3 text-sm">
+                            {/* <span className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary mr-2 text-xs"> // Reduced size/spacing
                              {index + 1}
                             </span> */}
                            {section.title}
@@ -624,31 +624,31 @@ const PRDWorkbench = () => {
                                }
                              }}
                               // Show edit button on hover
-                             className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary opacity-0 group-hover:opacity-100 transition-opacity"
+                             className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary opacity-0 group-hover:opacity-100 transition-opacity ml-2" // Added ml
                            >
-                             <div className="i-ph:pencil-simple" />
+                             <div className="i-ph:pencil-simple w-4 h-4" /> {/* Explicit size */}
                            </IconButton>
                          )}
                        </div>
 
                        {editMode && activeSection === section.id ? (
-                         <div className="mb-4">
+                         <div className="mb-2"> {/* Reduced mb */}
                            <textarea
                              value={editContent}
                              onChange={(e) => setEditContent(e.target.value)}
-                             rows={15} // Adjust rows as needed
-                             className="w-full p-4 border border-bolt-elements-borderColor rounded-lg bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus"
+                             rows={10} // Reduced rows
+                             className="w-full p-3 border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus text-sm" // Reduced padding, text size
                            />
                            <div className="flex justify-end mt-2 gap-2">
                              <button
                                onClick={() => { setEditMode(false); setActiveSection(null); }}
-                               className="px-4 py-2 bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary rounded-md text-sm transition-colors"
+                               className="px-3 py-1 bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary rounded text-xs transition-colors" // Reduced padding, text size
                              >
                                Cancel
                              </button>
                              <button
                                onClick={saveEdits}
-                               className="px-4 py-2 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm transition-colors"
+                               className="px-3 py-1 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded text-xs transition-colors" // Reduced padding, text size
                              >
                                Save Changes
                              </button>
@@ -656,7 +656,7 @@ const PRDWorkbench = () => {
                          </div>
                        ) : (
                          // Use the improved renderer for section content
-                         <div className="prose prose-bolt max-w-none text-bolt-elements-textPrimary">
+                         <div className="prose prose-bolt max-w-none text-bolt-elements-textPrimary text-sm"> {/* Added text-sm */}
                             <SimpleMarkdownRenderer content={section.content} />
                          </div>
                        )}

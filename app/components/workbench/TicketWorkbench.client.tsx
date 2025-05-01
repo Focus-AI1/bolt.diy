@@ -72,9 +72,9 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
   const closeList = () => {
     if (listItems.length > 0) {
       if (listType === 'ul') {
-        elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-6 mb-3 space-y-1">{listItems}</ul>);
+        elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-5 mb-2 space-y-0.5">{listItems}</ul>);
       } else if (listType === 'ol') {
-        elements.push(<ol key={`list-${elements.length}`} className="list-decimal pl-6 mb-3 space-y-1">{listItems}</ol>);
+        elements.push(<ol key={`list-${elements.length}`} className="list-decimal pl-5 mb-2 space-y-0.5">{listItems}</ol>);
       }
     }
     listItems = [];
@@ -121,16 +121,16 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
     // Headings within content (less common, but handle basic ###)
     else if (trimmedLine.startsWith('### ')) {
       closeList();
-      elements.push(<h3 key={index} className="text-lg font-semibold mt-4 mb-2">{renderLine(trimmedLine.substring(4))}</h3>);
+      elements.push(<h3 key={index} className="text-base font-semibold mt-2 mb-1">{renderLine(trimmedLine.substring(4))}</h3>);
     }
      else if (trimmedLine.startsWith('## ')) { // Handle ## if used within section content
       closeList();
-      elements.push(<h2 key={index} className="text-xl font-semibold mt-5 mb-3">{renderLine(trimmedLine.substring(3))}</h2>);
+      elements.push(<h2 key={index} className="text-lg font-semibold mt-3 mb-1">{renderLine(trimmedLine.substring(3))}</h2>);
      }
     // Paragraphs (non-empty lines that are not lists or headings)
     else if (trimmedLine !== '') {
       closeList();
-      elements.push(<p key={index} className="mb-3">{renderLine(trimmedLine)}</p>);
+      elements.push(<p key={index} className="mb-1.5">{renderLine(trimmedLine)}</p>);
     }
      // Empty line - potentially signifies paragraph break, handled by default spacing or explicit <br> if needed
      else {
@@ -444,32 +444,32 @@ const TicketWorkbench = () => {
         {/* Main content area */}
         <div className="flex-1 flex overflow-hidden">
           {showFilterSidebar && (
-            <div className="w-64 border-r border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 overflow-y-auto flex-shrink-0">
-              <div className="p-4">
-                <h3 className="text-sm font-medium text-bolt-elements-textPrimary mb-3">Filters & Search</h3>
-                <div className="mb-4">
+            <div className="w-60 border-r border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 overflow-y-auto flex-shrink-0">
+              <div className="p-3">
+                <h3 className="text-sm font-medium text-bolt-elements-textPrimary mb-2">Filters & Search</h3>
+                <div className="mb-3">
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <div className="i-ph:magnifying-glass text-bolt-elements-textTertiary" />
+                    <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                      <div className="i-ph:magnifying-glass text-bolt-elements-textTertiary w-3.5 h-3.5" />
                     </div>
                     <input
                       type="text"
                       placeholder="Search title/desc..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="block w-full pl-10 pr-3 py-2 text-sm border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus"
+                      className="block w-full pl-7 pr-2 py-1.5 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-3 mb-4">
+                <div className="space-y-2 mb-3">
                   <div>
-                    <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-1">Status</label>
+                    <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-0.5">Status</label>
                     <div className="relative">
                       <select
                         value={statusFilter || ''}
                         onChange={(e) => setStatusFilter(e.target.value || null)}
-                        className="block w-full pl-3 pr-8 py-1.5 text-sm border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
+                        className="block w-full pl-2 pr-7 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
                       >
                         <option value="">All</option>
                         {statuses.map(status => (
@@ -477,17 +477,17 @@ const TicketWorkbench = () => {
                         ))}
                       </select>
                       <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <div className="i-ph:caret-down text-bolt-elements-textTertiary" />
+                        <div className="i-ph:caret-down text-bolt-elements-textTertiary w-3 h-3" />
                       </div>
                     </div>
                   </div>
                   <div>
-                     <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-1">Priority</label>
+                     <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-0.5">Priority</label>
                      <div className="relative">
                         <select
                           value={priorityFilter || ''}
                           onChange={(e) => setPriorityFilter(e.target.value || null)}
-                          className="block w-full pl-3 pr-8 py-1.5 text-sm border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
+                          className="block w-full pl-2 pr-7 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
                         >
                           <option value="">All</option>
                           {priorities.map(priority => (
@@ -495,17 +495,17 @@ const TicketWorkbench = () => {
                           ))}
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                           <div className="i-ph:caret-down text-bolt-elements-textTertiary" />
+                           <div className="i-ph:caret-down text-bolt-elements-textTertiary w-3 h-3" />
                         </div>
                      </div>
                   </div>
                   <div>
-                     <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-1">Type</label>
+                     <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-0.5">Type</label>
                       <div className="relative">
                         <select
                           value={typeFilter || ''}
                           onChange={(e) => setTypeFilter(e.target.value || null)}
-                          className="block w-full pl-3 pr-8 py-1.5 text-sm border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
+                          className="block w-full pl-2 pr-7 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
                         >
                           <option value="">All</option>
                           {types.map(type => (
@@ -513,7 +513,7 @@ const TicketWorkbench = () => {
                           ))}
                         </select>
                         <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                          <div className="i-ph:caret-down text-bolt-elements-textTertiary" />
+                          <div className="i-ph:caret-down text-bolt-elements-textTertiary w-3 h-3" />
                         </div>
                       </div>
                   </div>
@@ -527,15 +527,15 @@ const TicketWorkbench = () => {
                       setPriorityFilter(null);
                       setTypeFilter(null);
                     }}
-                    className="w-full px-3 py-1.5 text-sm border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:bg-bolt-elements-background-depth-3 focus:outline-none"
+                    className="w-full px-2 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:bg-bolt-elements-background-depth-3 focus:outline-none"
                   >
                     Clear Filters
                   </button>
                 )}
 
-                <div className="mt-6 p-3 bg-bolt-elements-background-depth-2 rounded-lg">
-                  <h4 className="text-xs font-medium text-bolt-elements-textPrimary mb-2">Filtered Tickets</h4>
-                  <div className="text-xs text-bolt-elements-textSecondary space-y-1">
+                <div className="mt-4 p-2 bg-bolt-elements-background-depth-2 rounded-lg">
+                  <h4 className="text-xs font-medium text-bolt-elements-textPrimary mb-1">Filtered Tickets</h4>
+                  <div className="text-xs text-bolt-elements-textSecondary space-y-0.5">
                     <div>Total: {ticketStats.total}</div>
                     <div>Open: {ticketStats.open}</div>
                     <div>In Progress: {ticketStats.inProgress}</div>
@@ -548,7 +548,7 @@ const TicketWorkbench = () => {
 
           <div
             ref={contentRef}
-            className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4"
+            className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-3"
           >
             {tickets.length > 0 ? (
               <div
@@ -559,7 +559,7 @@ const TicketWorkbench = () => {
                 }}
               >
                 {/* Modern grid layout for tickets */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredTickets.map((ticket, index) => (
                     <motion.div
                       key={ticket.id}
@@ -571,22 +571,22 @@ const TicketWorkbench = () => {
                     >
                       {/* Ticket header with colored bar based on priority */}
                       <div className={classNames(
-                        "h-1.5 w-full",
+                        "h-1 w-full",
                         ticket.priority === 'High' ? "bg-red-500" :
                         ticket.priority === 'Medium' ? "bg-amber-500" :
                         "bg-blue-500"
                       )} />
                       
-                      <div className="flex-1 flex flex-col p-4">
+                      <div className="flex-1 flex flex-col p-3">
                         {/* Ticket header with ID, title, and edit button */}
-                        <div className="flex justify-between items-start mb-3">
+                        <div className="flex justify-between items-start mb-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center mb-1">
-                              <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-md px-2 py-0.5 mr-2">
+                              <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 mr-1.5">
                                 #{ticket.id}
                               </span>
                               <span className={classNames(
-                                "text-xs font-medium rounded-md px-2 py-0.5",
+                                "text-xs font-medium rounded px-1.5 py-0.5",
                                 ticket.status === 'Open' ? "bg-green-100 text-green-700" :
                                 ticket.status === 'In Progress' ? "bg-purple-100 text-purple-700" :
                                 "bg-gray-200 text-gray-600"
@@ -594,7 +594,7 @@ const TicketWorkbench = () => {
                                 {ticket.status}
                               </span>
                             </div>
-                            <h2 className="text-lg font-semibold text-gray-800 truncate">
+                            <h2 className="text-base font-semibold text-gray-800 truncate">
                               {ticket.title}
                             </h2>
                           </div>
@@ -609,9 +609,9 @@ const TicketWorkbench = () => {
                                   startEditing(ticket.id);
                                 }
                               }}
-                              className="ml-2 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="ml-1.5 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
-                              <div className="i-ph:pencil-simple" />
+                              <div className="i-ph:pencil-simple w-3.5 h-3.5" />
                             </IconButton>
                           )}
                         </div>
@@ -622,28 +622,28 @@ const TicketWorkbench = () => {
                             <textarea
                               value={editContent}
                               onChange={(e) => setEditContent(e.target.value)}
-                              rows={15}
-                              className="flex-1 w-full p-3 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-sm"
+                              rows={12}
+                              className="flex-1 w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs"
                             />
-                            <div className="flex justify-end mt-3 gap-2">
+                            <div className="flex justify-end mt-2 gap-2">
                               <button
                                 onClick={() => { setEditMode(false); setActiveTicketId(null); }}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm transition-colors"
+                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-xs transition-colors"
                               >
                                 Cancel
                               </button>
                               <button
                                 onClick={saveEdits}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm transition-colors"
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs transition-colors"
                               >
-                                Save Changes
+                                Save
                               </button>
                             </div>
                           </div>
                         ) : (
                           <>
                             {/* Ticket description with scrollable area */}
-                            <div className="flex-1 overflow-y-auto mb-3 prose-sm prose-gray max-h-40">
+                            <div className="flex-1 overflow-y-auto mb-2 prose-sm prose-gray max-h-28 text-xs">
                               <div className="prose prose-bolt max-w-none text-gray-700">
                                 <SimpleMarkdownRenderer content={ticket.description} />
                               </div>
@@ -653,11 +653,11 @@ const TicketWorkbench = () => {
                             <div className="mt-auto">
                               {/* Tags */}
                               {ticket.tags && ticket.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-3">
+                                <div className="flex flex-wrap gap-1 mb-1.5">
                                   {ticket.tags.map(tag => (
                                     <span
                                       key={tag}
-                                      className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700"
+                                      className="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700"
                                     >
                                       {tag}
                                     </span>
@@ -666,21 +666,21 @@ const TicketWorkbench = () => {
                               )}
                               
                               {/* Ticket properties */}
-                              <div className="flex flex-wrap gap-2 mb-3">
-                                <span className="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600">
+                              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
                                   Type: {ticket.type}
                                 </span>
                                 {ticket.assignee && (
-                                  <span className="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600">
+                                  <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
                                     Assignee: {ticket.assignee}
                                   </span>
                                 )}
                               </div>
                               
                               {/* Timestamps */}
-                              <div className="text-xs text-gray-500 mt-2">
+                              <div className="text-xs text-gray-500 mt-1.5">
                                 <span>Created: {new Date(ticket.createdAt).toLocaleString()}</span>
-                                <span className="mx-2">•</span>
+                                <span className="mx-1.5">•</span>
                                 <span>Updated: {new Date(ticket.updatedAt).toLocaleString()}</span>
                               </div>
                             </div>
@@ -693,10 +693,10 @@ const TicketWorkbench = () => {
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center">
-                <div className="text-center p-10">
-                  <div className="i-ph:ticket text-6xl text-bolt-elements-textTertiary mb-6 mx-auto"></div>
-                  <h3 className="text-xl font-semibold text-bolt-elements-textPrimary mb-2">No Tickets Available</h3>
-                  <p className="text-bolt-elements-textSecondary max-w-md">
+                <div className="text-center p-6">
+                  <div className="i-ph:ticket text-5xl text-bolt-elements-textTertiary mb-4 mx-auto"></div>
+                  <h3 className="text-lg font-semibold text-bolt-elements-textPrimary mb-1.5">No Tickets Available</h3>
+                  <p className="text-bolt-elements-textSecondary max-w-md text-sm">
                     Use the Ticket Assistant chat to generate or load tickets.
                     They will appear here.
                   </p>

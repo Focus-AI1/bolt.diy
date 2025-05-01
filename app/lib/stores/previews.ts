@@ -63,80 +63,66 @@ export class PreviewsStore {
       const originalSetItem = localStorage.setItem;
 
       localStorage.setItem = (...args) => {
-        originalSetItem.apply(localStorage, args);
-        this._broadcastStorageSync();
+        try {
+          originalSetItem.apply(localStorage, args);
+          this._broadcastStorageSync();
+        } catch (error) {
+          console.error('[Preview] localStorage error:', error);
+          
+          // If it's a quota error, try to free up space
+          // This maintains existing functionality while adding robustness for quota issues
+          if (error instanceof DOMException && 
+              (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+            
+            console.warn('[Preview] Storage quota exceeded, cleaning up...');
+            
+            // Find and remove old snapshots
+            // This prevents the app from crashing when localStorage is full
+            const snapshotKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && key.startsWith('snapshot:')) {
+                snapshotKeys.push(key);
+              }
+            }
+            
+            // If we have more than 10 snapshots, remove the oldest ones
+            // This ensures we maintain the most recent user data
+            if (snapshotKeys.length > 10) {
+              // Sort by extraction of numeric ID (if possible) or alphabetically
+              snapshotKeys.sort((a, b) => {
+                const idA = parseInt(a.split(':')[1]) || 0;
+                const idB = parseInt(b.split(':')[1]) || 0;
+                return idA - idB;
+              });
+              
+              // Remove oldest snapshots (keep the 10 most recent)
+              const toRemove = snapshotKeys.slice(0, snapshotKeys.length - 10);
+              toRemove.forEach(key => {
+                console.log('[Preview] Removing old snapshot due to quota:', key);
+                try {
+                  localStorage.removeItem(key);
+                } catch (e) {
+                  console.error('[Preview] Error removing item:', e);
+                }
+              });
+              
+              // Try again with the original setItem
+              try {
+                originalSetItem.apply(localStorage, args);
+              } catch (retryError) {
+                console.error('[Preview] Still cannot store item after cleanup:', retryError);
+              }
+            } else {
+              // If we don't have many snapshots but still hit quota, it might be a very large item
+              console.warn('[Preview] Storage quota exceeded with few snapshots, item may be too large');
+            }
+          }
+        }
       };
     }
 
     this.#init();
-  }
-
-  // Generate a unique ID for this tab
-  private _getTabId(): string {
-    if (typeof window !== 'undefined') {
-      if (!window._tabId) {
-        window._tabId = Math.random().toString(36).substring(2, 15);
-      }
-
-      return window._tabId;
-    }
-
-    return '';
-  }
-
-  // Sync storage data between tabs
-  private _syncStorage(storage: Record<string, string>) {
-    if (typeof window !== 'undefined') {
-      Object.entries(storage).forEach(([key, value]) => {
-        try {
-          const originalSetItem = Object.getPrototypeOf(localStorage).setItem;
-          originalSetItem.call(localStorage, key, value);
-        } catch (error) {
-          console.error('[Preview] Error syncing storage:', error);
-        }
-      });
-
-      // Force a refresh after syncing storage
-      const previews = this.previews.get();
-      previews.forEach((preview) => {
-        const previewId = this.getPreviewId(preview.baseUrl);
-
-        if (previewId) {
-          this.refreshPreview(previewId);
-        }
-      });
-
-      // Reload the page content
-      if (typeof window !== 'undefined' && window.location) {
-        const iframe = document.querySelector('iframe');
-
-        if (iframe) {
-          iframe.src = iframe.src;
-        }
-      }
-    }
-  }
-
-  // Broadcast storage state to other tabs
-  private _broadcastStorageSync() {
-    if (typeof window !== 'undefined') {
-      const storage: Record<string, string> = {};
-
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-
-        if (key) {
-          storage[key] = localStorage.getItem(key) || '';
-        }
-      }
-
-      this.#storageChannel.postMessage({
-        type: 'storage-sync',
-        storage,
-        source: this._getTabId(),
-        timestamp: Date.now(),
-      });
-    }
   }
 
   async #init() {
@@ -294,6 +280,74 @@ export class PreviewsStore {
     }, this.#REFRESH_DELAY);
 
     this.#refreshTimeouts.set(previewId, timeout);
+  }
+
+  // Generate a unique ID for this tab
+  private _getTabId(): string {
+    if (typeof window !== 'undefined') {
+      if (!window._tabId) {
+        window._tabId = Math.random().toString(36).substring(2, 15);
+      }
+
+      return window._tabId;
+    }
+
+    return '';
+  }
+
+  // Sync storage data between tabs
+  private _syncStorage(storage: Record<string, string>) {
+    if (typeof window !== 'undefined') {
+      Object.entries(storage).forEach(([key, value]) => {
+        try {
+          const originalSetItem = Object.getPrototypeOf(localStorage).setItem;
+          originalSetItem.call(localStorage, key, value);
+        } catch (error) {
+          console.error('[Preview] Error syncing storage:', error);
+        }
+      });
+
+      // Force a refresh after syncing storage
+      const previews = this.previews.get();
+      previews.forEach((preview) => {
+        const previewId = this.getPreviewId(preview.baseUrl);
+
+        if (previewId) {
+          this.refreshPreview(previewId);
+        }
+      });
+
+      // Reload the page content
+      if (typeof window !== 'undefined' && window.location) {
+        const iframe = document.querySelector('iframe');
+
+        if (iframe) {
+          iframe.src = iframe.src;
+        }
+      }
+    }
+  }
+
+  // Broadcast storage state to other tabs
+  private _broadcastStorageSync() {
+    if (typeof window !== 'undefined') {
+      const storage: Record<string, string> = {};
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+
+        if (key) {
+          storage[key] = localStorage.getItem(key) || '';
+        }
+      }
+
+      this.#storageChannel.postMessage({
+        type: 'storage-sync',
+        storage,
+        source: this._getTabId(),
+        timestamp: Date.now(),
+      });
+    }
   }
 }
 

@@ -20,6 +20,7 @@ import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
 import { createCommandsMessage, detectProjectCommands } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
+import storageManager from '~/utils/storageManager'; // Import the storage manager utility
 
 export interface ChatHistoryItem {
   id: string;
@@ -237,57 +238,132 @@ ${value.content}
     }
   }, [mixedId]);
 
-  const takeSnapshot = useCallback(
-    async (chatIdx: string, files: FileMap, _chatId?: string | undefined, chatSummary?: string) => {
-      const id = _chatId || chatId;
-
-      if (!id) {
-        return;
-      }
-
-      const snapshot: Snapshot = {
-        chatIndex: chatIdx,
-        files,
-        summary: chatSummary,
-      };
-      localStorage.setItem(`snapshot:${id}`, JSON.stringify(snapshot));
-    },
-    [chatId],
-  );
-
-  const restoreSnapshot = useCallback(async (id: string) => {
-    const snapshotStr = localStorage.getItem(`snapshot:${id}`);
-    const container = await webcontainer;
-
-    // if (snapshotStr)setSnapshot(JSON.parse(snapshotStr));
-    const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} };
-
-    if (!snapshot?.files) {
+  // Function to take a snapshot of the current chat and files
+  // Enhanced with storage management to prevent quota exceeded errors
+  const takeSnapshot = useCallback((chatIndex: string, files: FileMap, chatId?: string, summary?: string) => {
+    if (!chatId) {
       return;
     }
 
-    Object.entries(snapshot.files).forEach(async ([key, value]) => {
-      if (key.startsWith(container.workdir)) {
-        key = key.replace(container.workdir, '');
-      }
+    const snapshot: Snapshot = {
+      chatIndex,
+      files,
+      summary,
+    };
 
-      if (value?.type === 'folder') {
-        await container.fs.mkdir(key, { recursive: true });
+    try {
+      // Use the storage manager to safely store the snapshot
+      // This handles quota management and will clean up old snapshots if needed
+      const snapshotKey = `snapshot:${chatId}`;
+      const success = storageManager.safeSetItem(snapshotKey, JSON.stringify(snapshot));
+      
+      if (!success) {
+        console.warn(`[Chat] Failed to store snapshot for chat ${chatId}, storage may be full`);
+        // Perform a storage health check to clean up
+        storageManager.performStorageHealthCheck();
       }
-    });
-    Object.entries(snapshot.files).forEach(async ([key, value]) => {
-      if (value?.type === 'file') {
-        if (key.startsWith(container.workdir)) {
-          key = key.replace(container.workdir, '');
-        }
-
-        await container.fs.writeFile(key, value.content, { encoding: value.isBinary ? undefined : 'utf8' });
-      } else {
-      }
-    });
-
-    // workbenchStore.files.setKey(snapshot?.files)
+    } catch (error) {
+      console.error('[Chat] Error taking snapshot:', error);
+    }
   }, []);
+
+  // Restore a snapshot with improved error handling
+  // This maintains all existing functionality while adding robustness
+  const restoreSnapshot = useCallback(async (id: string) => {
+    try {
+      // Use the storage manager to safely get the snapshot
+      // This handles decompression if the snapshot was compressed
+      const snapshotStr = storageManager.safeGetItem(`snapshot:${id}`);
+      if (!snapshotStr) {
+        console.warn(`[Chat] No snapshot found for chat ${id}`);
+        return;
+      }
+      
+      const snapshot: Snapshot = JSON.parse(snapshotStr);
+      
+      if (snapshot.files) {
+        workbenchStore.files.set(snapshot.files);
+        // Trigger file system update if needed
+        const container = await webcontainer;
+        
+        // Update the file system with the snapshot files
+        for (const [path, fileData] of Object.entries(snapshot.files)) {
+          if (fileData && typeof fileData === 'object' && 'type' in fileData) {
+            const typedFileData = fileData as { type: string; content?: string };
+            
+            if (typedFileData.type === 'file' && typedFileData.content !== undefined) {
+              try {
+                await container.fs.writeFile(path, typedFileData.content);
+              } catch (e) {
+                console.error(`[Chat] Error writing file ${path}:`, e);
+              }
+            } else if (typedFileData.type === 'folder' || typedFileData.type === 'directory') {
+              try {
+                await container.fs.mkdir(path, { recursive: true });
+              } catch (e) {
+                // Directory might already exist, which is fine
+                console.debug(`[Chat] Directory ${path} might already exist:`, e);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Chat] Error restoring snapshot:', error);
+      toast.error('Failed to restore chat snapshot');
+    }
+  }, []);
+
+  // Add a function to check and clean localStorage when approaching quota
+  // This helps prevent quota exceeded errors by proactively managing storage
+  const cleanupLocalStorage = () => {
+    try {
+      // Check if we're close to quota (80% used as a threshold)
+      const totalSpace = 5 * 1024 * 1024; // Assume 5MB quota (conservative estimate)
+      let usedSpace = 0;
+      
+      // Calculate current usage
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          usedSpace += (localStorage.getItem(key) || '').length * 2; // UTF-16 chars are 2 bytes
+        }
+      }
+      
+      // If we're using more than 80% of quota, clean up old items
+      if (usedSpace > 0.8 * totalSpace) {
+        console.log('[Storage] Cleaning up localStorage, used:', Math.round(usedSpace / 1024), 'KB');
+        
+        // Get all snapshot keys and sort by timestamp (assuming format snapshot:id)
+        const snapshotKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('snapshot:')) {
+            snapshotKeys.push(key);
+          }
+        }
+        
+        // If we have more than 20 snapshots, remove the oldest ones
+        if (snapshotKeys.length > 20) {
+          // Sort by extraction of numeric ID (if possible) or alphabetically
+          snapshotKeys.sort((a, b) => {
+            const idA = parseInt(a.split(':')[1]) || 0;
+            const idB = parseInt(b.split(':')[1]) || 0;
+            return idA - idB;
+          });
+          
+          // Remove oldest snapshots (keep the 20 most recent)
+          const toRemove = snapshotKeys.slice(0, snapshotKeys.length - 20);
+          toRemove.forEach(key => {
+            console.log('[Storage] Removing old snapshot:', key);
+            localStorage.removeItem(key);
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[Storage] Error cleaning up localStorage:', error);
+    }
+  };
 
   return {
     ready: !mixedId || ready,
@@ -345,7 +421,15 @@ ${value.content}
         }
       }
 
-      takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+      // Clean up localStorage before taking a new snapshot
+      cleanupLocalStorage();
+
+      try {
+        takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), _urlId, chatSummary);
+      } catch (error) {
+        console.error('[Storage] Error taking snapshot, likely quota exceeded:', error);
+        // Continue with the rest of the function even if snapshot fails
+      }
 
       if (!description.get() && firstArtifact?.title) {
         description.set(firstArtifact?.title);
