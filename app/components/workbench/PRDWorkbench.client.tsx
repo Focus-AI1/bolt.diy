@@ -8,6 +8,7 @@ import { IconButton } from '~/components/ui/IconButton';
 import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
+import PRDTipTapEditor, { EditorToolbar } from './PRDTipTapEditor';
 
 const logger = createScopedLogger('PRDWorkbench');
 
@@ -43,128 +44,118 @@ interface PRDDocument {
   lastUpdated: string;
 }
 
-// Simple Markdown Renderer Component (or helper function)
-const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
-  if (!content) {
-    return null;
-  }
-
-  // Check if the content contains the placeholder text and remove it
-  content = content.replace(/\[Previous sections continue unchanged\.\.\.\]/g, '');
-  
-  const lines = content.split('\n');
-  const elements: React.ReactNode[] = [];
-  let listType: 'ul' | 'ol' | null = null;
-  let listItems: React.ReactNode[] = [];
-
-  const closeList = () => {
-    if (listItems.length > 0) {
-      if (listType === 'ul') {
-        elements.push(<ul key={`list-${elements.length}`} className="list-disc pl-5 mb-2 space-y-0.5">{listItems}</ul>);
-      } else if (listType === 'ol') {
-        elements.push(<ol key={`list-${elements.length}`} className="list-decimal pl-5 mb-2 space-y-0.5">{listItems}</ol>);
-      }
-    }
-    listItems = [];
-    listType = null;
-  };
-
-  lines.forEach((line, index) => {
-    const trimmedLine = line.trim();
-    
-    // Skip any remaining placeholder lines
-    if (trimmedLine.includes("Previous sections continue unchanged") || 
-        trimmedLine.includes("[unchanged content]") ||
-        trimmedLine.includes("[section unchanged]")) {
-      return;
-    }
-
-    // Regex for bold and italics - basic version, might not handle nested or complex cases perfectly
-    const renderLine = (text: string) => {
-      // Remove any inline placeholder text
-      text = text.replace(/\[.*?unchanged.*?\]/g, '');
-      
-      // Split by bold/italic markers, keeping the markers
-      const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
-      return parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={i}>{part.slice(2, -2)}</strong>;
-        }
-        if (part.startsWith('*') && part.endsWith('*')) {
-           // Check if it's not actually bold marker remnants
-          if (!(part.startsWith('**') || part.endsWith('**'))) {
-             return <em key={i}>{part.slice(1, -1)}</em>;
-          }
-        }
-        return <Fragment key={i}>{part}</Fragment>; // Use Fragment for plain text parts
-      });
-    };
-
-
-    // Unordered List Items
-    if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ') || trimmedLine.startsWith('• ')) {
-      if (listType !== 'ul') {
-        closeList();
-        listType = 'ul';
-      }
-      listItems.push(<li key={index}>{renderLine(trimmedLine.substring(2))}</li>);
-    }
-    // Ordered List Items
-    else if (/^\d+\.\s/.test(trimmedLine)) {
-       if (listType !== 'ol') {
-         closeList();
-         listType = 'ol';
-       }
-       listItems.push(<li key={index}>{renderLine(trimmedLine.replace(/^\d+\.\s/, ''))}</li>);
-     }
-    // Headings within content (less common, but handle basic ###)
-    else if (trimmedLine.startsWith('### ')) {
-      closeList();
-      elements.push(<h3 key={index} className="text-base font-semibold mt-3 mb-1">{renderLine(trimmedLine.substring(4))}</h3>);
-    }
-     else if (trimmedLine.startsWith('## ')) { // Handle ## if used within section content
-      closeList();
-      elements.push(<h2 key={index} className="text-lg font-semibold mt-4 mb-2">{renderLine(trimmedLine.substring(3))}</h2>);
-     }
-    // Paragraphs (non-empty lines that are not lists or headings)
-    else if (trimmedLine !== '') {
-      closeList();
-      elements.push(<p key={index} className="mb-2 text-sm">{renderLine(line)}</p>);
-    }
-     // Empty line - potentially signifies paragraph break, handled by default spacing or explicit <br> if needed
-     else {
-       // Could add a <br /> or just rely on paragraph margins
-       closeList(); // Close list if an empty line breaks it
-       // Optionally add spacing for empty lines if desired: elements.push(<div key={index} className="h-4"></div>);
-     }
-  });
-
-  closeList(); // Ensure the last list is closed
-
-  return <>{elements}</>;
-};
-
 // PRD Workbench component that displays the PRD document
 const PRDWorkbench = () => {
   const showWorkbench = useStore(workbenchStore.showWorkbench);
-  const [editMode, setEditMode] = useState(false);
-  const [editContent, setEditContent] = useState('');
-  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [fullPrdHtmlContent, setFullPrdHtmlContent] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [showOutline, setShowOutline] = useState(true); // Default to showing outline
   const contentRef = useRef<HTMLDivElement>(null);
-  
-  // Replace static sample data with state that can be updated from chat
-  const [prdDocument, setPrdDocument] = useState<PRDDocument | null>(null); // Initialize as null
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const [editor, setEditor] = useState<any>(null);
+  const streamingPRDContent = useStore(workbenchStore.streamingPRDContent);
+
+  const [prdDocument, setPrdDocument] = useState<PRDDocument | null>(null);
 
   // Set the chat type to 'prd' when the PRD workbench is shown
   useEffect(() => {
     if (showWorkbench) {
-      // Set the chat type to 'prd' when the PRD workbench is shown
       chatType.set('prd');
       logger.debug('Workbench visible: Chat type set to PRD');
     }
   }, [showWorkbench]);
+
+  // Handle streaming PRD content updates
+  useEffect(() => {
+    if (streamingPRDContent && prdDocument) {
+      try {
+        // Create a temporary document with streaming content
+        const tempDoc = { ...prdDocument };
+        
+        // Parse the streaming markdown content into sections
+        const lines = streamingPRDContent.split('\n');
+        let currentTitle = '';
+        let currentContent = '';
+        let inSection = false;
+        let updatedSections: PRDSection[] = [...tempDoc.sections];
+        
+        // Simple parsing logic for streaming content
+        lines.forEach(line => {
+          const trimmedLine = line.trim();
+          
+          if (trimmedLine.startsWith('# ')) {
+            // Main title - update document title
+            tempDoc.title = trimmedLine.substring(2).trim();
+          } else if (trimmedLine.startsWith('## ')) {
+            // Section title - if we were in a section, save it
+            if (inSection && currentTitle) {
+              // Find existing section or create new one
+              const existingIndex = updatedSections.findIndex(s => s.title === currentTitle);
+              if (existingIndex >= 0) {
+                updatedSections[existingIndex].content = currentContent;
+              } else {
+                const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                updatedSections.push({
+                  id: newId,
+                  title: currentTitle,
+                  content: currentContent
+                });
+              }
+            }
+            
+            // Start new section
+            currentTitle = trimmedLine.substring(3).trim();
+            currentContent = '';
+            inSection = true;
+          } else if (inSection) {
+            // Add to current section content
+            currentContent += line + '\n';
+          } else if (!tempDoc.description && !inSection) {
+            // If not in a section and no description yet, this might be the description
+            tempDoc.description += line + '\n';
+          }
+        });
+        
+        // Add the last section if we were in one
+        if (inSection && currentTitle) {
+          const existingIndex = updatedSections.findIndex(s => s.title === currentTitle);
+          if (existingIndex >= 0) {
+            updatedSections[existingIndex].content = currentContent;
+          } else {
+            const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+            updatedSections.push({
+              id: newId,
+              title: currentTitle,
+              content: currentContent
+            });
+          }
+        }
+        
+        tempDoc.sections = updatedSections;
+        tempDoc.lastUpdated = new Date().toISOString();
+        
+        // Generate HTML from the updated document
+        const generatedHtml = generateFullHtml(tempDoc);
+        setFullPrdHtmlContent(generatedHtml);
+        
+        // Don't save to sessionStorage during streaming to avoid conflicts
+      } catch (error) {
+        logger.error('Error processing streaming PRD content:', error);
+      }
+    }
+  }, [streamingPRDContent, prdDocument]);
+
+  // Generate combined HTML content for the editor
+  const generateFullHtml = (doc: PRDDocument): string => {
+    let html = `<h1>${doc.title}</h1>`;
+    if (doc.description) {
+      html += `<p>${doc.description}</p>`;
+    }
+    doc.sections.forEach(section => {
+      html += `<h2 id="${section.id}">${section.title}</h2>${section.content}`;
+    });
+    return html;
+  };
 
   // Load PRD from sessionStorage and listen for changes
   useEffect(() => {
@@ -172,40 +163,48 @@ const PRDWorkbench = () => {
       try {
         const storedPRD = sessionStorage.getItem('current_prd');
         if (storedPRD) {
-          const parsedPRD = JSON.parse(storedPRD);
+          const parsedPRD: PRDDocument = JSON.parse(storedPRD);
           // Basic validation
           if (parsedPRD && typeof parsedPRD.title === 'string' && Array.isArray(parsedPRD.sections)) {
-              // Check if the document has actually changed before updating state
-              // This avoids unnecessary re-renders if parsing yields the same object structure
-              setPrdDocument(currentDoc => {
-                  if (JSON.stringify(currentDoc) !== JSON.stringify(parsedPRD)) {
-                     logger.debug('PRD updated from sessionStorage:', parsedPRD.title);
-                     return parsedPRD;
-                  }
-                  return currentDoc; // No change
-              });
-
+            setPrdDocument(currentDoc => {
+              const newContent = JSON.stringify(parsedPRD);
+              if (JSON.stringify(currentDoc) !== newContent) {
+                logger.debug('PRD updated from sessionStorage:', parsedPRD.title);
+                const generatedHtml = generateFullHtml(parsedPRD);
+                setFullPrdHtmlContent(generatedHtml);
+                setHasUnsavedChanges(false);
+                return parsedPRD;
+              }
+              return currentDoc;
+            });
           } else {
-             logger.warn('Invalid PRD structure found in sessionStorage');
-             setPrdDocument(null); // Clear if invalid
-             // sessionStorage.removeItem('current_prd'); // Keep potentially partial data? Or remove? Let's remove.
-             sessionStorage.removeItem('current_prd');
+            logger.warn('Invalid PRD structure found in sessionStorage');
+            setPrdDocument(null);
+            setFullPrdHtmlContent('');
+            setHasUnsavedChanges(false);
+            sessionStorage.removeItem('current_prd');
           }
         } else {
-           // Only set to null if it's not already null
-           setPrdDocument(currentDoc => currentDoc !== null ? null : currentDoc);
-           // logger.debug('No PRD found in sessionStorage.'); // Can be noisy
+          setPrdDocument(currentDoc => {
+            if (currentDoc !== null) {
+              setFullPrdHtmlContent('');
+              setHasUnsavedChanges(false);
+              return null;
+            }
+            return currentDoc;
+          });
         }
       } catch (error) {
         logger.error('Error loading PRD from sessionStorage:', error);
-        setPrdDocument(null); // Clear on error
-        sessionStorage.removeItem('current_prd'); // Remove potentially corrupted data
+        setPrdDocument(null);
+        setFullPrdHtmlContent('');
+        setHasUnsavedChanges(false);
+        sessionStorage.removeItem('current_prd');
       }
     };
 
     loadPrd(); // Initial load
 
-    // Listen for storage events to update PRD if changed in another tab/window
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === 'current_prd' && event.storageArea === sessionStorage) {
         logger.debug('sessionStorage changed (event), reloading PRD for workbench.');
@@ -214,471 +213,256 @@ const PRDWorkbench = () => {
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // Interval as fallback for same-tab updates (polling mechanism)
-    // A shorter interval makes updates appear faster, but increases polling frequency.
-    const intervalId = setInterval(loadPrd, 500); // Check every 500ms for faster updates
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(intervalId);
     };
-  }, []); // Removed dependencies, this setup should run once on mount
+  }, []);
 
-  // Function to scroll to a specific section when navigating from chat
-  useEffect(() => {
-    if (!prdDocument) return; // Don't run if no PRD loaded
+  // Function to parse HTML back into PRDDocument structure (simplified)
+  const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocument => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const sections: PRDSection[] = [];
+    let title = existingDoc.title;
+    let description = existingDoc.description;
 
-    // Check if we need to scroll to a section based on URL hash or other trigger
-    const hash = window.location.hash;
-    if (hash && (hash === '#title' || hash.startsWith('#section-'))) {
-      const elementId = hash.substring(1); // Remove #
-      setActiveSection(elementId === 'title' ? null : elementId); // Set active outline item
-      setTimeout(() => {
-        // Scroll the container, not the window
-        const container = contentRef.current?.querySelector('.bg-white.rounded-lg.shadow-lg');
-        const element = document.getElementById(elementId);
-        if (container && element) {
-           // Calculate position relative to the container
-           const elementTop = element.offsetTop;
-           const containerTop = (container as HTMLElement).offsetTop; // Adjust if container isn't the direct parent
-           container.scrollTo({ top: elementTop - containerTop - 20, behavior: 'smooth' }); // Adjust offset as needed
-           logger.debug(`Scrolling to element: ${elementId}`);
+    const h1 = doc.querySelector('h1');
+    if (h1) {
+      title = h1.textContent || existingDoc.title;
+      const firstP = h1.nextElementSibling;
+      if (firstP && firstP.tagName === 'P') {
+        let nextSibling = firstP.nextElementSibling;
+        if (!nextSibling || nextSibling.tagName === 'H2') {
+            description = firstP.innerHTML;
         } else {
-           logger.warn(`Element or container not found for scrolling: ${elementId}`);
+           description = '';
         }
-      }, 300); // Increased delay slightly
+      } else {
+        description = '';
+      }
     }
-  }, [prdDocument]); // Rerun when PRD document updates
 
-  // Function to handle section editing
-  const startEditing = (sectionId: string) => {
-     if (!prdDocument) return;
-    const section = prdDocument.sections.find(s => s.id === sectionId);
-    if (section) {
-      setEditContent(section.content);
-      setEditMode(true);
-      setActiveSection(sectionId);
-    }
+    const sectionHeadings = doc.querySelectorAll('h2');
+    sectionHeadings.forEach((h2) => {
+      const sectionTitle = h2.textContent || 'Untitled Section';
+      const sectionId = h2.id || 'section-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+      let contentHtml = '';
+      let sibling = h2.nextElementSibling;
+
+      while (sibling && sibling.tagName !== 'H2') {
+        contentHtml += sibling.outerHTML;
+        sibling = sibling.nextElementSibling;
+      }
+
+      sections.push({
+        id: sectionId,
+        title: sectionTitle,
+        content: contentHtml.trim()
+      });
+    });
+
+    const existingSectionIds = new Set(existingDoc.sections.map(s => s.id));
+    const parsedSectionIds = new Set(sections.map(s => s.id));
+    existingDoc.sections.forEach(existingSection => {
+        if (!parsedSectionIds.has(existingSection.id)) {
+            sections.push({ ...existingSection, content: '' });
+             logger.warn(`Section "${existingSection.title}" (ID: ${existingSection.id}) was missing after parse, added back as empty.`);
+        }
+    });
+
+    sections.sort((a, b) => {
+      const elementA = doc.getElementById(a.id);
+      const elementB = doc.getElementById(b.id);
+      if (!elementA || !elementB) return 0;
+      return elementA.compareDocumentPosition(elementB) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+    });
+
+    return {
+      ...existingDoc,
+      title: title,
+      description: description,
+      sections: sections,
+      lastUpdated: new Date().toISOString()
+    };
   };
 
-  // Function to save edited section
-  const saveEdits = () => {
-    if (!activeSection || !prdDocument) return;
+  // Function to save the entire PRD
+  const saveFullPrd = () => {
+    if (!prdDocument) return;
 
-    setPrdDocument(current => {
-      if (!current) return null; // Should not happen if activeSection is set
+    try {
+      const updatedPrdDoc = parseHtmlToPrd(fullPrdHtmlContent, prdDocument);
 
-      const updatedSections = current.sections.map(section =>
-        section.id === activeSection
-          ? { ...section, content: editContent }
-          : section
-      );
+      const newPrdString = JSON.stringify(updatedPrdDoc);
+      sessionStorage.setItem('current_prd', newPrdString);
+      logger.debug('Full PRD (HTML) saved to sessionStorage.');
 
-      const updated = {
-        ...current,
-        sections: updatedSections,
-        lastUpdated: new Date().toISOString()
-      };
+      workbenchStore.updatePRD(updatedPrdDoc.lastUpdated);
 
-      // Save to sessionStorage - this should trigger the listener to update state
-      sessionStorage.setItem('current_prd', JSON.stringify(updated));
-      logger.debug('PRD section saved to sessionStorage.');
-      
-      // Notify the workbench store that PRD has been updated
-      workbenchStore.updatePRD(updated.lastUpdated);
-      
-      // Trigger storage event for other listeners
-      window.dispatchEvent(new StorageEvent('storage', { 
-        key: 'current_prd', 
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'current_prd',
         storageArea: sessionStorage,
-        newValue: JSON.stringify(updated)
+        newValue: newPrdString
       }));
 
-      // Let the storage event handler update the state for consistency
-      return current; // Return current state, let storage listener handle update
-    });
+      setPrdDocument(updatedPrdDoc);
+      setHasUnsavedChanges(false);
 
-    setEditMode(false);
-    setActiveSection(null); // Deselect section after saving
-    toast.success('Section updated successfully');
-  };
-
-
-  // Function to export PRD as markdown
-  const exportPRDAsMarkdown = () => {
-     if (!prdDocument) {
-       toast.error("No PRD document loaded to export.");
-       return;
-     }
-    let markdown = `# ${prdDocument.title}\n\n`;
-    // Include description if it exists
-    if (prdDocument.description) {
-      markdown += `${prdDocument.description}\n\n`; // Assuming description is plain text or simple markdown
+      toast.success('PRD updated successfully');
+    } catch (error) {
+      logger.error('Error saving PRD:', error);
+      toast.error('Failed to save PRD. Check content structure.');
     }
-    // Add separator before sections if description exists
-    if (prdDocument.description && prdDocument.sections.length > 0) {
-      markdown += '---\n\n';
-    }
-
-    prdDocument.sections.forEach(section => {
-      markdown += `## ${section.title}\n\n${section.content}\n\n`; // Content is already markdown
-    });
-
-    // Create and download file
-    const blob = new Blob([markdown.trim()], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${prdDocument.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
-  // Function to export PRD as HTML
-  const exportPRDAsHTML = () => {
-     if (!prdDocument) {
-       toast.error("No PRD document loaded to export.");
-       return;
-     }
-    // Simple HTML template with improved styling and basic markdown conversion
-    const renderContentToHtml = (content: string): string => {
-      // Basic conversion: paragraphs, bold, italics, lists
-      let htmlContent = content
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')     // Italics
-        .split('\n')
-        .map(line => line.trim())
-        .reduce((acc, line) => {
-          if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('• ')) {
-            const item = `<li>${line.substring(2)}</li>`;
-            if (acc.lastType === 'ul') acc.html += item;
-            else acc.html += `<ul>${item}`;
-            acc.lastType = 'ul';
-          } else if (/^\d+\.\s/.test(line)) {
-            const item = `<li>${line.replace(/^\d+\.\s/, '')}</li>`;
-            if (acc.lastType === 'ol') acc.html += item;
-            else acc.html += `<ol>${item}`;
-            acc.lastType = 'ol';
-          } else if (line === '') {
-            if (acc.lastType === 'ul') acc.html += '</ul>';
-            if (acc.lastType === 'ol') acc.html += '</ol>';
-            acc.lastType = null;
-            // Maybe add <br> or rely on p margins
-          } else {
-             if (acc.lastType === 'ul') acc.html += '</ul>';
-             if (acc.lastType === 'ol') acc.html += '</ol>';
-             acc.html += `<p>${line}</p>`;
-             acc.lastType = 'p';
-          }
-          return acc;
-        }, { html: '', lastType: null as ('ul' | 'ol' | 'p' | null) });
-
-      // Close any open list at the end
-      if (htmlContent.lastType === 'ul') htmlContent.html += '</ul>';
-      if (htmlContent.lastType === 'ol') htmlContent.html += '</ol>';
-
-      return htmlContent.html;
-    };
-
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${prdDocument.title}</title>
-  <style>
-    body { font-family: sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 0 15px; }
-    h1 { color: #2563eb; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 0; }
-    h2 { color: #111; margin-top: 40px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-    .description { color: #555; margin-bottom: 30px; font-size: 1.1em; }
-    .section { margin-bottom: 30px; }
-    p { margin-bottom: 1em; }
-    ul, ol { margin-bottom: 1em; padding-left: 2em; }
-    li { margin-bottom: 0.5em; }
-    strong { font-weight: bold; }
-    em { font-style: italic; }
-    .meta { font-size: 0.85em; color: #777; text-align: right; margin-top: 50px; border-top: 1px solid #eee; padding-top: 10px;}
-  </style>
-</head>
-<body>
-  <h1>${prdDocument.title}</h1>
-  ${prdDocument.description ? `<div class="description">${renderContentToHtml(prdDocument.description)}</div>` : ''}
-
-  ${prdDocument.sections.map(section => `
-  <div class="section" id="${section.id}">
-    <h2>${section.title}</h2>
-    <div>${renderContentToHtml(section.content)}</div>
-  </div>
-  `).join('')}
-
-  <div class="meta">Last updated: ${new Date(prdDocument.lastUpdated).toLocaleString()}</div>
-</body>
-</html>`;
-
-    // Create and download file
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${prdDocument.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Handler for editor content changes
+  const handleEditorChange = (newHtmlContent: string) => {
+    setFullPrdHtmlContent(newHtmlContent);
+    setHasUnsavedChanges(true);
   };
 
-
-  // Handle zoom in/out
-  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.1, 1.5));
-  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.1, 0.7));
-  const handleZoomReset = () => setZoomLevel(1);
-
-  // Generate outline items only if prdDocument is loaded
-  const outlineItems = prdDocument ? [
-    { id: 'title', title: prdDocument.title || 'Overview' }, // Use PRD title
-    ...prdDocument.sections.map((section) => ({
-      id: section.id,
-      title: section.title,
-    }))
-  ] : [];
-
-  // Handle initial state and loading
   if (!showWorkbench) return null;
-
 
   return (
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench"
+      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench fixed right-0 top-[var(--header-height)] bottom-0"
       variants={workbenchVariants}
       initial="closed"
       animate={showWorkbench ? 'open' : 'closed'}
       style={{
-        position: 'fixed',
-        right: 0,
-        top: 'var(--header-height)',
-        bottom: 0,
         height: 'calc(100vh - var(--header-height))',
-        width: 'var(--workbench-width)', // Controlled by animation
+        width: 'var(--workbench-width)',
       }}
     >
       <div className="h-full flex flex-col">
-        {/* Toolbar */}
-        <div className="flex justify-between items-center p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <IconButton
-              title="Toggle Outline"
-              onClick={() => setShowOutline(!showOutline)}
-              className={classNames("text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary flex-shrink-0", {
-                "bg-bolt-elements-background-depth-3": showOutline
-              })}
-            >
-              <div className="i-ph:sidebar" />
-            </IconButton>
-            <span className="text-sm font-medium text-bolt-elements-textPrimary truncate flex-shrink min-w-0">
+        <div className="flex justify-between items-center p-2 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0 gap-2">
+          <div className="flex items-center gap-2 overflow-hidden flex-shrink min-w-0">
+            <span className="text-sm font-medium text-bolt-elements-textPrimary truncate">
               {prdDocument?.title || 'PRD Workbench'}
             </span>
+            {hasUnsavedChanges && (
+                 <span className="text-xs text-yellow-500 dark:text-yellow-400 ml-1 flex-shrink-0" title="Unsaved changes">*</span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
-            <IconButton title="Zoom Out" onClick={handleZoomOut} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:minus" />
+            <span className="text-xs text-bolt-elements-textTertiary mr-1 hidden md:inline">
+              {prdDocument ? `${fullPrdHtmlContent.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length} words` : ''}
+            </span>
+
+            <div className="h-4 w-px bg-bolt-elements-borderColor mx-1"></div>
+
+            <IconButton
+              title="Save Changes"
+              onClick={saveFullPrd}
+              disabled={!prdDocument || !hasUnsavedChanges}
+              className="text-green-500 hover:text-green-600 disabled:opacity-50 disabled:hover:text-green-500"
+            >
+              <div className="i-ph:floppy-disk-back w-5 h-5" />
             </IconButton>
-            <span className="text-xs text-bolt-elements-textSecondary px-1 w-10 text-center">
+
+            <div className="h-4 w-px bg-bolt-elements-borderColor mx-1"></div>
+
+            <IconButton title="Zoom Out" onClick={() => setZoomLevel(prev => Math.max(prev - 0.1, 0.5))} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+              <div className="i-ph:minus w-5 h-5" />
+            </IconButton>
+            <span className="text-xs text-bolt-elements-textSecondary px-1 w-10 text-center select-none">
               {prdDocument ? `${Math.round(zoomLevel * 100)}%` : '-'}
             </span>
-            <IconButton title="Zoom In" onClick={handleZoomIn} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:plus" />
+            <IconButton title="Zoom In" onClick={() => setZoomLevel(prev => Math.min(prev + 0.1, 2.0))} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+              <div className="i-ph:plus w-5 h-5" />
             </IconButton>
-            <IconButton title="Reset Zoom" onClick={handleZoomReset} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
-              <div className="i-ph:frame-corners" />
+            <IconButton title="Reset Zoom" onClick={() => setZoomLevel(1)} disabled={!prdDocument || zoomLevel === 1} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
+              <div className="i-ph:frame-corners w-5 h-5" />
             </IconButton>
 
-            <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
+            <div className="h-4 w-px bg-bolt-elements-borderColor mx-1"></div>
 
-            <IconButton title="Export as Markdown" onClick={exportPRDAsMarkdown} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:file-markdown" />
+            <IconButton title="Export as Markdown" onClick={() => {
+              if (!prdDocument) { toast.error("No PRD loaded."); return; }
+              const markdown = "Markdown export requires HTML-to-Markdown conversion (e.g., using turndown library)";
+              console.warn("Markdown export needs implementation using an HTML-to-Markdown library.");
+              toast.info("Markdown export not fully implemented.");
+            }} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+              <div className="i-ph:file-markdown w-5 h-5" />
             </IconButton>
-            <IconButton title="Export as HTML" onClick={exportPRDAsHTML} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:file-html" />
+            <IconButton title="Export as HTML" onClick={() => {
+              if (!prdDocument) { toast.error("No PRD loaded."); return; }
+              const fullHtml = `<!DOCTYPE html>
+ <html lang="en">
+ <head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>${prdDocument.title}</title>
+   <style> body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 20px auto; padding: 15px; } h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; } /* Add more basic styles if needed */ </style>
+ </head>
+ <body>
+   ${fullPrdHtmlContent}
+   <hr>
+   <p style="font-size: 0.8em; color: #777;">Last updated: ${new Date(prdDocument.lastUpdated).toLocaleString()}</p>
+ </body>
+ </html>`;
+              const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${prdDocument.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+              <div className="i-ph:file-html w-5 h-5" />
             </IconButton>
           </div>
         </div>
 
-        {/* Main content area */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Outline sidebar */}
-          {showOutline && (
-            <div className="w-64 border-r border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 overflow-y-auto flex-shrink-0">
-               {prdDocument ? (
-                 <div className="p-4">
-                   <h3 className="text-sm font-medium text-bolt-elements-textPrimary mb-3">Document Outline</h3>
-                   <ul className="space-y-1">
-                     {outlineItems.map((item) => (
-                       <li key={item.id}>
-                         <button
-                           onClick={() => {
-                             const targetElement = document.getElementById(item.id);
-                             if (targetElement) {
-                               setActiveSection(item.id === 'title' ? null : item.id);
-                               // Scroll container logic (simplified)
-                               const container = contentRef.current?.querySelector('.bg-white.rounded-lg.shadow-lg');
-                               if(container) {
-                                   const elementTop = targetElement.offsetTop;
-                                   container.scrollTo({ top: elementTop - 30, behavior: 'smooth' }); // Adjust offset
-                               }
-                             }
-                           }}
-                           className={classNames(
-                             "w-full text-left py-1.5 px-2 rounded-md flex items-center justify-between text-sm transition-colors",
-                             (activeSection === item.id || (activeSection === null && item.id === 'title')) // Highlight title when activeSection is null
-                               ? "bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary font-medium"
-                               : "hover:bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary"
-                           )}
-                         >
-                           <span className="truncate">{item.title}</span>
-                         </button>
-                       </li>
-                     ))}
-                   </ul>
-
-                   <div className="mt-6 p-3 bg-bolt-elements-background-depth-2 rounded-lg">
-                     <h4 className="text-xs font-medium text-bolt-elements-textPrimary mb-2">Document Info</h4>
-                     <div className="text-xs text-bolt-elements-textSecondary space-y-1">
-                       <div>Sections: {prdDocument.sections.length}</div>
-                       <div>Last Updated: {new Date(prdDocument.lastUpdated).toLocaleDateString()}</div>
-                       {/* Simple word count */}
-                       <div>Word count: {
-                         [prdDocument.description, ...prdDocument.sections.map(s => s.content)]
-                           .join(' ')
-                           .split(/\s+/)
-                           .filter(Boolean)
-                           .length
-                       }</div>
-                     </div>
-                   </div>
-                 </div>
-               ) : (
-                  <div className="p-4 text-center text-sm text-bolt-elements-textTertiary mt-10">
-                     No PRD loaded. Generate one using the PRD Assistant.
-                  </div>
-               )}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Editor Toolbar positioned as a full-width banner */}
+          {prdDocument && editor && (
+            <div className="w-full bg-white dark:bg-gray-900 border-b border-bolt-elements-borderColor shadow-sm">
+              <EditorToolbar editor={editor} readOnly={false} />
             </div>
           )}
-
-          {/* Document viewer */}
+          
           <div
-              ref={contentRef} // Ref for the scrollable container
-              className="flex-1 flex flex-col overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6" // Reduced padding (removed lg:p-8)
-           >
-             {prdDocument ? (
-               <div
-                 className="bg-white rounded-lg shadow-lg transition-transform w-full max-w-4xl mx-auto mb-6" // Use max-width, add mb for bottom spacing
-                 style={{
-                   transform: `scale(${zoomLevel})`,
-                   transformOrigin: 'top center',
-                 }}
-               >
-                 {/* Single page PRD document */}
-                 <div className="p-4 md:p-6 lg:p-8"> {/* Reduced base padding, kept larger screen padding */}
-                   {/* Title and description */}
-                   <div id="title" className="mb-6 lg:mb-8 border-b border-gray-200 pb-4 lg:pb-6"> {/* Reduced mb, pb */}
-                     <div className="flex justify-between items-center mb-2"> {/* Reduced mb */}
-                         <span className="text-xs font-medium text-bolt-elements-textSecondary"> {/* Reduced size */}
-                            Product Requirements Document
-                         </span>
-                         <div className="text-xs text-bolt-elements-textTertiary">
-                           Updated: {new Date(prdDocument.lastUpdated).toLocaleDateString()} {/* Shortened label */}
-                         </div>
-                     </div>
-                     <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-bolt-elements-textPrimary mb-2 text-center">{prdDocument.title}</h1> {/* Reduced size, mb */}
-                     {prdDocument.description && (
-                         <div className="prose prose-bolt max-w-none text-bolt-elements-textSecondary text-center mt-2 text-sm"> {/* Reduced mt, text size */}
-                            <SimpleMarkdownRenderer content={prdDocument.description} />
-                         </div>
-                     )}
-                   </div>
-
-                   {/* Sections */}
-                   {prdDocument.sections.map((section, index) => (
-                     <div key={section.id} id={section.id} className="mb-6 lg:mb-8"> {/* Reduced mb */}
-                       <div className="flex justify-between items-center mb-2 group"> {/* Reduced mb */}
-                         <h2 className="text-lg md:text-xl font-semibold text-bolt-elements-textPrimary flex items-center"> {/* Reduced size */}
-                           {/* Optional section numbering */}
-                            {/* <span className="inline-flex justify-center items-center w-6 h-6 rounded-full bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary mr-2 text-xs"> // Reduced size/spacing
-                             {index + 1}
-                            </span> */}
-                           {section.title}
-                         </h2>
-                         {!editMode && (
-                           <IconButton
-                             title={editMode && activeSection === section.id ? "Cancel editing" : "Edit section"}
-                             onClick={() => {
-                               if (editMode && activeSection === section.id) {
-                                 setEditMode(false);
-                                 setActiveSection(null);
-                               } else {
-                                 startEditing(section.id);
-                               }
-                             }}
-                              // Show edit button on hover
-                             className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary opacity-0 group-hover:opacity-100 transition-opacity ml-2" // Added ml
-                           >
-                             <div className="i-ph:pencil-simple w-4 h-4" /> {/* Explicit size */}
-                           </IconButton>
-                         )}
-                       </div>
-
-                       {editMode && activeSection === section.id ? (
-                         <div className="mb-2"> {/* Reduced mb */}
-                           <textarea
-                             value={editContent}
-                             onChange={(e) => setEditContent(e.target.value)}
-                             rows={10} // Reduced rows
-                             className="w-full p-3 border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus text-sm" // Reduced padding, text size
-                           />
-                           <div className="flex justify-end mt-2 gap-2">
-                             <button
-                               onClick={() => { setEditMode(false); setActiveSection(null); }}
-                               className="px-3 py-1 bg-bolt-elements-background-depth-2 hover:bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary rounded text-xs transition-colors" // Reduced padding, text size
-                             >
-                               Cancel
-                             </button>
-                             <button
-                               onClick={saveEdits}
-                               className="px-3 py-1 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded text-xs transition-colors" // Reduced padding, text size
-                             >
-                               Save Changes
-                             </button>
-                           </div>
-                         </div>
-                       ) : (
-                         // Use the improved renderer for section content
-                         <div className="prose prose-bolt max-w-none text-bolt-elements-textPrimary text-sm"> {/* Added text-sm */}
-                            <SimpleMarkdownRenderer content={section.content} />
-                         </div>
-                       )}
-                     </div>
-                   ))}
-                 </div>
-               </div>
-              ) : (
-                 // Placeholder when no PRD is loaded
-                 <div className="flex-1 flex items-center justify-center">
-                     <div className="text-center p-10">
-                         <div className="i-ph:clipboard-text text-6xl text-bolt-elements-textTertiary mb-6 mx-auto"></div>
-                         <h3 className="text-xl font-semibold text-bolt-elements-textPrimary mb-2">No PRD Loaded</h3>
-                         <p className="text-bolt-elements-textSecondary max-w-md">
-                           Use the PRD Assistant chat to generate or load a Product Requirements Document.
-                           It will appear here.
-                         </p>
-                     </div>
-                 </div>
-              )}
-           </div>
-
+            ref={contentRef}
+            className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6"
+          >
+            {prdDocument ? (
+              <div className="w-full max-w-4xl mx-auto">
+                {/* Editor Content */}
+                <div
+                  ref={editorContainerRef}
+                  className="bg-white dark:bg-gray-900 rounded shadow-lg transition-transform w-full mb-6"
+                  style={{
+                    transform: `scale(${zoomLevel})`,
+                    transformOrigin: 'top center',
+                    minHeight: 'calc(100% - 2rem)',
+                  }}
+                >
+                  <PRDTipTapEditor
+                    content={fullPrdHtmlContent}
+                    onChange={handleEditorChange}
+                    readOnly={false}
+                    className="w-full flex flex-col"
+                    placeholder={"Start writing your PRD..."}
+                    onEditorReady={setEditor}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center h-full">
+                <div className="text-center p-10">
+                  <div className="i-ph:clipboard-text text-6xl text-bolt-elements-textTertiary mb-6 mx-auto"></div>
+                  <h3 className="text-xl font-semibold text-bolt-elements-textPrimary mb-2">No PRD Loaded</h3>
+                  <p className="text-bolt-elements-textSecondary max-w-md">
+                    Use the PRD Assistant chat to generate or load a Product Requirements Document.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>

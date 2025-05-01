@@ -73,9 +73,13 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
         if (endIndex !== -1) {
             // Complete document found
             prdMarkdown = content.substring(startIndex + '<prd_document>'.length, endIndex).trim();
+            // Clear streaming content when complete
+            workbenchStore.updateStreamingPRDContent(null);
         } else {
             // Potentially partial document (streaming)
             prdMarkdown = content.substring(startIndex + '<prd_document>'.length).trim();
+            // Update streaming content for real-time display
+            workbenchStore.updateStreamingPRDContent(prdMarkdown);
             // We can optionally add a small heuristic, e.g., don't parse if it's too short
             // if (prdMarkdown.length < 20) return null; // Avoid parsing tiny fragments
         }
