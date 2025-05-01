@@ -49,6 +49,9 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
     return null;
   }
 
+  // Check if the content contains the placeholder text and remove it
+  content = content.replace(/\[Previous sections continue unchanged\.\.\.\]/g, '');
+  
   const lines = content.split('\n');
   const elements: React.ReactNode[] = [];
   let listType: 'ul' | 'ol' | null = null;
@@ -68,9 +71,19 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
 
   lines.forEach((line, index) => {
     const trimmedLine = line.trim();
+    
+    // Skip any remaining placeholder lines
+    if (trimmedLine.includes("Previous sections continue unchanged") || 
+        trimmedLine.includes("[unchanged content]") ||
+        trimmedLine.includes("[section unchanged]")) {
+      return;
+    }
 
     // Regex for bold and italics - basic version, might not handle nested or complex cases perfectly
     const renderLine = (text: string) => {
+      // Remove any inline placeholder text
+      text = text.replace(/\[.*?unchanged.*?\]/g, '');
+      
       // Split by bold/italic markers, keeping the markers
       const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
       return parts.map((part, i) => {
@@ -120,7 +133,7 @@ const SimpleMarkdownRenderer: React.FC<{ content: string }> = ({ content }) => {
     }
      // Empty line - potentially signifies paragraph break, handled by default spacing or explicit <br> if needed
      else {
-       // Could add a <br /> or just rely on paragraph margins if consecutive empty lines aren't significant
+       // Could add a <br /> or just rely on paragraph margins
        closeList(); // Close list if an empty line breaks it
        // Optionally add spacing for empty lines if desired: elements.push(<div key={index} className="h-4"></div>);
      }
@@ -270,11 +283,19 @@ const PRDWorkbench = () => {
       // Save to sessionStorage - this should trigger the listener to update state
       sessionStorage.setItem('current_prd', JSON.stringify(updated));
       logger.debug('PRD section saved to sessionStorage.');
+      
+      // Notify the workbench store that PRD has been updated
+      workbenchStore.updatePRD(updated.lastUpdated);
+      
+      // Trigger storage event for other listeners
+      window.dispatchEvent(new StorageEvent('storage', { 
+        key: 'current_prd', 
+        storageArea: sessionStorage,
+        newValue: JSON.stringify(updated)
+      }));
 
-      // Optimistically update state directly as well? Storage event might have delay.
-      // return updated;
       // Let the storage event handler update the state for consistency
-       return current; // Return current state, let storage listener handle update
+      return current; // Return current state, let storage listener handle update
     });
 
     setEditMode(false);

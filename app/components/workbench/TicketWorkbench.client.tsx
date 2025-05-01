@@ -41,6 +41,7 @@ interface Ticket {
   tags?: string[];
   createdAt: string;
   updatedAt: string;
+  _manuallyEdited?: boolean;
 }
 
 // Simple Markdown Renderer Component (or helper function)
@@ -226,19 +227,34 @@ const TicketWorkbench = () => {
 
     try {
       const editedTicketData = JSON.parse(editContent);
+      const now = new Date().toISOString();
 
       setTickets(current => {
          const updatedTickets = current.map(ticket =>
              ticket.id === activeTicketId
-             ? { ...ticket, ...editedTicketData, updatedAt: new Date().toISOString() }
+             ? { 
+                 ...ticket, 
+                 ...editedTicketData, 
+                 updatedAt: now,
+                 _manuallyEdited: true // Add flag to indicate this was manually edited
+               }
              : ticket
          );
 
         // Save to sessionStorage
         sessionStorage.setItem('tickets', JSON.stringify(updatedTickets));
         logger.debug('Ticket saved to sessionStorage.');
+        
+        // Notify the workbench store that tickets have been updated
+        // This is critical to ensure the edited version is treated as authoritative
+        workbenchStore.updateTickets(now);
+        
         // Trigger storage event for other listeners (like chat)
-        window.dispatchEvent(new StorageEvent('storage', { key: 'tickets', storageArea: sessionStorage }));
+        window.dispatchEvent(new StorageEvent('storage', { 
+          key: 'tickets', 
+          storageArea: sessionStorage,
+          newValue: JSON.stringify(updatedTickets)
+        }));
 
         return updatedTickets;
       });

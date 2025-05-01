@@ -49,48 +49,59 @@ interface PRDSection {
 
 // Updated Function to extract PRD content, handling partial streams
 const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
-  const assistantMessages = messages.filter(msg => msg.role === 'assistant');
-  if (assistantMessages.length === 0) return null;
-
-  // Find the latest assistant message that contains the start tag
-  const latestPrdMessage = assistantMessages
-    .slice() // Create a shallow copy to avoid reversing the original array if needed elsewhere
-    .reverse()
-    .find(msg => typeof msg.content === 'string' && msg.content.includes('<prd_document>'));
-
-  if (!latestPrdMessage || typeof latestPrdMessage.content !== 'string') {
-      // logger.debug('No assistant message with <prd_document> found.');
-      return null;
-  }
-
-  const content = latestPrdMessage.content;
-  const startIndex = content.indexOf('<prd_document>');
-  let prdMarkdown = '';
-
-  if (startIndex !== -1) {
-      const endIndex = content.indexOf('</prd_document>', startIndex);
-      if (endIndex !== -1) {
-          // Complete document found
-          prdMarkdown = content.substring(startIndex + '<prd_document>'.length, endIndex).trim();
-      } else {
-          // Potentially partial document (streaming)
-          prdMarkdown = content.substring(startIndex + '<prd_document>'.length).trim();
-          // We can optionally add a small heuristic, e.g., don't parse if it's too short
-          // if (prdMarkdown.length < 20) return null; // Avoid parsing tiny fragments
-      }
-  } else {
-      // Should not happen based on the find condition, but good to check
-      return null;
-  }
-
-  if (!prdMarkdown) {
-      // logger.debug('Empty markdown content after extraction.');
-      return null;
-  }
-
-
   try {
-    // Reuse the existing parsing logic - it should handle partial markdown gracefully
+    const assistantMessages = messages.filter(msg => msg.role === 'assistant');
+    if (assistantMessages.length === 0) return null;
+
+    // Find the latest assistant message that contains the start tag
+    const latestPrdMessage = assistantMessages
+      .slice() // Create a shallow copy to avoid reversing the original array if needed elsewhere
+      .reverse()
+      .find(msg => typeof msg.content === 'string' && msg.content.includes('<prd_document>'));
+
+    if (!latestPrdMessage || typeof latestPrdMessage.content !== 'string') {
+        // logger.debug('No assistant message with <prd_document> found.');
+        return null;
+    }
+
+    const content = latestPrdMessage.content;
+    const startIndex = content.indexOf('<prd_document>');
+    let prdMarkdown = '';
+
+    if (startIndex !== -1) {
+        const endIndex = content.indexOf('</prd_document>', startIndex);
+        if (endIndex !== -1) {
+            // Complete document found
+            prdMarkdown = content.substring(startIndex + '<prd_document>'.length, endIndex).trim();
+        } else {
+            // Potentially partial document (streaming)
+            prdMarkdown = content.substring(startIndex + '<prd_document>'.length).trim();
+            // We can optionally add a small heuristic, e.g., don't parse if it's too short
+            // if (prdMarkdown.length < 20) return null; // Avoid parsing tiny fragments
+        }
+    } else {
+        // Should not happen based on the find condition, but good to check
+        return null;
+    }
+
+    if (!prdMarkdown) {
+        // logger.debug('Empty markdown content after extraction.');
+        return null;
+    }
+
+    // First get any existing PRD to preserve edits
+    let existingPRD: PRDDocument | null = null;
+    try {
+      const storedPRD = sessionStorage.getItem('current_prd');
+      if (storedPRD) {
+        existingPRD = JSON.parse(storedPRD);
+      }
+    } catch (error) {
+      logger.error('Error parsing existing PRD from sessionStorage:', error);
+      // Continue with extraction without merging if we couldn't parse
+    }
+
+    // Parse the markdown content
     const lines = prdMarkdown.split('\n');
     let title = 'Untitled PRD';
     let description = '';
@@ -119,9 +130,9 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
           content: '',
         };
         readingState = 'section';
-        // Clear description accumulation once a section starts
-        if (readingState !== 'description') {
-           description = description.trim(); // Final trim if we switch state
+        // Clear description accumulation only when changing from description to section
+        if (readingState === 'section' && hasFoundTitle) {
+          description = description.trim(); // Final trim if we switch state
         }
       } else if (readingState === 'description' && hasFoundTitle) {
          // Accumulate description lines after the title line
@@ -133,8 +144,10 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
     });
 
     if (currentSection) {
-      currentSection.content = currentSection.content.trimEnd();
-      sections.push(currentSection);
+      // Ensure currentSection is of type PRDSection before accessing content
+      const typedSection = currentSection as PRDSection;
+      typedSection.content = typedSection.content.trimEnd();
+      sections.push(typedSection);
     }
 
     description = description.trim();
@@ -148,13 +161,73 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
         return null;
     }
 
+    // If we have an existing PRD, merge the new content with it
+    if (existingPRD) {
+      // For title and description, only update if they've been significantly changed
+      const newPRD: PRDDocument = {
+        title: existingPRD.title,
+        description: existingPRD.description,
+        sections: [], // Initialize with empty array, will be populated later
+        lastUpdated: new Date().toISOString()
+      };
+
+      // Only update title if the new one is significantly different and not default
+      if (title !== 'Untitled PRD' && title !== existingPRD.title) {
+        newPRD.title = title;
+      }
+
+      // Only update description if there's a significant change
+      if (description && description !== existingPRD.description) {
+        newPRD.description = description;
+      }
+
+      // Instead of trying to merge sections, use the new sections as the basis
+      // but preserve any sections with the same ID that have been manually edited
+      const newSections: PRDSection[] = [];
+      const existingSectionsByTitle = new Map<string, PRDSection>();
+      
+      // Create a map of existing sections by lowercase title for easier lookup
+      existingPRD.sections.forEach(section => {
+        existingSectionsByTitle.set(section.title.toLowerCase(), section);
+      });
+      
+      // Process the new sections, preserving IDs from matching existing sections
+      sections.forEach((newSection, index) => {
+        const existingSection = existingSectionsByTitle.get(newSection.title.toLowerCase());
+        
+        if (existingSection) {
+          // Use existing section ID but with the new content
+          newSections.push({
+            id: existingSection.id,
+            title: newSection.title,
+            content: newSection.content
+          });
+          
+          // Remove this section from the map to track which we've processed
+          existingSectionsByTitle.delete(newSection.title.toLowerCase());
+        } else {
+          // New section - add it with a new ID
+          newSections.push({
+            id: `section-${index}`,
+            title: newSection.title,
+            content: newSection.content
+          });
+        }
+      });
+      
+      // Add the sections to the new PRD
+      newPRD.sections = newSections;
+
+      return newPRD;
+    }
+
+    // If no existing PRD, return the newly parsed one
     return {
       title,
       description,
       sections,
       lastUpdated: new Date().toISOString(),
     };
-
   } catch (error) {
     logger.error('Error parsing potentially partial PRD markdown:', error);
     return null;
@@ -237,21 +310,40 @@ const PRDChat = ({ backgroundMode = false }) => {
     id: 'prd-chat',
     initialMessages: initialMessages,
     onFinish: (message) => {
+      const finishTimestamp = new Date().toISOString(); // Get timestamp when generation finishes
       // Final extraction attempt when streaming finishes, ensures the complete doc is parsed
       const finalMessages = [...messages, message];
+      storePRDMessages(finalMessages); // Store history
+
       const prdDocument = extractPRDFromMessages(finalMessages);
       if (prdDocument) {
+        // Our improved extractPRDFromMessages function already handles merging with existing content
         sessionStorage.setItem('current_prd', JSON.stringify(prdDocument));
         logger.debug('PRD extracted and saved onFinish (final)');
+        
+        // Trigger storage event for workbench update
+        window.dispatchEvent(new StorageEvent('storage', { 
+          key: 'current_prd', 
+          newValue: JSON.stringify(prdDocument), 
+          storageArea: sessionStorage 
+        }));
       }
-      // Update streaming state store *after* processing
-       streamingState.set(false);
-       logger.debug('Streaming finished.');
+      
+      // Update the last generated timestamp *after* processing and storing
+      workbenchStore.updatePRDLastGenerated(finishTimestamp);
+      streamingState.set(false);
+      logger.debug('Streaming finished.');
+      
+      // Ensure workbench is visible after PRD generation
+      if (prdDocument && !backgroundMode && !workbenchStore.showWorkbench.get()) {
+        workbenchStore.showWorkbench.set(true);
+      }
     },
     onError: (error) => {
       streamingState.set(false); // Ensure streaming state is reset on error
       toast.error(`Error: ${error.message}`);
       logger.error('PRD Chat API error:', error);
+       // Also potentially reset the last generated timestamp or handle differently? For now, just reset streaming.
     },
      // onResponse is called when the server response starts
      onResponse: (response) => {
@@ -303,35 +395,112 @@ const PRDChat = ({ backgroundMode = false }) => {
     processSampledMessages({
       messages,
       initialMessages,
-      isLoading, // Use isLoading from useChat hook
+      isLoading,
       parseMessages: (msgs, loading) => {
-         // Update streaming state store based on useChat's isLoading
-         // Note: onResponse/onFinish provide more accurate start/end signals
-         // streamingState.set(loading);
-
-        // Set chatStarted flag
+        // Original logic called workbenchStore.updatePRD and dispatched storage event here.
+        // This should now happen only in onFinish to avoid premature updates.
+        // We might still want chatStarted logic here if needed.
         if (msgs.length > initialMessages.length && !chatStarted) {
           setChatStarted(true);
         }
+        // The progressive extraction via extractPRDContent should still work for updating the workbench display during streaming.
       },
-      storeMessageHistory: storePRDMessages, // Use the specific PRD storage function
+      storeMessageHistory: storePRDMessages,
       extractPRDContent, // Pass the extraction function for progressive updates
     });
-  }, [messages, isLoading, initialMessages, storePRDMessages, extractPRDContent, chatStarted]);
+  }, [messages, isLoading, initialMessages, storePRDMessages, extractPRDContent, chatStarted]); // Added chatStarted dependency
 
 
-  // ... (rest of the component remains largely the same)
-  // useEffect for initialMessageData (auto-submit)
-  // useEffect for textarea auto-resize
-  // handleFileUpload
-  // handleTextareaChange
-  // handleFileSelection
-  // handlePaste
-  // prdTemplates
-  // selectTemplate
-  // handleSendMessage
-  // handleExportChat
-  // messagesForDisplay filtering
+  // Add state for PRD update notification
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
+  // Get the needsUpdate status from the store
+  const needsUpdate = useStore(workbenchStore.prdNeedsUpdate);
+
+  // Check if PRD needs update based on ticket changes AND if chat is idle
+  useEffect(() => {
+     // Show notification only if an update is needed AND the chat is not currently loading/streaming
+    setShowUpdateNotification(needsUpdate && !isLoading);
+
+    // Optional: remove interval logic if store listener is sufficient
+  }, [needsUpdate, isLoading]); // Depend on store value and isLoading
+
+
+  // Function to handle PRD regeneration based on updated tickets
+  const handleRegeneratePRD = () => {
+    // Acknowledge the update immediately to hide the button
+    workbenchStore.acknowledgePRDUpdate();
+    setShowUpdateNotification(false); // Hide manually as well
+
+    // Get the current PRD from sessionStorage to preserve manual edits
+    const currentPRD = sessionStorage.getItem('current_prd');
+    const latestTickets = sessionStorage.getItem('tickets');
+    let ticketsContext = '';
+    let prdContext = '';
+
+    // Parse the current PRD to include in the context
+    if (currentPRD) {
+      try {
+        const prdData = JSON.parse(currentPRD) as PRDDocument;
+        prdContext = `Current PRD: "${prdData.title}"\n\nSections:\n${prdData.sections.map((section, index) => 
+          `Section ${index + 1}: ${section.title}`
+        ).join('\n')}`;
+      } catch (error) {
+        logger.error('Error parsing current PRD data:', error);
+      }
+    }
+
+    if (latestTickets) {
+      try {
+        const ticketData = JSON.parse(latestTickets);
+        ticketsContext = `Based on the following updated tickets:\n${ticketData.map((ticket: any, index: number) => // Use 'any' or define Ticket type locally/import
+          `Ticket ${index + 1}: ${ticket.title} (${ticket.type}, ${ticket.priority})
+Description: ${ticket.description.substring(0, 100)}...`
+        ).join('\n')}`;
+      } catch (error) {
+        logger.error('Error parsing tickets data:', error);
+      }
+    }
+
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    const updatePrompt = `Tickets have been updated. Please update the PRD considering these changes.
+
+IMPORTANT: The PRD has been manually edited by the user. For sections that need to be updated based on ticket changes:
+1. DO NOT append to existing content - completely REPLACE the old content with new content
+2. When updating a section, replace its ENTIRE content
+3. Keep the section titles and structure exactly as they are
+4. Only update sections that are directly affected by the ticket changes
+5. Do not regenerate the entire PRD; only update specific sections that need changing
+
+${prdContext}
+
+${ticketsContext}
+
+(Context from original request if available: ${lastUserMessage?.content ?? 'Generate initial PRD based on the tickets.'})`;
+
+    append({
+      role: 'user',
+      content: updatePrompt
+    });
+  };
+
+  // Listen for storage events to detect changes in tickets from the workbench
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'tickets' && event.newValue !== null) {
+        // Tickets have been updated in the workbench, call the store method
+        // The store method now handles the logic of comparing timestamps
+        workbenchStore.updateTickets();
+      }
+       // Add listener for PRD updates potentially triggered by workbench edits
+       if (event.key === 'current_prd' && event.newValue !== null) {
+         workbenchStore.updatePRD();
+       }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []); // No dependencies needed
+
 
     // Check for initial message data and auto-submit if needed
     useEffect(() => {
@@ -351,22 +520,10 @@ const PRDChat = ({ backgroundMode = false }) => {
 
         // Use a short timeout to ensure state updates have been applied
         setTimeout(() => {
-          // Create message content array with text and images
-          const messageContent: Array<{ type: string; text?: string; image?: string }> = [
-            { type: 'text', text: initialMessageData.text }
-          ];
-
-          // Add images to message content if present
-          if (initialMessageData.imageDataList.length > 0) {
-            initialMessageData.imageDataList.forEach(imageData => {
-              messageContent.push({ type: 'image', image: imageData });
-            });
-          }
-
           // Use append directly instead of handleSubmit with a synthetic event
           append({
             role: 'user',
-            content: messageContent as any // Vercel AI SDK expects string or specific structure
+            content: initialMessageData.text
           });
 
           // Show workbench when sending first message, but only if not in background mode
@@ -522,13 +679,13 @@ const PRDChat = ({ backgroundMode = false }) => {
 
       // Create message content array with text and images
       // Vercel AI SDK expects content as a string, or structured data for multimodal
-      let messageContent: any = currentInput; // Start with text content
+      let messageContent: string | MessageContent[] = currentInput; // Start with text content
 
       if (imageDataList.length > 0) {
          // Format for multimodal input if API supports it
          // Assuming API handles { type: 'text', text: ... } and { type: 'image', image: ... } structure
          // passed via the `data` field in handleSubmit options.
-         const contentParts = [{ type: 'text', text: currentInput }];
+         const contentParts: MessageContent[] = [{ type: 'text', text: currentInput }];
          imageDataList.forEach(imageData => {
            contentParts.push({ type: 'image', image: imageData });
          });
@@ -547,7 +704,14 @@ const PRDChat = ({ backgroundMode = false }) => {
       // The current `handleSubmit` call passes data via `options.data` { data: { messages: messageContent } }
       // Let's keep that for now.
 
-      handleSubmit(event as any, { data: { messages: messageContent } });
+      if (typeof messageContent === 'string') {
+        event.preventDefault();
+        handleSubmit(event);
+      } else {
+        // For multimodal content, use the data option with type assertion
+        event.preventDefault();
+        handleSubmit(event, { data: { messages: messageContent } as any });
+      }
 
 
       // Clear uploaded files and input after sending
@@ -620,6 +784,22 @@ const PRDChat = ({ backgroundMode = false }) => {
         "hidden": backgroundMode // Hide the UI when in background mode
       }
     )}>
+      {/* PRD Update Notification - Renders based on showUpdateNotification state */}
+      {showUpdateNotification && (
+        <div className="bg-bolt-elements-background-accent/10 border border-bolt-elements-background-accent/30 rounded-md p-3 m-3 flex justify-between items-center">
+          <span className="text-bolt-elements-textPrimary">
+            <span className="i-ph:info mr-2"></span>
+            Tickets have been updated. Would you like to regenerate the PRD?
+          </span>
+          <button
+            onClick={handleRegeneratePRD}
+            className="px-3 py-1 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm transition-colors"
+            // disabled={isLoading} // Good practice
+          >
+            Regenerate PRD
+          </button>
+        </div>
+      )}
       {/* Chat header */}
       <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-3 flex justify-between items-center flex-shrink-0">
         <div className="flex items-center gap-2">

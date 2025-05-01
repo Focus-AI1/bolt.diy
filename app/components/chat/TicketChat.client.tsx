@@ -46,6 +46,7 @@ interface Ticket {
   estimatedTime?: string;
   createdAt: string;
   updatedAt: string;
+  _manuallyEdited?: boolean;
 }
 
 // Function to extract tickets from messages
@@ -86,7 +87,7 @@ const extractTicketsFromMessages = (messages: Message[]): Ticket[] | null => {
   }
 
   // Parse XML-like structure to extract tickets
-  const tickets: Ticket[] = [];
+  const newTickets: Ticket[] = [];
   const ticketRegex = /<ticket>([\s\S]*?)<\/ticket>/g;
   let ticketMatch;
 
@@ -124,13 +125,78 @@ const extractTicketsFromMessages = (messages: Message[]): Ticket[] | null => {
       assignee: extractField('assignee'),
       tags: extractTags(),
       createdAt: extractField('createdAt') || new Date().toISOString(),
-      updatedAt: extractField('updatedAt') || new Date().toISOString()
+      updatedAt: extractField('updatedAt') || new Date().toISOString(),
+      _manuallyEdited: false
     };
 
-    tickets.push(ticket);
+    newTickets.push(ticket);
   }
 
-  return tickets.length > 0 ? tickets : null;
+  if (newTickets.length === 0) {
+    return null;
+  }
+
+  // Get existing tickets from session storage to preserve manually edited ones
+  try {
+    const existingTicketsJson = sessionStorage.getItem('tickets');
+    if (existingTicketsJson) {
+      const existingTickets: Ticket[] = JSON.parse(existingTicketsJson);
+      
+      // Create a map of existing tickets by ID for quick lookup
+      const existingTicketsMap = new Map<string, Ticket>();
+      existingTickets.forEach(ticket => {
+        existingTicketsMap.set(ticket.id, ticket);
+      });
+      
+      // Get the last updated timestamp from workbench store
+      const ticketsLastUpdated = workbenchStore.getTicketsLastUpdated();
+      
+      // Merge new tickets with existing ones that have been manually edited
+      const mergedTickets: Ticket[] = [];
+      
+      // Process new tickets
+      for (const newTicket of newTickets) {
+        const existingTicket = existingTicketsMap.get(newTicket.id);
+        
+        // If ticket exists and was manually edited 
+        // (has _manuallyEdited flag or has a more recent update timestamp)
+        if (existingTicket && (
+            existingTicket._manuallyEdited || 
+            (ticketsLastUpdated && new Date(existingTicket.updatedAt) > new Date(ticketsLastUpdated))
+        )) {
+          // Keep the existing ticket (preserve manual edits)
+          mergedTickets.push(existingTicket);
+          // If the existing ticket had a different type/priority/status, log it
+          if (existingTicket.type !== newTicket.type || 
+              existingTicket.priority !== newTicket.priority || 
+              existingTicket.status !== newTicket.status) {
+            logger.debug(`Preserving edited ticket #${existingTicket.id}: "${existingTicket.title}"`);
+          }
+          existingTicketsMap.delete(newTicket.id); // Remove from map to track processed tickets
+        } else {
+          // Use the new ticket but preserve any existing _manuallyEdited flag
+          mergedTickets.push({
+            ...newTicket,
+            _manuallyEdited: existingTicket?._manuallyEdited || false
+          });
+          existingTicketsMap.delete(newTicket.id); // Remove from map to track processed tickets
+        }
+      }
+      
+      // Add any remaining existing tickets that weren't in the new set
+      // This preserves manually created/edited tickets not present in the regenerated set
+      existingTicketsMap.forEach(ticket => {
+        mergedTickets.push(ticket);
+      });
+      
+      return mergedTickets;
+    }
+  } catch (error) {
+    logger.error('Error merging tickets:', error);
+    // Fall back to just the new tickets if there's an error
+  }
+  
+  return newTickets;
 };
 
 // Ticket Chat component
@@ -150,7 +216,7 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
   const [chatStarted, setChatStarted] = useState(false);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
   const isStreaming = useStore(streamingState);
-  const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory('ticket');
+  const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory();
 
   // Get chat history functions
   // Removed: const { storeMessageHistory, setChatType } = useChatHistory();
@@ -204,21 +270,35 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
     initialMessages: initialMessages,
     onFinish: (message) => {
       logger.debug('Chat finished', message);
+      const finishTimestamp = new Date().toISOString(); // Get timestamp when generation finishes
+
       // Store messages in history using the dedicated function
       storeTicketMessages([...messages, message]); // Include the final message
+
+      // Extract tickets from completed message set
       const finalTickets = extractTicketsFromMessages([...messages, message]);
       if (finalTickets) {
-         sessionStorage.setItem('tickets', JSON.stringify(finalTickets));
-         logger.debug('Tickets extracted and saved onFinish (final)');
-         // Optionally trigger storage event manually if needed for workbench update
-         window.dispatchEvent(new StorageEvent('storage', { key: 'tickets', storageArea: sessionStorage }));
+        // Save the final tickets to session storage
+        sessionStorage.setItem('tickets', JSON.stringify(finalTickets));
+        logger.debug('Tickets extracted and saved onFinish (final)');
+        
+        // Trigger storage event to update any listening components
+        window.dispatchEvent(new StorageEvent('storage', { 
+          key: 'tickets', 
+          newValue: JSON.stringify(finalTickets), 
+          storageArea: sessionStorage 
+        }));
       }
+      
+      // Update the last generated timestamp *after* processing and storing
+      workbenchStore.updateTicketsLastGenerated(finishTimestamp);
       streamingState.set(false); // Update streaming state store
     },
     onError: (error) => {
       logger.error('Chat error', error);
       toast.error('An error occurred during the chat.');
       streamingState.set(false); // Reset streaming state on error
+      // Also potentially reset the last generated timestamp or handle differently? For now, just reset streaming.
     },
     onResponse: (response) => {
       logger.debug('Chat response started', response);
@@ -232,10 +312,16 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
   const extractTicketContent = useCallback((currentMessages: Message[]) => {
     const currentTickets = extractTicketsFromMessages(currentMessages);
     if (currentTickets) {
+      // Store the newly extracted tickets
       sessionStorage.setItem('tickets', JSON.stringify(currentTickets));
-      // Optionally trigger storage event manually for faster workbench updates during streaming
-       window.dispatchEvent(new StorageEvent('storage', { key: 'tickets', storageArea: sessionStorage }));
-       // logger.debug('Tickets extracted and saved via extractTicketContent (progressive)'); // Can be noisy
+      
+      // Trigger storage event for workbench updates
+      window.dispatchEvent(new StorageEvent('storage', { 
+        key: 'tickets', 
+        storageArea: sessionStorage 
+      }));
+      
+      // Show workbench if tickets are found and not in background mode
       if (!workbenchStore.showWorkbench.get() && !backgroundMode) {
         workbenchStore.showWorkbench.set(true);
         logger.debug('Showing workbench as Ticket content is streaming.');
@@ -326,9 +412,10 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
           });
         }
 
+        // Use append for multimodal content
         append({
           role: 'user',
-          content: messageContent as any,
+          content: messageContent as any, // Cast for Vercel AI SDK
           data: { // Pass files via data if needed by API
              files: initialMessage.files.map(f => ({ name: f.name, type: f.type, size: f.size })) // Example: send metadata
           }
@@ -367,14 +454,113 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
     }
   }, [input]); // Depend on input from useChat
 
-  // Parse messages to extract tickets (Removed, handled by extractTicketContent)
-  // const parseMessages = useCallback(...);
-  // Effect to trigger parseMessages (Removed)
-  // useEffect(() => { parseMessages(messages, isLoading); }, ...);
-  // Effect to update workbench when tickets change (Removed, handled by extractTicketContent)
-  // useEffect(() => { if (tickets && tickets.length > 0) { ... } }, [tickets]);
-  // Effect to update workbench when response is complete (Removed, handled by onFinish/extract)
-  // useEffect(() => { if (!isLoading && messages.length > 0) { ... } }, [isLoading, messages, tickets]);
+  // Add state for tickets update notification
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
+
+  // Get the needsUpdate status from the store
+  const needsUpdate = useStore(workbenchStore.ticketsNeedUpdate);
+
+  // Check if tickets need update based on PRD changes AND if chat is idle
+  useEffect(() => {
+    // Show notification only if an update is needed AND the chat is not currently loading/streaming
+    setShowUpdateNotification(needsUpdate && !isLoading);
+
+    // Optional: Add periodic check if needed, though store updates should trigger this effect.
+    // The interval logic previously here might be redundant if the store updates reliably trigger the effect.
+    // Let's rely on the store listener and isLoading state changes.
+
+  }, [needsUpdate, isLoading]); // Depend on store value and isLoading
+
+  // Function to handle tickets regeneration based on updated PRD
+  const handleRegenerateTickets = () => {
+    // Acknowledge the update immediately to hide the button
+    workbenchStore.acknowledgeTicketsUpdate();
+    setShowUpdateNotification(false); // Hide manually as well
+
+    // Get the latest PRD data from sessionStorage
+    const latestPRD = sessionStorage.getItem('current_prd');
+    let prdContext = '';
+
+    if (latestPRD) {
+      try {
+        const prdData = JSON.parse(latestPRD);
+        
+        // Define an interface for PRD sections
+        interface PRDSection {
+          title: string;
+          content: string;
+        }
+        
+        prdContext = `Based on the following updated PRD:
+Title: ${prdData.title}
+Description: ${prdData.description}
+${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.content.substring(0, 100)}...`).join('\n')}`;
+      } catch (error) {
+        logger.error('Error parsing PRD data:', error);
+      }
+    }
+
+    // Get existing tickets to provide context for what should be preserved
+    let existingTicketsContext = '';
+    try {
+      const existingTicketsJson = sessionStorage.getItem('tickets');
+      if (existingTicketsJson) {
+        const existingTickets = JSON.parse(existingTicketsJson);
+        if (Array.isArray(existingTickets) && existingTickets.length > 0) {
+          // Create a compact representation of existing tickets for the prompt
+          existingTicketsContext = `\n\nExisting tickets to preserve and update:\n${
+            existingTickets.map(ticket => 
+              `ID: ${ticket.id} | Title: ${ticket.title} | Type: ${ticket.type} | Priority: ${ticket.priority} | Status: ${ticket.status}${
+                ticket._manuallyEdited ? ' [MANUALLY EDITED]' : ''
+              }`
+            ).join('\n')
+          }`;
+          
+          logger.debug(`Including ${existingTickets.length} existing tickets in regeneration context`);
+        }
+      }
+    } catch (error) {
+      logger.error('Error parsing existing tickets:', error);
+    }
+
+    // Get the last user message or create a new one asking to update based on PRD
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    // Construct the prompt more clearly indicating it's an update request
+    const updatePrompt = `The PRD has been updated. Please regenerate the tickets considering these changes.\n\n${prdContext}\n\n${existingTicketsContext}\n\n(Context from original request if available: ${lastUserMessage?.content ?? 'Generate initial tickets based on the PRD.'})`;
+
+    // Submit the regeneration request using append
+    append({
+      role: 'user',
+      content: updatePrompt
+    });
+
+    // Ensure chat starts if it hasn't
+    if (!chatStarted) {
+      setChatStarted(true);
+    }
+    // Show workbench if hidden
+    if (!backgroundMode && !workbenchStore.showWorkbench.get()) {
+      workbenchStore.showWorkbench.set(true);
+    }
+  };
+
+  // Listen for storage events to detect changes in PRD from the workbench
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'current_prd' && event.newValue !== null) {
+        // PRD has been updated in the workbench, call the store method
+        // The store method now handles the logic of comparing timestamps
+        workbenchStore.updatePRD();
+      }
+       // Add listener for ticket updates potentially triggered by workbench edits
+       if (event.key === 'tickets' && event.newValue !== null) {
+         workbenchStore.updateTickets();
+       }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []); // No dependencies needed as workbenchStore methods are stable
 
   // Handle file upload button click
   const handleFileUpload = () => {
@@ -547,6 +733,23 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
         "hidden": backgroundMode
       }
     )}>
+      {/* Tickets Update Notification - Renders based on showUpdateNotification state */}
+      {showUpdateNotification && (
+        <div className="bg-bolt-elements-background-accent/10 border border-bolt-elements-background-accent/30 rounded-md p-3 m-3 flex justify-between items-center">
+          <span className="text-bolt-elements-textPrimary">
+            <span className="i-ph:info mr-2"></span>
+            The PRD has been updated. Would you like to regenerate the tickets?
+          </span>
+          <button
+            onClick={handleRegenerateTickets}
+            className="px-3 py-1 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm transition-colors"
+            // disabled={isLoading} // Disable button if somehow clicked while loading starts again? Good practice.
+          >
+            Regenerate Tickets
+          </button>
+        </div>
+      )}
+      
       {/* Chat header - Aligned with PRDChat */}
       <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 p-3 flex justify-between items-center flex-shrink-0">
         <div className="flex items-center gap-2">

@@ -49,11 +49,20 @@ export class WorkbenchStore {
   currentView: WritableAtom<WorkbenchViewType> = import.meta.hot?.data.currentView ?? atom('code');
   unsavedFiles: WritableAtom<Set<string>> = import.meta.hot?.data.unsavedFiles ?? atom(new Set<string>());
   actionAlert: WritableAtom<ActionAlert | undefined> =
-    import.meta.hot?.data.unsavedFiles ?? atom<ActionAlert | undefined>(undefined);
+    import.meta.hot?.data.actionAlert ?? atom<ActionAlert | undefined>(undefined);
   supabaseAlert: WritableAtom<SupabaseAlert | undefined> =
-    import.meta.hot?.data.unsavedFiles ?? atom<ActionAlert | undefined>(undefined);
+    import.meta.hot?.data.supabaseAlert ?? atom<SupabaseAlert | undefined>(undefined);
   deployAlert: WritableAtom<DeployAlert | undefined> =
-    import.meta.hot?.data.unsavedFiles ?? atom<DeployAlert | undefined>(undefined);
+    import.meta.hot?.data.deployAlert ?? atom<DeployAlert | undefined>(undefined);
+  
+  prdLastUpdated: WritableAtom<string | null> = import.meta.hot?.data.prdLastUpdated ?? atom<string | null>(null);
+  ticketsLastUpdated: WritableAtom<string | null> = import.meta.hot?.data.ticketsLastUpdated ?? atom<string | null>(null);
+  prdNeedsUpdate: WritableAtom<boolean> = import.meta.hot?.data.prdNeedsUpdate ?? atom<boolean>(false);
+  ticketsNeedUpdate: WritableAtom<boolean> = import.meta.hot?.data.ticketsNeedUpdate ?? atom<boolean>(false);
+  
+  prdLastGenerated: WritableAtom<string | null> = import.meta.hot?.data.prdLastGenerated ?? atom<string | null>(null);
+  ticketsLastGenerated: WritableAtom<string | null> = import.meta.hot?.data.ticketsLastGenerated ?? atom<string | null>(null);
+  
   modifiedFiles = new Set<string>();
   artifactIdList: string[] = [];
   #globalExecutionQueue = Promise.resolve();
@@ -66,6 +75,13 @@ export class WorkbenchStore {
       import.meta.hot.data.actionAlert = this.actionAlert;
       import.meta.hot.data.supabaseAlert = this.supabaseAlert;
       import.meta.hot.data.deployAlert = this.deployAlert;
+      
+      import.meta.hot.data.prdLastUpdated = this.prdLastUpdated;
+      import.meta.hot.data.ticketsLastUpdated = this.ticketsLastUpdated;
+      import.meta.hot.data.prdLastGenerated = this.prdLastGenerated;
+      import.meta.hot.data.ticketsLastGenerated = this.ticketsLastGenerated;
+      import.meta.hot.data.prdNeedsUpdate = this.prdNeedsUpdate;
+      import.meta.hot.data.ticketsNeedUpdate = this.ticketsNeedUpdate;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -793,6 +809,94 @@ export class WorkbenchStore {
       console.error('Error pushing to GitHub:', error);
       throw error; // Rethrow the error for further handling
     }
+  }
+
+  /**
+   * Called when PRD content is updated (e.g., from storage event or workbench edit).
+   * Updates the timestamp and checks if tickets might need regeneration.
+   */
+  updatePRD(timestamp: string = new Date().toISOString()) {
+    this.prdLastUpdated.set(timestamp);
+    const ticketsGenerated = this.ticketsLastGenerated.get();
+    // Only flag tickets for update if PRD was updated *after* tickets were last generated
+    if (ticketsGenerated && timestamp > ticketsGenerated) {
+      this.ticketsNeedUpdate.set(true);
+    }
+  }
+
+  /**
+   * Called when Ticket content is updated (e.g., from storage event or workbench edit).
+   * Updates the timestamp and checks if PRD might need regeneration.
+   */
+  updateTickets(timestamp: string = new Date().toISOString()) {
+    this.ticketsLastUpdated.set(timestamp);
+    const prdGenerated = this.prdLastGenerated.get();
+    // Only flag PRD for update if tickets were updated *after* PRD was last generated
+    if (prdGenerated && timestamp > prdGenerated) {
+      this.prdNeedsUpdate.set(true);
+    }
+  }
+
+  /**
+   * Called when the PRD chat finishes generating content.
+   * Updates the generation timestamp and resets the needs update flag.
+   */
+  updatePRDLastGenerated(timestamp: string = new Date().toISOString()) {
+    this.prdLastGenerated.set(timestamp);
+    this.prdNeedsUpdate.set(false); // PRD is now up-to-date with latest generation trigger
+  }
+
+  /**
+   * Called when the Ticket chat finishes generating content.
+   * Updates the generation timestamp and resets the needs update flag.
+   */
+  updateTicketsLastGenerated(timestamp: string = new Date().toISOString()) {
+    this.ticketsLastGenerated.set(timestamp);
+    this.ticketsNeedUpdate.set(false); // Tickets are now up-to-date with latest generation trigger
+  }
+
+  /**
+   * Acknowledges the user has seen the tickets update notification or initiated regeneration.
+   */
+  acknowledgeTicketsUpdate() {
+    this.ticketsNeedUpdate.set(false);
+  }
+
+  /**
+   * Acknowledges the user has seen the PRD update notification or initiated regeneration.
+   */
+  acknowledgePRDUpdate() {
+    this.prdNeedsUpdate.set(false);
+  }
+
+  /**
+   * Checks if the tickets need regeneration based on PRD updates.
+   */
+  doTicketsNeedUpdate(): boolean {
+    return this.ticketsNeedUpdate.get();
+  }
+
+  /**
+   * Checks if the PRD needs regeneration based on ticket updates.
+   */
+  doesPRDNeedUpdate(): boolean {
+    return this.prdNeedsUpdate.get();
+  }
+
+  getPRDLastUpdated(): string | null {
+    return this.prdLastUpdated.get();
+  }
+
+  getTicketsLastUpdated(): string | null {
+    return this.ticketsLastUpdated.get();
+  }
+
+  getPRDLastGenerated(): string | null {
+    return this.prdLastGenerated.get();
+  }
+
+  getTicketsLastGenerated(): string | null {
+    return this.ticketsLastGenerated.get();
   }
 }
 
