@@ -60,6 +60,9 @@ export class WorkbenchStore {
   prdNeedsUpdate: WritableAtom<boolean> = import.meta.hot?.data.prdNeedsUpdate ?? atom<boolean>(false);
   ticketsNeedUpdate: WritableAtom<boolean> = import.meta.hot?.data.ticketsNeedUpdate ?? atom<boolean>(false);
   
+  // Add new atom for streaming PRD content
+  streamingPRDContent: WritableAtom<string | null> = import.meta.hot?.data.streamingPRDContent ?? atom<string | null>(null);
+  
   prdLastGenerated: WritableAtom<string | null> = import.meta.hot?.data.prdLastGenerated ?? atom<string | null>(null);
   ticketsLastGenerated: WritableAtom<string | null> = import.meta.hot?.data.ticketsLastGenerated ?? atom<string | null>(null);
   
@@ -79,6 +82,7 @@ export class WorkbenchStore {
       import.meta.hot.data.prdLastUpdated = this.prdLastUpdated;
       import.meta.hot.data.ticketsLastUpdated = this.ticketsLastUpdated;
       import.meta.hot.data.prdLastGenerated = this.prdLastGenerated;
+      import.meta.hot.data.streamingPRDContent = this.streamingPRDContent;
       import.meta.hot.data.ticketsLastGenerated = this.ticketsLastGenerated;
       import.meta.hot.data.prdNeedsUpdate = this.prdNeedsUpdate;
       import.meta.hot.data.ticketsNeedUpdate = this.ticketsNeedUpdate;
@@ -809,6 +813,21 @@ export class WorkbenchStore {
       console.error('Error pushing to GitHub:', error);
       throw error; // Rethrow the error for further handling
     }
+  }
+
+  /**
+   * Updates the streaming PRD content during real-time generation
+   * This allows the workbench to update as content is streamed
+   */
+  updateStreamingPRDContent(content: string | null) {
+    this.streamingPRDContent.set(content);
+  }
+
+  /**
+   * Gets the current streaming PRD content
+   */
+  getStreamingPRDContent(): string | null {
+    return this.streamingPRDContent.get();
   }
 
   /**
