@@ -60,6 +60,9 @@ export class WorkbenchStore {
   prdNeedsUpdate: WritableAtom<boolean> = import.meta.hot?.data.prdNeedsUpdate ?? atom<boolean>(false);
   ticketsNeedUpdate: WritableAtom<boolean> = import.meta.hot?.data.ticketsNeedUpdate ?? atom<boolean>(false);
   
+  // Simple flag to track if we're in the initial generation phase
+  isInitialStartup: WritableAtom<boolean> = import.meta.hot?.data.isInitialStartup ?? atom<boolean>(true);
+  
   // Add new atom for streaming PRD content
   streamingPRDContent: WritableAtom<string | null> = import.meta.hot?.data.streamingPRDContent ?? atom<string | null>(null);
   
@@ -81,11 +84,14 @@ export class WorkbenchStore {
       
       import.meta.hot.data.prdLastUpdated = this.prdLastUpdated;
       import.meta.hot.data.ticketsLastUpdated = this.ticketsLastUpdated;
-      import.meta.hot.data.prdLastGenerated = this.prdLastGenerated;
-      import.meta.hot.data.streamingPRDContent = this.streamingPRDContent;
-      import.meta.hot.data.ticketsLastGenerated = this.ticketsLastGenerated;
       import.meta.hot.data.prdNeedsUpdate = this.prdNeedsUpdate;
       import.meta.hot.data.ticketsNeedUpdate = this.ticketsNeedUpdate;
+      
+      import.meta.hot.data.isInitialStartup = this.isInitialStartup;
+      
+      import.meta.hot.data.streamingPRDContent = this.streamingPRDContent;
+      import.meta.hot.data.prdLastGenerated = this.prdLastGenerated;
+      import.meta.hot.data.ticketsLastGenerated = this.ticketsLastGenerated;
 
       // Ensure binary files are properly preserved across hot reloads
       const filesMap = this.files.get();
@@ -97,6 +103,9 @@ export class WorkbenchStore {
         }
       }
     }
+
+    // Set initial startup time if not already set
+    // Removed the code that references the deleted initialStartupTime property
   }
 
   addToExecutionQueue(callback: () => Promise<void>) {
@@ -836,6 +845,12 @@ export class WorkbenchStore {
    */
   updatePRD(timestamp: string = new Date().toISOString()) {
     this.prdLastUpdated.set(timestamp);
+    
+    // Skip update checks during initial startup
+    if (this.isInitialStartup.get()) {
+      return;
+    }
+    
     const ticketsGenerated = this.ticketsLastGenerated.get();
     // Only flag tickets for update if PRD was updated *after* tickets were last generated
     if (ticketsGenerated && timestamp > ticketsGenerated) {
@@ -849,6 +864,12 @@ export class WorkbenchStore {
    */
   updateTickets(timestamp: string = new Date().toISOString()) {
     this.ticketsLastUpdated.set(timestamp);
+    
+    // Skip update checks during initial startup
+    if (this.isInitialStartup.get()) {
+      return;
+    }
+    
     const prdGenerated = this.prdLastGenerated.get();
     // Only flag PRD for update if tickets were updated *after* PRD was last generated
     if (prdGenerated && timestamp > prdGenerated) {
@@ -863,6 +884,9 @@ export class WorkbenchStore {
   updatePRDLastGenerated(timestamp: string = new Date().toISOString()) {
     this.prdLastGenerated.set(timestamp);
     this.prdNeedsUpdate.set(false); // PRD is now up-to-date with latest generation trigger
+    
+    // Check if both documents have been generated, and if so, exit initial startup mode
+    this._checkInitialStartupComplete();
   }
 
   /**
@@ -872,6 +896,29 @@ export class WorkbenchStore {
   updateTicketsLastGenerated(timestamp: string = new Date().toISOString()) {
     this.ticketsLastGenerated.set(timestamp);
     this.ticketsNeedUpdate.set(false); // Tickets are now up-to-date with latest generation trigger
+    
+    // Check if both documents have been generated, and if so, exit initial startup mode
+    this._checkInitialStartupComplete();
+  }
+  
+  /**
+   * Private helper to check if both documents have completed initial generation
+   * If so, exit the initial startup mode to enable update detection --very important logic
+   */
+  private _checkInitialStartupComplete() {
+    // If we're not in initial startup mode, nothing to do
+    if (!this.isInitialStartup.get()) {
+      return;
+    }
+    
+    // Check if both documents have been generated
+    const prdGenerated = this.prdLastGenerated.get();
+    const ticketsGenerated = this.ticketsLastGenerated.get();
+    
+    // If both have been generated, exit initial startup mode
+    if (prdGenerated && ticketsGenerated) {
+      this.isInitialStartup.set(false);
+    }
   }
 
   /**

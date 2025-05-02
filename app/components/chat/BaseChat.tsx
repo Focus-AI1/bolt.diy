@@ -16,6 +16,7 @@ import { APIKeyManager, getApiKeysFromCookies } from './APIKeyManager';
 import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useStore } from '@nanostores/react';
+import { motion } from 'framer-motion';
 
 import styles from './BaseChat.module.scss';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
@@ -48,6 +49,7 @@ import TicketChat from './TicketChat.client';
 import TicketWorkbench from '../workbench/TicketWorkbench.client';
 import ResearchChat from './ResearchChat.client';
 import ResearchWorkbench from '../workbench/ResearchWorkbench.client';
+import { UpdateNotification } from './UpdateNotification';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -88,6 +90,12 @@ interface BaseChatProps {
   clearDeployAlert?: () => void;
   data?: JSONValue[] | undefined;
   actionRunner?: ActionRunner;
+  showPRDUpdateNotification?: boolean;
+  showTicketUpdateNotification?: boolean;
+  handleRegeneratePrototype?: () => void;
+  prdUpdateDetails?: { title?: string; lastUpdated?: string };
+  ticketUpdateDetails?: { id?: string; title?: string; lastUpdated?: string };
+  handleValidatePrototype?: () => void;
 }
 
 export const initialPrdMessageStore = atom<{
@@ -198,6 +206,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       clearSupabaseAlert,
       data,
       actionRunner,
+      showPRDUpdateNotification,
+      showTicketUpdateNotification,
+      handleRegeneratePrototype,
+      prdUpdateDetails,
+      ticketUpdateDetails,
+      handleValidatePrototype,
     },
     ref,
   ) => {
@@ -326,6 +340,37 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         recognition.stop();
         setIsListening(false);
       }
+    };
+
+    const RotatingText = () => {
+      const words = ["Tickets", "PRDs", "Prototypes", "Research"];
+      const [currentIndex, setCurrentIndex] = useState(0);
+      
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
+        }, 2000); // Change word every 2 seconds
+        
+        return () => clearInterval(interval);
+      }, []);
+      
+      return (
+        <div className="relative h-[1.5em] overflow-hidden">
+          {words.map((word, index) => (
+            <div
+              key={word}
+              className={classNames(
+                "absolute w-full transition-all duration-500 ease-in-out",
+                index === currentIndex 
+                  ? "opacity-100 transform-none" 
+                  : "opacity-0 translate-y-8"
+              )}
+            >
+              {word}
+            </div>
+          ))}
+        </div>
+      );
     };
 
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
@@ -516,9 +561,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   Where prompts become:
                   <RotatingText />
                 </h1>
-                <p className="text-md lg:text-xl mb-2 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
-                  Bring ideas to life in seconds or get help on existing projects.
-                </p>
+                <p className="text-md lg:text-xl mb-2 text-bolt-elements-textSecondary animate-fade-in animation-delay-200"> Bring ideas to life in seconds or get help on existing projects.</p>
               </div>
             )}
             {chatStarted && (
@@ -585,12 +628,39 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     <ClientOnly>
                       {() => {
                         return chatStarted ? (
-                          <Messages
-                            ref={messageRef}
-                            className="flex flex-col w-full h-full pb-6 z-1"
-                            messages={messages}
-                            isStreaming={isStreaming}
-                          />
+                          <div className={styles.chatContainer}>
+                            <div className="flex flex-col h-full">
+                              <div className="flex flex-col flex-1 overflow-hidden">
+                                <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0 sm:px-6 sm:pt-6">
+                                  {/* Display PRD update notification */}
+                                  {showPRDUpdateNotification && (
+                                    <UpdateNotification
+                                      type="prd"
+                                      details={prdUpdateDetails}
+                                      onRegenerateClick={handleRegeneratePrototype || (() => {})}
+                                      onValidateClick={handleValidatePrototype || (() => {})}
+                                    />
+                                  )}
+
+                                  {/* Display Ticket update notification */}
+                                  {showTicketUpdateNotification && (
+                                    <UpdateNotification
+                                      type="ticket"
+                                      details={ticketUpdateDetails}
+                                      onRegenerateClick={handleRegeneratePrototype || (() => {})}
+                                      onValidateClick={handleValidatePrototype || (() => {})}
+                                    />
+                                  )}
+                                  
+                                  <Messages
+                                    ref={messageRef}
+                                    messages={messages}
+                                    isStreaming={isStreaming}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         ) : <div className="flex-1"></div>;
                       }}
                     </ClientOnly>
@@ -777,7 +847,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             <SendButton
                               show={input.length > 0 || isStreaming || uploadedFiles.length > 0}
                               isStreaming={isStreaming}
-                              disabled={!providerList || providerList.length === 0}
                               onClick={(event) => {
                                 if (isStreaming) {
                                   handleStop?.();
@@ -790,7 +859,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         </ClientOnly>
                         <div className="flex justify-between items-center text-sm p-4 pt-2">
                           <div className="flex gap-1 items-center">
-                            <IconButton title="Upload file" className="transition-all" onClick={() => handleFileUpload()}>
+                            <IconButton 
+                              title="Upload file" 
+                              className="transition-all" 
+                              onClick={() => handleFileUpload()} 
+                            >
                               <div className="i-ph:paperclip text-xl"></div>
                             </IconButton>
                             <IconButton

@@ -303,9 +303,18 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
       // Also potentially reset the last generated timestamp or handle differently? For now, just reset streaming.
     },
     onResponse: (response) => {
-      logger.debug('Chat response started', response);
       if (response.ok) {
-         streamingState.set(true); // Update streaming state store
+        streamingState.set(true);
+        // Set generation status in sessionStorage
+        sessionStorage.setItem('ticket_generation_status', 'generating');
+        
+        // Dispatch storage event to notify other components
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'ticket_generation_status',
+          newValue: 'generating'
+        }));
+        
+        logger.debug('Ticket streaming response started.');
       }
     },
   });
@@ -818,7 +827,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                      Regenerate
                    </button>
                  </div>
-               </div>
+              </div>
             )}
           </div>
         </div>
