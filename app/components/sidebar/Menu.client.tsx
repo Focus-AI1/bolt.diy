@@ -15,6 +15,17 @@ import { classNames } from '~/utils/classNames';
 import { useStore } from '@nanostores/react';
 import { profileStore } from '~/lib/stores/profile';
 
+// Define the window interface extension for TypeScript
+declare global {
+  interface Window {
+    __USER_DATA__?: {
+      name?: string;
+      email?: string;
+      imageUrl?: string;
+    };
+  }
+}
+
 const menuVariants = {
   closed: {
     opacity: 0,
@@ -35,6 +46,221 @@ const menuVariants = {
     },
   },
 } satisfies Variants;
+
+// Add this function at the top level to communicate with the parent window
+function requestUserDataFromParent() {
+  try {
+    if (window.parent && window.parent !== window) {
+      console.log('Requesting user data from parent window');
+      window.parent.postMessage({ type: 'REQUEST_USER_DATA' }, '*');
+      return true;
+    }
+  } catch (e) {
+    console.error('Error requesting user data from parent:', e);
+  }
+  return false;
+}
+
+// UserButton component 
+function UserButton() {
+  const [userData, setUserData] = useState<{name?: string; imageUrl?: string; email?: string} | null>(null);
+  const profile = useStore(profileStore);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Close menu when clicking outside
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    // Add event listener when menu is open
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
+
+  useEffect(() => {
+    // Initialize: First check window.__USER_DATA__, then listen for messages
+    const getUserData = () => {
+      // Try to get data from window.__USER_DATA__ first
+      if (window.__USER_DATA__) {
+        console.log('Found user data in window.__USER_DATA__:', window.__USER_DATA__);
+        setUserData(window.__USER_DATA__);
+        return true;
+      }
+      return false;
+    };
+
+    // Try to get data immediately
+    const found = getUserData();
+    if (!found) {
+      console.log('No user data found in window.__USER_DATA__, will listen for messages');
+      // Immediately request data from parent if not found
+      requestUserDataFromParent();
+    }
+    
+    // Set up message listener for receiving user data
+    const handleMessage = (event: MessageEvent) => {
+      console.log('Received message in bolt.diy:', event.data?.type);
+      
+      // Handle direct user data updates
+      if (event.data && event.data.type === 'USER_DATA_UPDATE') {
+        console.log('Received user data update:', event.data.userData);
+        if (event.data.userData) {
+          setUserData(event.data.userData);
+        }
+      }
+      
+      // Handle initial connection messages that might contain user data
+      if (event.data && (event.data.type === 'INIT_CONNECTION' || event.data.type === 'SET_PROMPT')) {
+        if (event.data.userData) {
+          console.log('Received user data in connection message:', event.data.userData);
+          setUserData(event.data.userData);
+        }
+      }
+    };
+    
+    // Add message listener
+    window.addEventListener('message', handleMessage);
+    
+    // Let parent know we're ready to receive user data
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'BOLT_READY' }, '*');
+        console.log('Sent BOLT_READY message to parent');
+      }
+    } catch (e) {
+      console.error('Error sending ready message to parent:', e);
+    }
+    
+    // Poll for user data every 2 seconds for the first 30 seconds
+    // This handles cases where the iframe loads before the parent sets the data
+    let attempts = 0;
+    const maxAttempts = 15; // 15 attempts * 2 seconds = 30 seconds
+    
+    const checkInterval = setInterval(() => {
+      attempts++;
+      if (attempts > maxAttempts || userData) {
+        clearInterval(checkInterval);
+        return;
+      }
+      
+      const found = getUserData();
+      if (found) {
+        console.log(`Found user data on attempt ${attempts}`);
+        clearInterval(checkInterval);
+      } else if (attempts % 3 === 0) {
+        // Every 6 seconds (every 3rd attempt), request data from parent
+        requestUserDataFromParent();
+      }
+    }, 2000);
+    
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      clearInterval(checkInterval);
+    };
+  }, []);
+  
+  // Use the user data if available, otherwise fall back to the profile store
+  const displayName = userData?.name || profile?.username || 'Guest User';
+  const hasAvatar = !!userData?.imageUrl || !!profile?.avatar;
+  const avatarUrl = userData?.imageUrl || profile?.avatar;
+  
+  // For debugging
+  const userSource = userData ? 'Clerk (parent window)' : profile?.username ? 'Profile Store' : 'Default';
+
+  // Handler for managing account
+  const handleManageAccount = () => {
+    try {
+      if (window.parent && window.parent !== window) {
+        console.log('Sending MANAGE_ACCOUNT message to parent');
+        window.parent.postMessage({ type: 'MANAGE_ACCOUNT' }, '*');
+        setIsMenuOpen(false);
+      } else {
+        toast.info('Account management will be available soon!');
+      }
+    } catch (error) {
+      console.error('Error sending manage account message to parent:', error);
+      toast.info('Account management will be available soon!');
+    }
+  };
+
+  // Handler for signing out
+  const handleSignOut = () => {
+    try {
+      if (window.parent && window.parent !== window) {
+        console.log('Sending SIGN_OUT message to parent');
+        window.parent.postMessage({ type: 'SIGN_OUT' }, '*');
+        setIsMenuOpen(false);
+      } else {
+        toast.info('Sign out will be available soon!');
+      }
+    } catch (error) {
+      console.error('Error sending sign out message to parent:', error);
+      toast.info('Sign out will be available soon!');
+    }
+  };
+  
+  return (
+    <div className="flex items-center gap-3 relative" ref={menuRef}>
+      <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
+        {displayName}
+      </span>
+      <div 
+        className="flex items-center justify-center w-[32px] h-[32px] overflow-hidden bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-500 rounded-full shrink-0 hover:ring-2 hover:ring-purple-500/20 transition-all cursor-pointer"
+        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        title={`User: ${displayName} (Source: ${userSource})`}
+      >
+        {hasAvatar ? (
+          <img
+            src={avatarUrl}
+            alt={displayName}
+            className="w-full h-full object-cover"
+            loading="eager"
+            decoding="sync"
+          />
+        ) : (
+          <div className="i-ph:user-fill text-lg" />
+        )}
+      </div>
+
+      {/* User dropdown menu */}
+      {isMenuOpen && (
+        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 py-1 border border-gray-200 dark:border-gray-700">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{displayName}</p>
+            {userData?.email && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{userData.email}</p>
+            )}
+          </div>
+          <div className="py-1">
+            <button
+              onClick={handleManageAccount}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <span className="i-ph:gear h-4 w-4 mr-2 opacity-80"></span>
+              Manage account
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <span className="i-ph:sign-out h-4 w-4 mr-2 opacity-80"></span>
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type DialogContent =
   | { type: 'delete'; item: ChatHistoryItem }
@@ -332,8 +558,6 @@ export const Menu = () => {
       window.location.href = `/prd/${item.urlId}`;
     } else if (chatType === 'ticket') {
       window.location.href = `/ticket/${item.urlId}`;
-    } else if (chatType === 'research') {
-      window.location.href = `/research/${item.urlId}`;
     } else {
       window.location.href = `/chat/${item.urlId}`;
     }
@@ -396,24 +620,7 @@ export const Menu = () => {
       >
         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50">
           <div className="text-gray-900 dark:text-white font-medium"></div>
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
-              {profile?.username || 'Guest User'}
-            </span>
-            <div className="flex items-center justify-center w-[32px] h-[32px] overflow-hidden bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-500 rounded-full shrink-0">
-              {profile?.avatar ? (
-                <img
-                  src={profile.avatar}
-                  alt={profile?.username || 'User'}
-                  className="w-full h-full object-cover"
-                  loading="eager"
-                  decoding="sync"
-                />
-              ) : (
-                <div className="i-ph:user-fill text-lg" />
-              )}
-            </div>
-          </div>
+          <UserButton />
         </div>
         <CurrentDateTime />
         <div className="flex-1 flex flex-col h-full w-full overflow-hidden">
