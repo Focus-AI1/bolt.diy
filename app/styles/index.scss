@@ -21,4 +21,34 @@ body {
   // --primary-color: rgba(147, 112, 219, var(--gradient-opacity));
   // --secondary-color: rgba(138, 43, 226, var(--gradient-opacity));
   // --accent-color: rgba(180, 170, 220, var(--gradient-opacity));
+  --header-height: 64px; // Adjust based on your actual header height
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; // Prevent body scrolling
+  height: 100vh;
+}
+
+.MainLayout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.HeaderContainer {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  height: var(--header-height);
+}
+
+.ContentContainer {
+  flex: 1;
+  overflow: hidden; // Let the children handle their own scrolling
+  position: relative;
+  height: calc(100vh - var(--header-height));
 }

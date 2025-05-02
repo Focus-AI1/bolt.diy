@@ -128,6 +128,37 @@ export const initialResearchMessageStore = atom<{
 
 type ChatMode = 'chat' | 'prd' | 'ticket' | 'research';
 
+const RotatingText = () => {
+  const words = ["Tickets", "PRDs", "Prototypes", "Research"];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
+    }, 2000); // Change word every 2 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
+  
+  return (
+    <div className="relative h-[1.5em] overflow-hidden">
+      {words.map((word, index) => (
+        <div
+          key={word}
+          className={classNames(
+            "absolute w-full transition-all duration-500 ease-in-out",
+            index === currentIndex 
+              ? "opacity-100 transform-none" 
+              : "opacity-0 translate-y-8"
+          )}
+        >
+          {word}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
     {
@@ -480,11 +511,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             )}
             
             {!chatStarted && chatMode === 'chat' && (
-              <div id="intro" className="mt-[5vh] max-w-chat mx-auto text-center px-4 lg:px-0 flex-shrink-0">
-                <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
-                  Where tickets become prototypes
+              <div id="intro" className="mt-[2vh] mb-8 max-w-chat mx-auto text-center px-4 lg:px-0 flex-shrink-0">
+                <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-2 animate-fade-in">
+                  Where prompts become:
+                  <RotatingText />
                 </h1>
-                <p className="text-md lg:text-xl mb-4 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
+                <p className="text-md lg:text-xl mb-2 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
                   Bring ideas to life in seconds or get help on existing projects.
                 </p>
               </div>
@@ -546,7 +578,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
               </div>
             )}
-            <div className="flex-1 overflow-y-auto px-2 sm:px-6 pt-6 flex flex-col">
+            <div className="flex-1 overflow-y-auto px-2 sm:px-6 pt-2 flex flex-col">
               {chatMode === 'chat' ? (
                 <>
                   <div className="flex-1 w-full max-w-chat mx-auto">
@@ -974,7 +1006,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               ) : null}
             </div>
             {chatMode === 'chat' && !chatStarted && (
-              <div id="examples" className="flex flex-col justify-center gap-2 mt-auto pb-4 flex-shrink-0 px-2 sm:px-6">
+              <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 flex-shrink-0 px-2 sm:px-6">
                 <div className="flex justify-center gap-2">
                   {ImportButtons(importChat)}
                   <GitCloneButton importChat={importChat} />
