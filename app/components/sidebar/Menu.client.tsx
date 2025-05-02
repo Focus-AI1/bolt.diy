@@ -332,6 +332,8 @@ export const Menu = () => {
       window.location.href = `/prd/${item.urlId}`;
     } else if (chatType === 'ticket') {
       window.location.href = `/ticket/${item.urlId}`;
+    } else if (chatType === 'research') {
+      window.location.href = `/research/${item.urlId}`;
     } else {
       window.location.href = `/chat/${item.urlId}`;
     }

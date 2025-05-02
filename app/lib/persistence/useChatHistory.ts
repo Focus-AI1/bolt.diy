@@ -29,7 +29,7 @@ export interface ChatHistoryItem {
   messages: Message[];
   timestamp: string;
   metadata?: IChatMetadata;
-  type?: 'chat' | 'prd' | 'ticket'; // Add 'ticket' to the type options
+  type?: 'chat' | 'prd' | 'ticket' | 'research'; // Add 'research' to the type options
 }
 
 const persistenceEnabled = !import.meta.env.VITE_DISABLE_PERSISTENCE;
@@ -39,13 +39,14 @@ export const db = persistenceEnabled ? await openDatabase() : undefined;
 export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
 export const chatMetadata = atom<IChatMetadata | undefined>(undefined);
-export const chatType = atom<'chat' | 'prd' | 'ticket'>('chat'); // Add 'ticket' to the type options
+export const chatType = atom<'chat' | 'prd' | 'ticket' | 'research'>('chat'); // Add 'research' to the type options
 
 // Add constants for chat types
 export const chatTypes = {
   CHAT: 'chat' as const,
   PRD: 'prd' as const,
-  TICKET: 'ticket' as const
+  TICKET: 'ticket' as const,
+  RESEARCH: 'research' as const // Add RESEARCH type
 };
 
 export function useChatHistory() {
@@ -55,13 +56,14 @@ export function useChatHistory() {
   const location = window.location.pathname;
   const isInPRDRoute = location.startsWith('/prd/');
   const isInTicketRoute = location.startsWith('/ticket/');
+  const isInResearchRoute = location.startsWith('/research/'); // Check for research route
 
   const [archivedMessages, setArchivedMessages] = useState<Message[]>([]);
   const [initialMessages, setInitialMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState<boolean>(false);
   const [urlId, setUrlId] = useState<string | undefined>();
-  const [currentType, setCurrentType] = useState<'chat' | 'prd' | 'ticket'>(
-    isInPRDRoute ? 'prd' : isInTicketRoute ? 'ticket' : 'chat'
+  const [currentType, setCurrentType] = useState<'chat' | 'prd' | 'ticket' | 'research'>(
+    isInPRDRoute ? 'prd' : isInTicketRoute ? 'ticket' : isInResearchRoute ? 'research' : 'chat' // Set initial type based on route, including research
   );
 
   useEffect(() => {
@@ -85,19 +87,22 @@ export function useChatHistory() {
             const type = storedMessages.type || 'chat';
             
             // Check if the chat type matches the current route
-            // If we're in a PRD route but the chat is a regular chat, or vice versa, redirect to the correct route
-            if ((isInPRDRoute && type !== 'prd') || 
-                (isInTicketRoute && type !== 'ticket') || 
-                (!isInPRDRoute && !isInTicketRoute && type !== 'chat')) {
+            // If we're in a specific route but the chat is not of that type, redirect
+            const isChatRoute = !isInPRDRoute && !isInTicketRoute && !isInResearchRoute;
+            if ((isInPRDRoute && type !== 'prd') ||
+                (isInTicketRoute && type !== 'ticket') ||
+                (isInResearchRoute && type !== 'research') || // Check research route
+                (isChatRoute && type !== 'chat')) {
               let correctPath = '/chat/' + mixedId;
               if (type === 'prd') correctPath = '/prd/' + mixedId;
               if (type === 'ticket') correctPath = '/ticket/' + mixedId;
+              if (type === 'research') correctPath = '/research/' + mixedId; // Add research path
               window.location.href = correctPath;
               return;
             }
             
-            setCurrentType(type);
-            chatType.set(type);
+            setCurrentType(type as 'chat' | 'prd' | 'ticket' | 'research'); // Ensure type assertion includes research
+            chatType.set(type as 'chat' | 'prd' | 'ticket' | 'research'); // Ensure type assertion includes research
             
             const snapshotStr = localStorage.getItem(`snapshot:${mixedId}`);
             const snapshot: Snapshot = snapshotStr ? JSON.parse(snapshotStr) : { chatIndex: 0, files: {} };
@@ -370,7 +375,7 @@ ${value.content}
     initialMessages,
     urlId,
     chatType: currentType,
-    setChatType: (type: 'chat' | 'prd' | 'ticket') => {
+    setChatType: (type: 'chat' | 'prd' | 'ticket' | 'research') => {
       setCurrentType(type);
       chatType.set(type);
     },
@@ -456,7 +461,7 @@ ${value.content}
         description.get(),
         undefined,
         chatMetadata.get(),
-        type, // Pass the current chat type
+        type, // Pass the current chat type (already includes research)
       );
     },
     duplicateCurrentChat: async (listItemId: string) => {
@@ -473,7 +478,7 @@ ${value.content}
         console.log(error);
       }
     },
-    importChat: async (description: string, messages: Message[], metadata?: IChatMetadata, type: 'chat' | 'prd' | 'ticket' = 'chat') => {
+    importChat: async (description: string, messages: Message[], metadata?: IChatMetadata, type: 'chat' | 'prd' | 'ticket' | 'research' = 'chat') => {
       if (!db) {
         return;
       }
@@ -483,6 +488,7 @@ ${value.content}
         let redirectPath = `/chat/${newId}`;
         if (type === 'prd') redirectPath = `/prd/${newId}`;
         if (type === 'ticket') redirectPath = `/ticket/${newId}`;
+        if (type === 'research') redirectPath = `/research/${newId}`; // Add research redirect path
         window.location.href = redirectPath;
         toast.success('Chat imported successfully');
       } catch (error) {

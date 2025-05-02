@@ -2,6 +2,7 @@ import { getSystemPrompt } from './prompts/prompts';
 import optimized from './prompts/optimized';
 import prdPrompt from './prompts/prd-prompt';
 import ticketPrompt from './prompts/ticket-prompt';
+import researchPrompt from './prompts/research-prompt';
 
 export interface PromptOptions {
   cwd: string;
@@ -45,6 +46,11 @@ export class PromptLibrary {
       label: 'Ticket Prompt',
       description: 'Specialized prompt for analyzing and managing software development tickets',
       get: (options) => ticketPrompt(options),
+    },
+    research: {
+      label: 'Research Prompt',
+      description: 'Specialized prompt for conducting and documenting research',
+      get: (options) => researchPrompt(options),
     },
   };
   static getList() {

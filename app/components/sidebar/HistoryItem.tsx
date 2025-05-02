@@ -75,6 +75,7 @@ export function HistoryItem({
   const chatRoute =
     chatType === 'prd' ? `/prd/${item.urlId}` :
     chatType === 'ticket' ? `/ticket/${item.urlId}` :
+    chatType === 'research' ? `/research/${item.urlId}` :
     `/chat/${item.urlId}`;
 
   return (
@@ -126,6 +127,7 @@ export function HistoryItem({
               <span className={
                 chatType === 'prd' ? 'i-ph:note-pencil h-4 w-4 text-blue-500' :
                 chatType === 'ticket' ? 'i-ph:ticket h-4 w-4 text-amber-500' :
+                chatType === 'research' ? 'i-ph:binoculars h-4 w-4 text-purple-500' :
                 'i-ph:chat-circle h-4 w-4 text-green-500'
               } />
               <span className="truncate">{currentDescription}</span>

@@ -215,8 +215,10 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [chatStarted, setChatStarted] = useState(false);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
-  const isStreaming = useStore(streamingState);
   const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory();
+
+  // Get the needsUpdate status from the store
+  const needsUpdate = useStore(workbenchStore.ticketsNeedUpdate);
 
   // Get chat history functions
   // Removed: const { storeMessageHistory, setChatType } = useChatHistory();
@@ -458,28 +460,10 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
     }
   }, [input]); // Depend on input from useChat
 
-  // Add state for tickets update notification
-  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
-
-  // Get the needsUpdate status from the store
-  const needsUpdate = useStore(workbenchStore.ticketsNeedUpdate);
-
-  // Check if tickets need update based on PRD changes AND if chat is idle
-  useEffect(() => {
-    // Show notification only if an update is needed AND the chat is not currently loading/streaming
-    setShowUpdateNotification(needsUpdate && !isLoading);
-
-    // Optional: Add periodic check if needed, though store updates should trigger this effect.
-    // The interval logic previously here might be redundant if the store updates reliably trigger the effect.
-    // Let's rely on the store listener and isLoading state changes.
-
-  }, [needsUpdate, isLoading]); // Depend on store value and isLoading
-
   // Function to handle tickets regeneration based on updated PRD
   const handleRegenerateTickets = () => {
-    // Acknowledge the update immediately to hide the button
+    // Acknowledge the update immediately to hide the prompt
     workbenchStore.acknowledgeTicketsUpdate();
-    setShowUpdateNotification(false); // Hide manually as well
 
     // Get the latest PRD data from sessionStorage
     const latestPRD = sessionStorage.getItem('current_prd');
@@ -743,26 +727,6 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
         "hidden": backgroundMode
       }
     )}>
-      {/* Tickets Update Notification - Placed above input area */}
-      {showUpdateNotification && (
-         <div className="px-4 pb-3 flex-shrink-0"> {/* Container to align with input padding */}
-           <div className="max-w-3xl mx-auto bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3"> {/* Match max-width */}
-             <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
-               <span className="i-ph:info text-lg text-bolt-elements-background-accent"></span>
-               <span>PRD updated. Regenerate tickets to reflect changes?</span>
-             </div>
-             <button
-               onClick={handleRegenerateTickets}
-               className="flex items-center gap-1.5 px-3 py-1.5 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bolt-elements-background-depth-1 focus:ring-bolt-elements-background-accent"
-               disabled={isLoading}
-             >
-               <span className="i-ph:arrows-clockwise text-base"></span>
-               Regenerate
-             </button>
-           </div>
-         </div>
-      )}
-
       {/* Main chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Messages container - Aligned with PRDChat */}
@@ -770,7 +734,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
           className="flex-1 overflow-y-auto px-4 py-2 scroll-smooth"
           ref={scrollRef} // Keep scrollRef if used for scrolling logic
         >
-          <div className="max-w-3xl mx-auto"> {/* Added max-width wrapper */}
+          <div className="max-w-chat mx-auto"> {/* Changed from max-w-3xl */}
             {!chatStarted && messagesForDisplay.length === 0 ? (
               // Initial state - Use PRDChat's structure/styling
               <div className="h-full flex flex-col items-center justify-center text-center p-6">
@@ -836,12 +800,32 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                 ref={messagesEndRef} // Keep ref if used
               />
             )}
+
+            {/* Regeneration prompt embedded in the message list area */}
+            {needsUpdate && !isLoading && (
+               <div className="py-3"> {/* Added padding */}
+                 <div className="bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3">
+                   <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
+                     <span className="i-ph:info text-lg text-bolt-elements-background-accent"></span>
+                     <span>PRD updated. Regenerate tickets to reflect changes?</span>
+                   </div>
+                   <button
+                     onClick={handleRegenerateTickets}
+                     className="flex items-center gap-1.5 px-3 py-1.5 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bolt-elements-background-depth-1 focus:ring-bolt-elements-background-accent"
+                     disabled={isLoading} // Keep disabled check just in case state changes rapidly
+                   >
+                     <span className="i-ph:arrows-clockwise text-base"></span>
+                     Regenerate
+                   </button>
+                 </div>
+               </div>
+            )}
           </div>
         </div>
 
         {/* Input area - Aligned with PRDChat */}
         <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-0 p-4 flex-shrink-0">
-          <div className="max-w-3xl mx-auto"> {/* Added max-width wrapper */}
+          <div className="max-w-chat mx-auto"> {/* Changed from max-w-3xl */}
             {/* Use handleSubmit from useChat */}
             <form onSubmit={handleSendMessage} className="flex flex-col gap-3">
                {/* File previews - Moved inside form, styled like PRD */}

@@ -105,8 +105,90 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
       // Continue with extraction without merging if we couldn't parse
     }
 
-    // Parse the markdown content
-    const lines = prdMarkdown.split('\n');
+    // Check for placeholder text that indicates partial content
+    const hasPlaceholderText = prdMarkdown.includes('[Previous sections continue unchanged...]') || 
+                              prdMarkdown.includes('[section unchanged]') || 
+                              prdMarkdown.includes('[unchanged content]');
+
+    // If we detect placeholder text and have an existing PRD, we need to ensure we preserve the full document
+    if (hasPlaceholderText && existingPRD) {
+      logger.warn('Detected placeholder text in PRD content. Using existing PRD as base.');
+      
+      // Parse the new content to extract only the sections that were updated
+      const parsedPartialPRD = parseMarkdownToPRD(prdMarkdown);
+      
+      if (!parsedPartialPRD) {
+        logger.error('Failed to parse partial PRD with placeholders');
+        return existingPRD; // Return existing PRD unchanged
+      }
+      
+      // Create a new PRD based on the existing one
+      const mergedPRD: PRDDocument = {
+        ...existingPRD,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Only update title if provided and different
+      if (parsedPartialPRD.title && parsedPartialPRD.title !== 'Untitled PRD' && 
+          parsedPartialPRD.title !== existingPRD.title) {
+        mergedPRD.title = parsedPartialPRD.title;
+      }
+      
+      // Only update description if provided and different
+      if (parsedPartialPRD.description && parsedPartialPRD.description !== existingPRD.description) {
+        mergedPRD.description = parsedPartialPRD.description;
+      }
+      
+      // For sections, we need to merge based on title
+      if (parsedPartialPRD.sections && parsedPartialPRD.sections.length > 0) {
+        // Create a map of existing sections by title for easier lookup
+        const existingSectionsByTitle = new Map<string, PRDSection>();
+        existingPRD.sections.forEach(section => {
+          existingSectionsByTitle.set(section.title.toLowerCase(), section);
+        });
+        
+        // Update or add sections from the partial PRD
+        parsedPartialPRD.sections.forEach(newSection => {
+          const existingSection = existingSectionsByTitle.get(newSection.title.toLowerCase());
+          
+          if (existingSection) {
+            // Update existing section content
+            existingSection.content = newSection.content;
+            // Remove from map to track which we've processed
+            existingSectionsByTitle.delete(newSection.title.toLowerCase());
+          } else {
+            // Add new section
+            mergedPRD.sections.push({
+              id: `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              title: newSection.title,
+              content: newSection.content
+            });
+          }
+        });
+        
+        // Rebuild sections array with updated content
+        mergedPRD.sections = [
+          ...mergedPRD.sections.filter(section => 
+            !existingSectionsByTitle.has(section.title.toLowerCase())),
+          ...Array.from(existingSectionsByTitle.values())
+        ];
+      }
+      
+      return mergedPRD;
+    }
+
+    // If no placeholders detected or no existing PRD, parse the markdown normally
+    return parseMarkdownToPRD(prdMarkdown, existingPRD);
+  } catch (error) {
+    logger.error('Error parsing potentially partial PRD markdown:', error);
+    return null;
+  }
+};
+
+// Helper function to parse markdown into PRD document structure
+const parseMarkdownToPRD = (markdown: string, existingPRD: PRDDocument | null = null): PRDDocument | null => {
+  try {
+    const lines = markdown.split('\n');
     let title = 'Untitled PRD';
     let description = '';
     const sections: PRDSection[] = [];
@@ -116,6 +198,13 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
 
     lines.forEach((line, index) => {
       const trimmedLine = line.trim();
+
+      // Skip placeholder lines
+      if (trimmedLine.includes('[Previous sections continue unchanged...]') || 
+          trimmedLine.includes('[section unchanged]') || 
+          trimmedLine.includes('[unchanged content]')) {
+        return;
+      }
 
       // Only assign the *first* H1 as the title
       if (!hasFoundTitle && trimmedLine.startsWith('# ')) {
@@ -156,13 +245,10 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
 
     description = description.trim();
 
-    // Simplified fallback logic: If only title is found, description remains empty, sections empty.
-    // The previous logic for moving description to Overview might be confusing during streaming.
-
     // Only return a document if at least a title was parsed
     if (!hasFoundTitle && sections.length === 0 && !description) {
-        // logger.debug('Partial PRD parsing did not yield title or sections.');
-        return null;
+      // logger.debug('Partial PRD parsing did not yield title or sections.');
+      return null;
     }
 
     // If we have an existing PRD, merge the new content with it
@@ -185,12 +271,8 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
         newPRD.description = description;
       }
 
-      // Instead of trying to merge sections, use the new sections as the basis
-      // but preserve any sections with the same ID that have been manually edited
-      const newSections: PRDSection[] = [];
+      // Create a map of existing sections by title for easier lookup
       const existingSectionsByTitle = new Map<string, PRDSection>();
-      
-      // Create a map of existing sections by lowercase title for easier lookup
       existingPRD.sections.forEach(section => {
         existingSectionsByTitle.set(section.title.toLowerCase(), section);
       });
@@ -201,7 +283,7 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
         
         if (existingSection) {
           // Use existing section ID but with the new content
-          newSections.push({
+          newPRD.sections.push({
             id: existingSection.id,
             title: newSection.title,
             content: newSection.content
@@ -211,7 +293,7 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
           existingSectionsByTitle.delete(newSection.title.toLowerCase());
         } else {
           // New section - add it with a new ID
-          newSections.push({
+          newPRD.sections.push({
             id: `section-${index}`,
             title: newSection.title,
             content: newSection.content
@@ -219,9 +301,12 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
         }
       });
       
-      // Add the sections to the new PRD
-      newPRD.sections = newSections;
-
+      // Add any remaining existing sections that weren't in the new content
+      // This ensures we preserve sections that weren't included in the partial update
+      existingSectionsByTitle.forEach(section => {
+        newPRD.sections.push(section);
+      });
+      
       return newPRD;
     }
 
@@ -233,7 +318,7 @@ const extractPRDFromMessages = (messages: Message[]): PRDDocument | null => {
       lastUpdated: new Date().toISOString(),
     };
   } catch (error) {
-    logger.error('Error parsing potentially partial PRD markdown:', error);
+    logger.error('Error in parseMarkdownToPRD:', error);
     return null;
   }
 };
@@ -251,13 +336,7 @@ const processSampledMessages = createSampler(
   }) => {
     const { messages, initialMessages, isLoading, parseMessages, storeMessageHistory, extractPRDContent } = options;
 
-    // Store history if needed (only when not loading maybe?)
-    // Logic for when to store might need refinement depending on desired behavior.
-    // Storing every sampled message might be excessive. Let's store only when loading finishes?
-    // if (!isLoading && messages.length > initialMessages.length) {
-    //     storeMessageHistory(messages).catch((error) => toast.error(error.message));
-    // }
-    // For now, keep original logic: store if messages changed or loading
+    // Store history if needed
     if (messages.length > initialMessages.length || isLoading) {
       parseMessages(messages, isLoading); // Handles setting chatStarted and streamingState
       storeMessageHistory(messages).catch((error) => toast.error(error.message)); // Store history
@@ -321,14 +400,89 @@ const PRDChat = ({ backgroundMode = false }) => {
 
       const prdDocument = extractPRDFromMessages(finalMessages);
       if (prdDocument) {
-        // Our improved extractPRDFromMessages function already handles merging with existing content
-        sessionStorage.setItem('current_prd', JSON.stringify(prdDocument));
+        // Check if this is a new chat session
+        let isNewSession = false;
+        if (finalMessages.length > 0 && finalMessages[0].role === 'user' && initialMessages.length === 0) {
+          // This is a new chat session, we should start fresh
+          isNewSession = true;
+          logger.debug('New chat session detected in onFinish, using fresh PRD content');
+        }
+        
+        // Get the existing PRD from sessionStorage to maintain section order
+        let existingPRD: PRDDocument | null = null;
+        if (!isNewSession) {
+          try {
+            const storedPRD = sessionStorage.getItem('current_prd');
+            if (storedPRD) {
+              existingPRD = JSON.parse(storedPRD);
+            }
+          } catch (error) {
+            logger.error('Error parsing existing PRD from sessionStorage:', error);
+          }
+        }
+        
+        // If we have an existing PRD and this is not a new session, ensure we maintain the section order
+        let finalPRD = prdDocument;
+        if (existingPRD && !isNewSession) {
+          // Create a map of new sections by title for easier lookup
+          const newSectionsByTitle = new Map<string, PRDSection>();
+          prdDocument.sections.forEach(section => {
+            newSectionsByTitle.set(section.title.toLowerCase(), section);
+          });
+          
+          // Preserve order by going through existing sections first
+          const orderedSections: PRDSection[] = [];
+          
+          // First add existing sections with updated content where applicable
+          existingPRD.sections.forEach(existingSection => {
+            const newSection = newSectionsByTitle.get(existingSection.title.toLowerCase());
+            if (newSection) {
+              // Use existing section ID but updated content
+              orderedSections.push({
+                id: existingSection.id,
+                title: existingSection.title,
+                content: newSection.content
+              });
+              // Remove from map to track which we've processed
+              newSectionsByTitle.delete(existingSection.title.toLowerCase());
+            } else {
+              // Keep existing section unchanged
+              orderedSections.push(existingSection);
+            }
+          });
+          
+          // Then add any new sections that weren't in the existing PRD
+          if (newSectionsByTitle.size > 0) {
+            Array.from(newSectionsByTitle.values()).forEach(newSection => {
+              orderedSections.push({
+                id: `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                title: newSection.title,
+                content: newSection.content
+              });
+            });
+          }
+          
+          // Create final PRD with sections in the right order
+          finalPRD = {
+            ...prdDocument,
+            sections: orderedSections
+          };
+        }
+        
+        // FINAL SAFETY CHECK: Ensure sections are in numerical order if they have numerical prefixes
+        finalPRD.sections = sortSectionsByNumericalPrefix(finalPRD.sections);
+        
+        // This is now the ONLY place where we write to sessionStorage
+        sessionStorage.setItem('current_prd', JSON.stringify(finalPRD));
         logger.debug('PRD extracted and saved onFinish (final)');
+        
+        // Clear the streaming content since we now have the final version
+        workbenchStore.updateStreamingPRDContent(null);
         
         // Trigger storage event for workbench update
         window.dispatchEvent(new StorageEvent('storage', { 
           key: 'current_prd', 
-          newValue: JSON.stringify(prdDocument), 
+          newValue: JSON.stringify(finalPRD), 
           storageArea: sessionStorage 
         }));
       }
@@ -360,20 +514,108 @@ const PRDChat = ({ backgroundMode = false }) => {
 
    // This is the primary callback for progressive extraction
   const extractPRDContent = useCallback((currentMessages: Message[]) => {
-    const prdDocument = extractPRDFromMessages(currentMessages);
-    if (prdDocument) {
-      sessionStorage.setItem('current_prd', JSON.stringify(prdDocument));
-      // logger.debug('PRD extracted and saved via extractPRDContent (progressive)'); // Can be noisy
-      // Show workbench automatically only if it finds a *complete* PRD initially?
-      // Or maybe show it as soon as *any* parseable PRD content appears? Let's show it.
-       if (!workbenchStore.showWorkbench.get() && !backgroundMode) {
-         workbenchStore.showWorkbench.set(true);
-         logger.debug('Showing workbench as PRD content is streaming.');
-       }
+    try {
+      // Extract PRD content from messages
+      const prdDocument = extractPRDFromMessages(currentMessages);
+      
+      if (prdDocument) {
+        // Only update the streaming content store, don't write to sessionStorage
+        // This ensures we show real-time updates in the UI without changing the source of truth
+        
+        // Get the existing PRD from sessionStorage to maintain section order
+        let existingPRD: PRDDocument | null = null;
+        let isNewSession = false;
+        
+        // Check if this is a new chat session
+        if (messages.length > 0 && messages[0].role === 'user' && initialMessages.length === 0) {
+          // This is a new chat session, we should start fresh
+          isNewSession = true;
+          logger.debug('New chat session detected, starting with fresh PRD content');
+        } else {
+          try {
+            const storedPRD = sessionStorage.getItem('current_prd');
+            if (storedPRD) {
+              existingPRD = JSON.parse(storedPRD);
+            }
+          } catch (error) {
+            logger.error('Error parsing existing PRD from sessionStorage:', error);
+          }
+        }
+        
+        // If we have an existing PRD and this is not a new session, ensure we maintain the section order
+        let orderedPRD = prdDocument;
+        if (existingPRD && !isNewSession) {
+          // Create a map of new sections by title for easier lookup
+          const newSectionsByTitle = new Map<string, PRDSection>();
+          prdDocument.sections.forEach(section => {
+            newSectionsByTitle.set(section.title.toLowerCase(), section);
+          });
+          
+          // Preserve order by going through existing sections first
+          const orderedSections: PRDSection[] = [];
+          
+          // First add existing sections with updated content where applicable
+          existingPRD.sections.forEach(existingSection => {
+            const newSection = newSectionsByTitle.get(existingSection.title.toLowerCase());
+            if (newSection) {
+              // Use existing section ID but updated content
+              orderedSections.push({
+                id: existingSection.id,
+                title: existingSection.title,
+                content: newSection.content
+              });
+              // Remove from map to track which we've processed
+              newSectionsByTitle.delete(existingSection.title.toLowerCase());
+            } else {
+              // Keep existing section unchanged
+              orderedSections.push(existingSection);
+            }
+          });
+          
+          // Then add any new sections that weren't in the existing PRD
+          if (newSectionsByTitle.size > 0) {
+            Array.from(newSectionsByTitle.values()).forEach(newSection => {
+              orderedSections.push({
+                id: `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                title: newSection.title,
+                content: newSection.content
+              });
+            });
+          }
+          
+          // Create ordered PRD with sections in the right order
+          orderedPRD = {
+            ...prdDocument,
+            sections: orderedSections
+          };
+        }
+        
+        // FINAL SAFETY CHECK: Ensure sections are in numerical order if they have numerical prefixes
+        orderedPRD.sections = sortSectionsByNumericalPrefix(orderedPRD.sections);
+        
+        // Convert the ordered PRD document to markdown for streaming display
+        const prdMarkdown = [
+          `# ${orderedPRD.title}`,
+          '',
+          orderedPRD.description,
+          '',
+          ...orderedPRD.sections.map(section => (
+            `## ${section.title}\n\n${section.content}`
+          ))
+        ].join('\n');
+        
+        workbenchStore.updateStreamingPRDContent(prdMarkdown);
+        
+        // Ensure workbench is visible if not in background mode
+        if (!workbenchStore.showWorkbench.get() && !backgroundMode) {
+          workbenchStore.showWorkbench.set(true);
+          logger.debug('Showing workbench as PRD content is available.');
+        }
+      }
+    } catch (error) {
+      logger.error('Error extracting PRD content:', error);
     }
-     // Don't log 'No PRD found' here, it will be too noisy during streaming before the tag appears
-  }, [backgroundMode]); // Dependencies: backgroundMode
-
+  }, [backgroundMode, messages, initialMessages]);
 
   // Load chat history
   useEffect(() => {
@@ -839,7 +1081,7 @@ ${ticketsContext}
           className="flex-1 overflow-y-auto px-4 py-2 scroll-smooth"
           // Add a ref maybe for scrolling? let messagesRef = useRef<HTMLDivElement>(null);
         >
-          <div className="max-w-1xl mx-auto">
+          <div className="max-w-chat mx-auto">
             {!chatStarted && messagesForDisplay.length === 0 ? ( // Check messages length too
               <div className="h-full flex flex-col items-center justify-center text-center p-6">
                 <div className="i-ph:clipboard-text text-6xl text-bolt-elements-textTertiary mb-6"></div>
@@ -878,7 +1120,7 @@ ${ticketsContext}
         {/* PRD Update Notification - Placed above input area */}
         {showUpdateNotification && (
           <div className="px-4 pb-3 flex-shrink-0"> {/* Container to align with input padding */}
-             <div className="max-w-1xl mx-auto bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3">
+             <div className="max-w-chat mx-auto bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3">
                <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
                  <span className="i-ph:info text-lg text-bolt-elements-background-accent"></span>
                  <span>Tickets updated. Regenerate PRD to reflect changes?</span>
@@ -897,7 +1139,7 @@ ${ticketsContext}
 
         {/* Input area */}
         <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-0 p-4 flex-shrink-0">
-          <div className="max-w-1xl mx-auto">
+          <div className="max-w-chat mx-auto">
             <form
               onSubmit={handleSendMessage} // Use the combined handler
               className="flex flex-col gap-3"
@@ -1052,3 +1294,24 @@ ${ticketsContext}
 };
 
 export default PRDChat;
+
+// Helper function to sort sections by numerical prefix
+const sortSectionsByNumericalPrefix = (sections: PRDSection[]): PRDSection[] => {
+  return [...sections].sort((a, b) => {
+    // Extract numerical prefixes if they exist (e.g., "1. Executive Summary")
+    const aMatch = a.title.match(/^(\d+)\.\s/);
+    const bMatch = b.title.match(/^(\d+)\.\s/);
+    
+    // If both have numerical prefixes, sort by the number
+    if (aMatch && bMatch) {
+      return parseInt(aMatch[1]) - parseInt(bMatch[1]);
+    }
+    
+    // If only one has a numerical prefix, prioritize it
+    if (aMatch) return -1;
+    if (bMatch) return 1;
+    
+    // Otherwise, keep original order
+    return 0;
+  });
+};

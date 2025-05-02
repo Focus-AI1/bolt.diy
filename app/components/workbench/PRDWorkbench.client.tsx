@@ -65,100 +65,9 @@ const PRDWorkbench = () => {
     }
   }, [showWorkbench]);
 
-  // Handle streaming PRD content updates
-  useEffect(() => {
-    if (streamingPRDContent && prdDocument) {
-      try {
-        // Create a temporary document with streaming content
-        const tempDoc = { ...prdDocument };
-        
-        // Parse the streaming markdown content into sections
-        const lines = streamingPRDContent.split('\n');
-        let currentTitle = '';
-        let currentContent = '';
-        let inSection = false;
-        let updatedSections: PRDSection[] = [...tempDoc.sections];
-        
-        // Simple parsing logic for streaming content
-        lines.forEach(line => {
-          const trimmedLine = line.trim();
-          
-          if (trimmedLine.startsWith('# ')) {
-            // Main title - update document title
-            tempDoc.title = trimmedLine.substring(2).trim();
-          } else if (trimmedLine.startsWith('## ')) {
-            // Section title - if we were in a section, save it
-            if (inSection && currentTitle) {
-              // Find existing section or create new one
-              const existingIndex = updatedSections.findIndex(s => s.title === currentTitle);
-              if (existingIndex >= 0) {
-                updatedSections[existingIndex].content = currentContent;
-              } else {
-                const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-                updatedSections.push({
-                  id: newId,
-                  title: currentTitle,
-                  content: currentContent
-                });
-              }
-            }
-            
-            // Start new section
-            currentTitle = trimmedLine.substring(3).trim();
-            currentContent = '';
-            inSection = true;
-          } else if (inSection) {
-            // Add to current section content
-            currentContent += line + '\n';
-          } else if (!tempDoc.description && !inSection) {
-            // If not in a section and no description yet, this might be the description
-            tempDoc.description += line + '\n';
-          }
-        });
-        
-        // Add the last section if we were in one
-        if (inSection && currentTitle) {
-          const existingIndex = updatedSections.findIndex(s => s.title === currentTitle);
-          if (existingIndex >= 0) {
-            updatedSections[existingIndex].content = currentContent;
-          } else {
-            const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-            updatedSections.push({
-              id: newId,
-              title: currentTitle,
-              content: currentContent
-            });
-          }
-        }
-        
-        tempDoc.sections = updatedSections;
-        tempDoc.lastUpdated = new Date().toISOString();
-        
-        // Generate HTML from the updated document
-        const generatedHtml = generateFullHtml(tempDoc);
-        setFullPrdHtmlContent(generatedHtml);
-        
-        // Don't save to sessionStorage during streaming to avoid conflicts
-      } catch (error) {
-        logger.error('Error processing streaming PRD content:', error);
-      }
-    }
-  }, [streamingPRDContent, prdDocument]);
-
-  // Generate combined HTML content for the editor
-  const generateFullHtml = (doc: PRDDocument): string => {
-    let html = `<h1>${doc.title}</h1>`;
-    if (doc.description) {
-      html += `<p>${doc.description}</p>`;
-    }
-    doc.sections.forEach(section => {
-      html += `<h2 id="${section.id}">${section.title}</h2>${section.content}`;
-    });
-    return html;
-  };
-
   // Load PRD from sessionStorage and listen for changes
   useEffect(() => {
+    // Load initial PRD
     const loadPrd = () => {
       try {
         const storedPRD = sessionStorage.getItem('current_prd');
@@ -213,77 +122,324 @@ const PRDWorkbench = () => {
     };
     window.addEventListener('storage', handleStorageChange);
 
+    // Add a listener for streaming content changes
+    const streamingContentListener = workbenchStore.streamingPRDContent.listen((content) => {
+      if (content && prdDocument) {
+        try {
+          // Clean the streaming content to remove any remnants
+          const cleanedContent = cleanStreamingContent(content);
+          
+          if (cleanedContent.trim()) {
+            // Create a temporary document with streaming content
+            const tempDoc = { ...prdDocument };
+            
+            // Parse the streaming markdown content into sections
+            const lines = cleanedContent.split('\n');
+            let currentTitle = '';
+            let currentContent = '';
+            let inSection = false;
+            let updatedSections = [...tempDoc.sections];
+            
+            // Create a map of existing sections by title for easier lookup
+            const sectionsByTitle = new Map<string, PRDSection>();
+            updatedSections.forEach((section, index) => {
+              sectionsByTitle.set(section.title.toLowerCase(), section);
+            });
+            
+            // Simple parsing logic for streaming content
+            lines.forEach(line => {
+              const trimmedLine = line.trim();
+              
+              // Skip placeholder lines and empty lines
+              if (!trimmedLine || 
+                  trimmedLine.includes('[Previous sections continue unchanged...]') || 
+                  trimmedLine.includes('[section unchanged]') || 
+                  trimmedLine.includes('[unchanged content]')) {
+                return;
+              }
+              
+              // Skip lines that are just numbers
+              if (/^\s*\d+\.?\s*$/.test(trimmedLine)) {
+                return;
+              }
+              
+              if (trimmedLine.startsWith('# ')) {
+                // Main title - update document title
+                tempDoc.title = trimmedLine.substring(2).trim();
+              } else if (trimmedLine.startsWith('## ')) {
+                // Section title - if we were in a section, save it
+                if (inSection && currentTitle) {
+                  // Find existing section or create new one
+                  const existingSection = sectionsByTitle.get(currentTitle.toLowerCase());
+                  if (existingSection) {
+                    existingSection.content = currentContent.trim();
+                  } else {
+                    const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                    updatedSections.push({
+                      id: newId,
+                      title: currentTitle,
+                      content: currentContent.trim()
+                    });
+                    sectionsByTitle.set(currentTitle.toLowerCase(), updatedSections[updatedSections.length - 1]);
+                  }
+                }
+                
+                // Start new section if the title is not just a number
+                const sectionTitle = trimmedLine.substring(3).trim();
+                if (!/^\s*\d+\.?\s*$/.test(sectionTitle)) {
+                  currentTitle = sectionTitle;
+                  currentContent = '';
+                  inSection = true;
+                }
+              } else if (inSection) {
+                // Add to current section content
+                currentContent += line + '\n';
+              }
+            });
+            
+            // Add the last section if we were in one
+            if (inSection && currentTitle) {
+              const existingSection = sectionsByTitle.get(currentTitle.toLowerCase());
+              if (existingSection) {
+                existingSection.content = currentContent.trim();
+              } else {
+                const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                updatedSections.push({
+                  id: newId,
+                  title: currentTitle,
+                  content: currentContent.trim()
+                });
+              }
+            }
+            
+            // Filter out any sections with just numbers or empty content
+            updatedSections = updatedSections.filter(section => {
+              const isTitleJustNumber = /^\d+\.?\s*$/.test(section.title.trim());
+              const hasContent = section.content.trim().length > 0;
+              const isContentJustNumbers = /^[\d\.\s]+$/.test(section.content.trim());
+              
+              return !isTitleJustNumber && hasContent && !isContentJustNumbers;
+            });
+            
+            tempDoc.sections = updatedSections;
+            tempDoc.lastUpdated = new Date().toISOString();
+            
+            // Generate HTML from the updated document
+            const generatedHtml = generateFullHtml(tempDoc);
+            setFullPrdHtmlContent(generatedHtml);
+          }
+        } catch (error) {
+          logger.error('Error processing streaming PRD content:', error);
+        }
+      }
+    });
+
+    // Cleanup function
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      streamingContentListener();
     };
-  }, []);
+  }, [prdDocument]);
 
-  // Function to parse HTML back into PRDDocument structure (simplified)
-  const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocument => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const sections: PRDSection[] = [];
-    let title = existingDoc.title;
-    let description = existingDoc.description;
-
-    const h1 = doc.querySelector('h1');
-    if (h1) {
-      title = h1.textContent || existingDoc.title;
-      const firstP = h1.nextElementSibling;
-      if (firstP && firstP.tagName === 'P') {
-        let nextSibling = firstP.nextElementSibling;
-        if (!nextSibling || nextSibling.tagName === 'H2') {
-            description = firstP.innerHTML;
-        } else {
-           description = '';
+  // Helper function to clean streaming content of remnants
+  const cleanStreamingContent = (content: string): string => {
+    if (!content) return '';
+    
+    // Split by lines to process
+    const lines = content.split('\n');
+    const cleanedLines: string[] = [];
+    
+    // Track if we're in a valid section
+    let inValidSection = false;
+    let validSectionCount = 0;
+    
+    // Process each line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      
+      // Skip empty lines
+      if (!trimmedLine) {
+        // Only keep empty lines if they're within a valid section
+        if (inValidSection) {
+          cleanedLines.push('');
         }
-      } else {
-        description = '';
+        continue;
+      }
+      
+      // Skip placeholder lines
+      if (trimmedLine.includes('[Previous sections continue unchanged...]') || 
+          trimmedLine.includes('[section unchanged]') || 
+          trimmedLine.includes('[unchanged content]')) {
+        continue;
+      }
+      
+      // Check for section headers
+      if (trimmedLine.startsWith('# ') || trimmedLine.startsWith('## ')) {
+        // If it's just a number or number + period, skip it
+        if (/^#+\s+\d+\.?\s*$/.test(trimmedLine)) {
+          continue;
+        }
+        
+        // If it's a section header with actual content, keep it
+        if (trimmedLine.length > 3) {
+          inValidSection = true;
+          validSectionCount++;
+          cleanedLines.push(line);
+        }
+        continue;
+      }
+      
+      // Check for lines that are just section numbers (more aggressive pattern)
+      // This catches standalone numbers like "1.", "2.", "3." etc.
+      if (/^\s*\d+\.?\s*$/.test(trimmedLine)) {
+        continue;
+      }
+      
+      // Include all other lines that have meaningful content
+      if (trimmedLine.length > 0) {
+        cleanedLines.push(line);
       }
     }
+    
+    // If we didn't find any valid sections but have content, it might be just remnants
+    // In this case, return an empty string to avoid displaying garbage
+    if (validSectionCount === 0 && cleanedLines.length < 5) {
+      return '';
+    }
+    
+    return cleanedLines.join('\n');
+  };
 
-    const sectionHeadings = doc.querySelectorAll('h2');
-    sectionHeadings.forEach((h2) => {
-      const sectionTitle = h2.textContent || 'Untitled Section';
-      const sectionId = h2.id || 'section-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
-      let contentHtml = '';
-      let sibling = h2.nextElementSibling;
+  // Generate combined HTML content for the editor
+  const generateFullHtml = (doc: PRDDocument): string => {
+    // Start with the title
+    let html = `<h1>${doc.title}</h1>\n\n`;
+    
+    // Add description if it exists
+    if (doc.description) {
+      // If description is already HTML, use it directly
+      if (doc.description.trim().startsWith('<')) {
+        html += `${doc.description}\n\n`;
+      } else {
+        // Otherwise, wrap it in a paragraph
+        html += `<p>${doc.description}</p>\n\n`;
+      }
+    }
+    
+    // Add each section with its title and content
+    if (doc.sections && doc.sections.length > 0) {
+      doc.sections.forEach(section => {
+        // Add section title as h2
+        html += `<h2 id="${section.id}">${section.title}</h2>\n\n`;
+        
+        // Add section content if it exists
+        if (section.content) {
+          html += `${section.content}\n\n`;
+        }
+      });
+    }
+    
+    return html.trim();
+  };
 
-      while (sibling && sibling.tagName !== 'H2') {
-        contentHtml += sibling.outerHTML;
-        sibling = sibling.nextElementSibling;
+  // Function to parse HTML back into PRDDocument structure
+  const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocument => {
+    try {
+      const parser = new DOMParser();
+      // Wrap the HTML in a div to ensure proper parsing
+      const doc = parser.parseFromString(`<div id="prd-root">${html}</div>`, 'text/html');
+      const rootDiv = doc.getElementById('prd-root');
+      
+      if (!rootDiv) {
+        console.error('Failed to parse HTML: root element not found');
+        return existingDoc;
+      }
+      
+      const result: PRDDocument = { 
+        title: existingDoc.title,
+        description: existingDoc.description,
+        sections: [],
+        lastUpdated: new Date().toISOString()
+      };
+
+      // Extract title (h1)
+      const titleElem = rootDiv.querySelector('h1');
+      if (titleElem && titleElem.textContent) {
+        result.title = titleElem.textContent.trim();
       }
 
-      sections.push({
-        id: sectionId,
-        title: sectionTitle,
-        content: contentHtml.trim()
-      });
-    });
-
-    const existingSectionIds = new Set(existingDoc.sections.map(s => s.id));
-    const parsedSectionIds = new Set(sections.map(s => s.id));
-    existingDoc.sections.forEach(existingSection => {
-        if (!parsedSectionIds.has(existingSection.id)) {
-            sections.push({ ...existingSection, content: '' });
-             logger.warn(`Section "${existingSection.title}" (ID: ${existingSection.id}) was missing after parse, added back as empty.`);
+      // Extract description (content between h1 and first h2)
+      let descriptionContent = '';
+      let currentElem = titleElem?.nextElementSibling;
+      while (currentElem && currentElem.tagName !== 'H2') {
+        if (currentElem.textContent) {
+          descriptionContent += currentElem.outerHTML;
         }
-    });
+        currentElem = currentElem.nextElementSibling;
+      }
 
-    sections.sort((a, b) => {
-      const elementA = doc.getElementById(a.id);
-      const elementB = doc.getElementById(b.id);
-      if (!elementA || !elementB) return 0;
-      return elementA.compareDocumentPosition(elementB) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-    });
+      if (descriptionContent) {
+        result.description = descriptionContent.trim();
+      }
 
-    return {
-      ...existingDoc,
-      title: title,
-      description: description,
-      sections: sections,
-      lastUpdated: new Date().toISOString()
-    };
+      // Extract sections (h2 and all content until next h2)
+      const sections: PRDSection[] = [];
+      const h2Elements = rootDiv.querySelectorAll('h2');
+
+      // Create a map of existing sections by title for easier lookup
+      const existingSectionsByTitle = new Map<string, PRDSection>();
+      existingDoc.sections.forEach(section => {
+        existingSectionsByTitle.set(section.title.toLowerCase(), section);
+      });
+
+      h2Elements.forEach((h2Elem, index) => {
+        if (!h2Elem.textContent) return; // Skip empty headings
+        
+        const sectionTitle = h2Elem.textContent.trim();
+        let sectionContent = '';
+        let currentNode = h2Elem.nextElementSibling;
+
+        while (currentNode && currentNode.tagName !== 'H2') {
+          if (currentNode.textContent) {
+            sectionContent += currentNode.outerHTML;
+          }
+          currentNode = currentNode.nextElementSibling;
+        }
+
+        // Look for existing section with same title to preserve ID
+        const existingSection = existingSectionsByTitle.get(sectionTitle.toLowerCase());
+        const sectionId = existingSection ? existingSection.id : `section-${index}-${Date.now()}`;
+
+        sections.push({
+          id: sectionId,
+          title: sectionTitle,
+          content: sectionContent.trim()
+        });
+
+        // Remove from map to track which we've processed
+        if (existingSection) {
+          existingSectionsByTitle.delete(sectionTitle.toLowerCase());
+        }
+      });
+
+      // Add any remaining existing sections that weren't in the new content
+      // This ensures we preserve sections that weren't included in the partial update
+      existingSectionsByTitle.forEach(section => {
+        // Only add non-empty sections that weren't processed above
+        if (section.title && section.content) {
+          sections.push({...section});
+        }
+      });
+
+      // Sort sections to maintain consistent order
+      result.sections = sections;
+      return result;
+    } catch (error) {
+      console.error('Error parsing HTML to PRD:', error);
+      // Return the existing document if parsing fails
+      return existingDoc;
+    }
   };
 
   // Function to save the entire PRD
@@ -291,27 +447,108 @@ const PRDWorkbench = () => {
     if (!prdDocument) return;
 
     try {
-      const updatedPrdDoc = parseHtmlToPrd(fullPrdHtmlContent, prdDocument);
-
-      const newPrdString = JSON.stringify(updatedPrdDoc);
-      sessionStorage.setItem('current_prd', newPrdString);
-      logger.debug('Full PRD (HTML) saved to sessionStorage.');
-
-      workbenchStore.updatePRD(updatedPrdDoc.lastUpdated);
-
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'current_prd',
-        storageArea: sessionStorage,
-        newValue: newPrdString
-      }));
-
-      setPrdDocument(updatedPrdDoc);
+      // Get the current HTML content from the editor
+      const currentHtml = editor?.getHTML() || fullPrdHtmlContent;
+      
+      // Clean the HTML to remove any empty sections or remnants
+      const cleanedHtml = cleanHtml(currentHtml);
+      
+      // Parse the HTML back into a PRD document structure
+      const updatedPrd = parseHtmlToPrd(cleanedHtml, prdDocument);
+      
+      // Ensure we're not losing any sections
+      if (updatedPrd.sections.length < prdDocument.sections.length) {
+        logger.warn('Potential data loss detected - section count decreased');
+        
+        // Create a map of updated sections by title
+        const updatedSectionsByTitle = new Map<string, PRDSection>();
+        updatedPrd.sections.forEach(section => {
+          updatedSectionsByTitle.set(section.title.toLowerCase(), section);
+        });
+        
+        // Add any missing sections from the original document that have content
+        prdDocument.sections.forEach(originalSection => {
+          if (!updatedSectionsByTitle.has(originalSection.title.toLowerCase()) && originalSection.content.trim()) {
+            logger.info(`Preserving potentially missing section: ${originalSection.title}`);
+            updatedPrd.sections.push(originalSection);
+          }
+        });
+      }
+      
+      // Filter out any sections with just numbers or empty content
+      updatedPrd.sections = updatedPrd.sections.filter(section => {
+        // Skip sections that are just numbers or empty
+        const isTitleJustNumber = /^\d+\.?\s*$/.test(section.title.trim());
+        const hasContent = section.content.trim().length > 0;
+        
+        // Additional check for content that's just numbers
+        const isContentJustNumbers = /^[\d\.\s]+$/.test(section.content.trim());
+        
+        return !isTitleJustNumber && hasContent && !isContentJustNumbers;
+      });
+      
+      // Update the lastUpdated timestamp
+      updatedPrd.lastUpdated = new Date().toISOString();
+      
+      // Save to session storage
+      sessionStorage.setItem('current_prd', JSON.stringify(updatedPrd));
+      
+      // Update state
+      setPrdDocument(updatedPrd);
       setHasUnsavedChanges(false);
-
-      toast.success('PRD updated successfully');
+      
+      // Generate clean HTML for the editor
+      const newHtml = generateFullHtml(updatedPrd);
+      setFullPrdHtmlContent(newHtml);
+      
+      logger.debug('PRD saved successfully');
+      toast.success('PRD saved successfully');
     } catch (error) {
       logger.error('Error saving PRD:', error);
-      toast.error('Failed to save PRD. Check content structure.');
+      toast.error('Error saving PRD. Please try again.');
+    }
+  };
+
+  // Helper function to clean HTML of remnants and empty sections
+  const cleanHtml = (html: string): string => {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      
+      // Remove empty headings or headings with just numbers
+      const headings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      headings.forEach(heading => {
+        const headingText = heading.textContent?.trim() || '';
+        // Check if heading is empty or just contains a number or number + period
+        if (!headingText || /^\d+\.?\s*$/.test(headingText)) {
+          heading.remove();
+        }
+      });
+      
+      // Remove any elements that might be remnants
+      const allElements = doc.body.querySelectorAll('*');
+      allElements.forEach(el => {
+        const content = el.textContent?.trim() || '';
+        // Remove elements that just contain section numbers or empty content
+        if (/^(\d+\.?\s*)+$/.test(content) || content === '') {
+          el.remove();
+        }
+      });
+      
+      // Additional cleanup for stray numbers that might be in paragraphs
+      const paragraphs = doc.querySelectorAll('p');
+      paragraphs.forEach(p => {
+        const content = p.textContent?.trim() || '';
+        // If paragraph only contains numbers and periods, remove it
+        if (/^[\d\.\s]+$/.test(content)) {
+          p.remove();
+        }
+      });
+      
+      return doc.body.innerHTML;
+    } catch (error) {
+      console.error('Error cleaning HTML:', error);
+      return html; // Return original if cleaning fails
     }
   };
 

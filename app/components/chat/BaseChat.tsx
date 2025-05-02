@@ -46,6 +46,8 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { atom } from 'nanostores';
 import TicketChat from './TicketChat.client';
 import TicketWorkbench from '../workbench/TicketWorkbench.client';
+import ResearchChat from './ResearchChat.client';
+import ResearchWorkbench from '../workbench/ResearchWorkbench.client';
 
 const TEXTAREA_MIN_HEIGHT = 76;
 
@@ -112,7 +114,19 @@ export const initialTicketMessageStore = atom<{
   autoSubmit: false,
 });
 
-type ChatMode = 'chat' | 'prd' | 'ticket';
+export const initialResearchMessageStore = atom<{
+  text: string;
+  files: File[];
+  imageDataList: string[];
+  autoSubmit: boolean;
+}>({
+  text: '',
+  files: [],
+  imageDataList: [],
+  autoSubmit: false,
+});
+
+type ChatMode = 'chat' | 'prd' | 'ticket' | 'research';
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
@@ -168,6 +182,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [chatMode, setChatMode] = useState<ChatMode>('chat');
     const [isPrdModeToggleOn, setIsPrdModeToggleOn] = useState(true);
     const [isTicketModeToggleOn, setIsTicketModeToggleOn] = useState(true);
+    const [isResearchModeToggleOn, setIsResearchModeToggleOn] = useState(true);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
 
     useEffect(() => {
@@ -338,6 +353,28 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           // Don't switch to Ticket mode UI, but still process in background
           // Keep the regular chat UI visible
         }
+        
+        // If Research mode is on, store the message for Research processing but don't switch UI
+        if (isResearchModeToggleOn) {
+          // First reset the store to clear any previous data
+          initialResearchMessageStore.set({
+            text: '',
+            files: [],
+            imageDataList: [],
+            autoSubmit: false
+          });
+          
+          // Then store the message content and files in the store for ResearchChat to use in background
+          initialResearchMessageStore.set({
+            text: messageContent,
+            files: uploadedFiles || [],
+            imageDataList: imageDataList || [],
+            autoSubmit: true
+          });
+          
+          // Don't switch to Research mode UI, but still process in background
+          // Keep the regular chat UI visible
+        }
       }
 
       // Always proceed with sending the message to the regular chat endpoint
@@ -428,6 +465,20 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               </div>
             )}
             
+            {/* Hidden TicketChat component that runs in the background when isTicketModeToggleOn is true */}
+            {isTicketModeToggleOn && chatStarted && chatMode === 'chat' && (
+                <div className="hidden">
+                    <ClientOnly>{() => <TicketChat backgroundMode={true} />}</ClientOnly>
+                </div>
+            )}
+            
+            {/* Hidden ResearchChat component that runs in the background when isResearchModeToggleOn is true */}
+            {isResearchModeToggleOn && chatStarted && chatMode === 'chat' && (
+                <div className="hidden">
+                    <ClientOnly>{() => <ResearchChat backgroundMode={true} />}</ClientOnly>
+                </div>
+            )}
+            
             {!chatStarted && chatMode === 'chat' && (
               <div id="intro" className="mt-[5vh] max-w-chat mx-auto text-center px-4 lg:px-0 flex-shrink-0">
                 <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in">
@@ -442,7 +493,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               <div className={classNames(
                 "sticky top-0 z-10 bg-bolt-elements-background-default border-b border-bolt-elements-borderColor flex-shrink-0 transition-all duration-200 ease-in-out",
                 {
-                  "mr-[var(--workbench-width)]": showWorkbench && (chatMode === 'prd' || chatMode === 'ticket') 
+                  "mr-[var(--workbench-width)]": showWorkbench && (chatMode === 'prd' || chatMode === 'ticket' || chatMode === 'research') 
                 }
               )}>
                 <div className="flex items-center justify-center px-6 py-3">
@@ -457,6 +508,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       )}
                     >
                       Chat
+                    </button>
+                    <button
+                      onClick={() => setChatMode('research')}
+                      className={classNames(
+                        'px-3 py-1.5 text-sm rounded transition-all',
+                        chatMode === 'research'
+                          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
+                          : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
+                      )}
+                    >
+                      Research
                     </button>
                     <button
                       onClick={() => setChatMode('prd')}
@@ -739,6 +801,54 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             </IconButton>
                           </div>
                           <div className="flex gap-2 items-center">
+                          <Tooltip.Root>
+                              <Tooltip.Trigger asChild>
+                                <button
+                                  type="button"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 500,
+                                    lineHeight: 1.2,
+                                    cursor: chatStarted ? 'not-allowed' : 'pointer',
+                                    opacity: chatStarted ? 0.5 : 1,
+                                    transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
+                                    backgroundColor: isResearchModeToggleOn
+                                      ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
+                                      : 'var(--bolt-elements-background-depth-3, #f9fafb)',
+                                    color: isResearchModeToggleOn
+                                      ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
+                                      : 'var(--bolt-elements-textSecondary, #6b7280)',
+                                    borderColor: isResearchModeToggleOn
+                                      ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
+                                      : 'var(--bolt-elements-borderColor, #e5e7eb)',
+                                  }}
+                                  onClick={() => !chatStarted && setIsResearchModeToggleOn(!isResearchModeToggleOn)}
+                                  disabled={chatStarted}
+                                >
+                                  <span style={{}}>
+                                    Research:
+                                  </span>
+                                  <span style={{ fontWeight: 600 }}>
+                                    {isResearchModeToggleOn ? 'ON' : 'OFF'}
+                                  </span>
+                                </button>
+                              </Tooltip.Trigger>
+                              <Tooltip.Portal>
+                                <Tooltip.Content
+                                  className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                  sideOffset={5}
+                                >
+                                  Generate Research first!
+                                  <Tooltip.Arrow className="fill-gray-800" />
+                                </Tooltip.Content>
+                              </Tooltip.Portal>
+                            </Tooltip.Root>
                             <Tooltip.Root>
                               <Tooltip.Trigger asChild>
                                 <button
@@ -850,12 +960,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   </div>
                 </>
               ) : chatMode === 'prd' ? (
-                <div className="flex-1 flex h-full overflow-hidden justify-center items-center">
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
                   <ClientOnly>{() => <PRDChat />}</ClientOnly>
                 </div>
               ) : chatMode === 'ticket' ? (
-                <div className="flex-1 flex h-full overflow-hidden justify-center items-center">
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
                   <ClientOnly>{() => <TicketChat />}</ClientOnly>
+                </div>
+              ) : chatMode === 'research' ? (
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
+                  <ClientOnly>{() => <ResearchChat />}</ClientOnly>
                 </div>
               ) : null}
             </div>
@@ -886,6 +1000,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 <PRDWorkbench />
               ) : chatMode === 'ticket' ? (
                 <TicketWorkbench />
+              ) : chatMode === 'research' ? (
+                <ResearchWorkbench />
               ) : null
             }
           </ClientOnly>
