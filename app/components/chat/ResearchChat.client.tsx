@@ -657,7 +657,13 @@ const ResearchChat = ({ backgroundMode = false }) => {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden relative">
+    <div className={classNames(
+      "flex flex-col h-full transition-all duration-200 ease-in-out",
+      {
+        "mr-[calc(var(--workbench-width)_+_3rem)]": workbenchVisible,
+        "hidden": backgroundMode
+      }
+    )}>
       {/* Left side - Chat UI */}
       <div className="flex-1 flex flex-col w-full max-w-full overflow-hidden">
         {/* Chat Header */}
