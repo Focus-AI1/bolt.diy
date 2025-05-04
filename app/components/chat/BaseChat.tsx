@@ -572,51 +572,21 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 }
               )}>
                 <div className="flex items-center justify-center px-6 py-3">
-                  <div className="flex items-center gap-2 p-0.5 bg-bolt-elements-background-depth-3 rounded-md">
-                    <button
-                      onClick={() => setChatMode('chat')}
-                      className={classNames(
-                        'px-3 py-1.5 text-sm rounded transition-all',
-                        chatMode === 'chat'
-                          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
-                          : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
-                      )}
-                    >
-                      Chat
-                    </button>
-                    <button
-                      onClick={() => setChatMode('research')}
-                      className={classNames(
-                        'px-3 py-1.5 text-sm rounded transition-all',
-                        chatMode === 'research'
-                          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
-                          : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
-                      )}
-                    >
-                      Research
-                    </button>
-                    <button
-                      onClick={() => setChatMode('prd')}
-                      className={classNames(
-                        'px-3 py-1.5 text-sm rounded transition-all',
-                        chatMode === 'prd'
-                          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
-                          : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
-                      )}
-                    >
-                      PRD
-                    </button>
-                    <button
-                      onClick={() => setChatMode('ticket')}
-                      className={classNames(
-                        'px-3 py-1.5 text-sm rounded transition-all',
-                        chatMode === 'ticket'
-                          ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
-                          : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
-                      )}
-                    >
-                      Ticket
-                    </button>
+                  <div className="flex items-center gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm">
+                    {['chat', 'research', 'prd', 'ticket'].map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setChatMode(mode as ChatMode)}
+                        className={classNames(
+                          'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
+                          chatMode === mode
+                            ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
+                            : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
+                        )}
+                      >
+                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
