@@ -1,0 +1,218 @@
+/* PRD Markdown Preview Styles */
+.markdownPreview {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  color: var(--bolt-elements-textPrimary);
+  
+  /* Headings */
+  :global(h1), :global(h2), :global(h3), :global(h4), :global(h5), :global(h6),
+  :global(.enhanced-heading) {
+    margin-top: 1.5em;
+    margin-bottom: 0.75em;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  
+  :global(h1), :global(.enhanced-heading.level-1) {
+    font-size: 2em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--bolt-elements-borderColor);
+  }
+  
+  :global(h2), :global(.enhanced-heading.level-2) {
+    font-size: 1.5em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--bolt-elements-borderColor);
+  }
+  
+  :global(h3), :global(.enhanced-heading.level-3) {
+    font-size: 1.25em;
+  }
+  
+  :global(h4), :global(.enhanced-heading.level-4) {
+    font-size: 1em;
+  }
+  
+  /* Paragraphs and spacing */
+  :global(p), :global(.enhanced-paragraph) {
+    margin-top: 0;
+    margin-bottom: 1em;
+  }
+  
+  /* Lists */
+  :global(ul), :global(ol), :global(.enhanced-ul), :global(.enhanced-ol) {
+    padding-left: 2em;
+    margin-top: 0;
+    margin-bottom: 1em;
+  }
+  
+  :global(li), :global(.enhanced-li) {
+    margin-bottom: 0.25em;
+  }
+  
+  :global(li > ul), :global(li > ol),
+  :global(.enhanced-li > .enhanced-ul), :global(.enhanced-li > .enhanced-ol) {
+    margin-top: 0.25em;
+    margin-bottom: 0.5em;
+  }
+  
+  /* Blockquotes */
+  :global(blockquote), :global(.enhanced-blockquote) {
+    padding: 0 1em;
+    color: var(--bolt-elements-textSecondary);
+    border-left: 0.25em solid var(--bolt-elements-borderColor);
+    margin: 0 0 1em 0;
+  }
+  
+  /* Code blocks */
+  :global(pre) {
+    background-color: var(--bolt-elements-background-depth-3);
+    border-radius: 0.375rem;
+    padding: 1em;
+    overflow-x: auto;
+    margin-bottom: 1em;
+  }
+  
+  :global(code), :global(.enhanced-code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.9em;
+    padding: 0.2em 0.4em;
+    border-radius: 0.25em;
+    background-color: var(--bolt-elements-background-depth-2);
+  }
+  
+  :global(pre code) {
+    padding: 0;
+    background-color: transparent;
+    border-radius: 0;
+    font-size: 0.9em;
+  }
+  
+  /* Links */
+  :global(a), :global(.enhanced-link) {
+    color: #3b82f6;
+    text-decoration: none;
+  }
+  
+  :global(a:hover), :global(.enhanced-link:hover) {
+    text-decoration: underline;
+  }
+  
+  /* Tables */
+  :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1em;
+    overflow-x: auto;
+    display: block;
+  }
+  
+  :global(th), :global(td) {
+    padding: 0.5em 1em;
+    border: 1px solid var(--bolt-elements-borderColor);
+    text-align: left;
+  }
+  
+  :global(th) {
+    background-color: var(--bolt-elements-background-depth-2);
+    font-weight: 600;
+  }
+  
+  :global(tr:nth-child(even)) {
+    background-color: var(--bolt-elements-background-depth-1);
+  }
+  
+  /* Horizontal rule */
+  :global(hr), :global(.enhanced-hr) {
+    height: 0.25em;
+    padding: 0;
+    margin: 1.5em 0;
+    background-color: var(--bolt-elements-borderColor);
+    border: 0;
+  }
+  
+  /* Task lists */
+  :global(ul[data-type="taskList"]), :global(.enhanced-task-list) {
+    list-style: none;
+    padding-left: 0;
+  }
+  
+  :global(ul[data-type="taskList"] li), :global(.enhanced-task-item) {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 0.5em;
+  }
+  
+  :global(ul[data-type="taskList"] li::before), :global(.enhanced-task-item::before) {
+    content: '';
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin-right: 0.5em;
+    border: 1px solid var(--bolt-elements-borderColor);
+    border-radius: 0.25em;
+  }
+  
+  :global(ul[data-type="taskList"] li[data-checked="true"]::before), :global(.enhanced-task-item[data-checked="true"]::before) {
+    background-color: #3b82f6;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+    background-size: 0.75em;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  
+  /* Images */
+  :global(img), :global(.enhanced-image) {
+    max-width: 100%;
+    height: auto;
+    margin: 1em 0;
+    border-radius: 0.375rem;
+  }
+  
+  /* Highlight */
+  :global(.enhanced-highlight) {
+    background-color: rgba(255, 255, 0, 0.2);
+    padding: 0.1em 0.2em;
+    border-radius: 0.2em;
+  }
+  
+  /* Editor-specific styles */
+  :global(.markdown-editor) {
+    /* Improve cursor visibility */
+    caret-color: #3b82f6;
+    
+    /* Better focus styles */
+    &:focus-within {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Improve placeholder visibility */
+    &.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
+      float: left;
+      color: var(--bolt-elements-textTertiary);
+      pointer-events: none;
+      height: 0;
+    }
+  }
+  
+  /* Dark mode adjustments */
+  :global(.dark) & {
+    :global(code), :global(.enhanced-code) {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    :global(a), :global(.enhanced-link) {
+      color: #60a5fa;
+    }
+    
+    :global(blockquote), :global(.enhanced-blockquote) {
+      border-left-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    :global(.enhanced-highlight) {
+      background-color: rgba(255, 255, 0, 0.15);
+    }
+  }
+}

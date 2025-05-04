@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, Fragment } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, type Variants } from 'framer-motion';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -9,6 +9,7 @@ import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
 import PRDTipTapEditor, { EditorToolbar } from './PRDTipTapEditor';
+import styles from './PRDMarkdown.module.scss';
 
 const logger = createScopedLogger('PRDWorkbench');
 
@@ -54,6 +55,7 @@ const PRDWorkbench = () => {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const [editor, setEditor] = useState<any>(null);
   const streamingPRDContent = useStore(workbenchStore.streamingPRDContent);
+  const [markdownContent, setMarkdownContent] = useState('');
 
   const [prdDocument, setPrdDocument] = useState<PRDDocument | null>(null);
 
@@ -81,6 +83,8 @@ const PRDWorkbench = () => {
                 logger.debug('PRD updated from sessionStorage:', parsedPRD.title);
                 const generatedHtml = generateFullHtml(parsedPRD);
                 setFullPrdHtmlContent(generatedHtml);
+                // Generate markdown content
+                setMarkdownContent(generateFullMarkdown(parsedPRD));
                 setHasUnsavedChanges(false);
                 return parsedPRD;
               }
@@ -90,6 +94,7 @@ const PRDWorkbench = () => {
             logger.warn('Invalid PRD structure found in sessionStorage');
             setPrdDocument(null);
             setFullPrdHtmlContent('');
+            setMarkdownContent('');
             setHasUnsavedChanges(false);
             sessionStorage.removeItem('current_prd');
           }
@@ -97,6 +102,7 @@ const PRDWorkbench = () => {
           setPrdDocument(currentDoc => {
             if (currentDoc !== null) {
               setFullPrdHtmlContent('');
+              setMarkdownContent('');
               setHasUnsavedChanges(false);
               return null;
             }
@@ -107,6 +113,7 @@ const PRDWorkbench = () => {
         logger.error('Error loading PRD from sessionStorage:', error);
         setPrdDocument(null);
         setFullPrdHtmlContent('');
+        setMarkdownContent('');
         setHasUnsavedChanges(false);
         sessionStorage.removeItem('current_prd');
       }
@@ -214,8 +221,11 @@ const PRDWorkbench = () => {
             
             // Filter out any sections with just numbers or empty content
             updatedSections = updatedSections.filter(section => {
+              // Skip sections that are just numbers or empty
               const isTitleJustNumber = /^\d+\.?\s*$/.test(section.title.trim());
               const hasContent = section.content.trim().length > 0;
+              
+              // Additional check for content that's just numbers
               const isContentJustNumbers = /^[\d\.\s]+$/.test(section.content.trim());
               
               return !isTitleJustNumber && hasContent && !isContentJustNumbers;
@@ -240,6 +250,44 @@ const PRDWorkbench = () => {
       streamingContentListener();
     };
   }, [prdDocument]);
+
+  // Watch for streaming PRD content updates
+  useEffect(() => {
+    if (streamingPRDContent && streamingPRDContent.trim()) {
+      // If we don't have a PRD document yet, create one
+      if (!prdDocument) {
+        const newPRD: PRDDocument = {
+          title: 'New PRD',
+          description: '',
+          sections: [],
+          lastUpdated: new Date().toISOString()
+        };
+        setPrdDocument(newPRD);
+      }
+      
+      // Clean streaming content and update the markdown
+      const cleanedContent = cleanStreamingContent(streamingPRDContent);
+      
+      // Only update if content has changed to prevent unnecessary re-renders
+      if (cleanedContent !== markdownContent) {
+        setMarkdownContent(cleanedContent);
+        
+        // Parse the markdown to update the PRD document structure
+        const updatedDoc = parseMarkdownToPrd(cleanedContent, prdDocument || {
+          title: 'New PRD',
+          description: '',
+          sections: [],
+          lastUpdated: new Date().toISOString()
+        });
+        
+        // Update the HTML content for export
+        setFullPrdHtmlContent(generateFullHtml(updatedDoc));
+        
+        // Mark as having unsaved changes
+        setHasUnsavedChanges(true);
+      }
+    }
+  }, [streamingPRDContent]);
 
   // Helper function to clean streaming content of remnants
   const cleanStreamingContent = (content: string): string => {
@@ -313,34 +361,75 @@ const PRDWorkbench = () => {
 
   // Generate combined HTML content for the editor
   const generateFullHtml = (doc: PRDDocument): string => {
-    // Start with the title
-    let html = `<h1>${doc.title}</h1>\n\n`;
+    if (!doc) return '';
     
-    // Add description if it exists
-    if (doc.description) {
-      // If description is already HTML, use it directly
-      if (doc.description.trim().startsWith('<')) {
-        html += `${doc.description}\n\n`;
-      } else {
-        // Otherwise, wrap it in a paragraph
-        html += `<p>${doc.description}</p>\n\n`;
+    try {
+      let html = '';
+      
+      // Add title with proper heading class
+      html += `<h1 class="enhanced-heading level-1">${doc.title}</h1>\n\n`;
+      
+      // Add description with proper paragraph class
+      if (doc.description) {
+        // Process description - it might already have HTML tags
+        const descHtml = doc.description.startsWith('<') 
+          ? doc.description 
+          : `<p class="enhanced-paragraph">${doc.description}</p>`;
+        html += `${descHtml}\n\n`;
       }
-    }
-    
-    // Add each section with its title and content
-    if (doc.sections && doc.sections.length > 0) {
+      
+      // Add sections with proper heading and content classes
       doc.sections.forEach(section => {
-        // Add section title as h2
-        html += `<h2 id="${section.id}">${section.title}</h2>\n\n`;
+        // Add section title with proper heading class
+        html += `<h2 class="enhanced-heading level-2">${section.title}</h2>\n\n`;
         
-        // Add section content if it exists
+        // Add section content - it might already have HTML tags
+        const contentHtml = section.content.startsWith('<') 
+          ? section.content 
+          : `<p class="enhanced-paragraph">${section.content}</p>`;
+        html += `${contentHtml}\n\n`;
+      });
+      
+      return html;
+    } catch (error) {
+      logger.error('Error generating HTML:', error);
+      return '';
+    }
+  };
+
+  // Generate combined Markdown content for preview
+  const generateFullMarkdown = (doc: PRDDocument): string => {
+    if (!doc) return '';
+    
+    try {
+      let markdown = '';
+      
+      // Add title
+      markdown += `# ${doc.title}\n\n`;
+      
+      // Add description - strip HTML tags if present
+      if (doc.description) {
+        const descriptionText = doc.description.replace(/<[^>]*>/g, '').trim();
+        markdown += `${descriptionText}\n\n`;
+      }
+      
+      // Add sections
+      doc.sections.forEach(section => {
+        // Add section title
+        markdown += `## ${section.title}\n\n`;
+        
+        // Add section content - strip HTML tags if present
         if (section.content) {
-          html += `${section.content}\n\n`;
+          const contentText = section.content.replace(/<[^>]*>/g, '').trim();
+          markdown += `${contentText}\n\n`;
         }
       });
+      
+      return markdown;
+    } catch (error) {
+      logger.error('Error generating markdown:', error);
+      return '';
     }
-    
-    return html.trim();
   };
 
   // Function to parse HTML back into PRDDocument structure
@@ -553,73 +642,151 @@ const PRDWorkbench = () => {
   };
 
   // Handler for editor content changes
-  const handleEditorChange = (newHtmlContent: string) => {
-    setFullPrdHtmlContent(newHtmlContent);
-    setHasUnsavedChanges(true);
+  const handleEditorChange = (newContent: string) => {
+    // Only update if content has actually changed to prevent unnecessary re-renders
+    if (newContent !== markdownContent) {
+      setMarkdownContent(newContent);
+      setHasUnsavedChanges(true);
+      
+      // Debounce the HTML content update to reduce processing load during rapid typing
+      if (prdDocument) {
+        // Use a more efficient approach for frequent updates
+        const updatedDoc = parseMarkdownToPrd(newContent, prdDocument);
+        setFullPrdHtmlContent(generateFullHtml(updatedDoc));
+      }
+    }
+  };
+
+  // Parse markdown content to PRD document structure
+  const parseMarkdownToPrd = (markdown: string, existingDoc: PRDDocument): PRDDocument => {
+    try {
+      // Create a copy of the existing document to update
+      const updatedDoc: PRDDocument = {
+        ...existingDoc,
+        sections: [...existingDoc.sections],
+        lastUpdated: new Date().toISOString()
+      };
+
+      // Extract title from the first h1 heading
+      const titleMatch = markdown.match(/^# (.*?)$/m);
+      if (titleMatch && titleMatch[1]) {
+        updatedDoc.title = titleMatch[1].trim();
+      }
+
+      // Extract description from content between title and first h2 heading
+      const descriptionMatch = markdown.match(/^# .*?\n\n([\s\S]*?)(?=\n## |$)/);
+      if (descriptionMatch && descriptionMatch[1]) {
+        updatedDoc.description = descriptionMatch[1].trim();
+      } else {
+        updatedDoc.description = '';
+      }
+
+      // Extract sections (h2 headings and their content)
+      const sectionMatches = markdown.matchAll(/^## (.*?)$([\s\S]*?)(?=\n## |$)/gm);
+      const sections: PRDSection[] = [];
+      
+      for (const match of sectionMatches) {
+        const title = match[1].trim();
+        const content = match[2].trim();
+        
+        // Try to find existing section with same title to preserve ID
+        const existingSection = existingDoc.sections.find(s => s.title === title);
+        
+        sections.push({
+          id: existingSection?.id || `section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title,
+          content
+        });
+      }
+      
+      // If we found sections, update the document
+      if (sections.length > 0) {
+        updatedDoc.sections = sections;
+      }
+      
+      return updatedDoc;
+    } catch (error) {
+      logger.error('Error parsing markdown to PRD:', error);
+      return existingDoc;
+    }
   };
 
   if (!showWorkbench) return null;
 
   return (
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench fixed right-0 top-[var(--header-height)] bottom-0"
+      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench"
       variants={workbenchVariants}
       initial="closed"
       animate={showWorkbench ? 'open' : 'closed'}
       style={{
+        position: 'fixed',
+        right: 0,
+        top: 'var(--header-height)',
+        bottom: 0,
         height: 'calc(100vh - var(--header-height))',
         width: 'var(--workbench-width)',
       }}
     >
       <div className="h-full flex flex-col">
-        <div className="flex justify-between items-center p-2 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0 gap-2">
-          <div className="flex items-center gap-2 overflow-hidden flex-shrink min-w-0">
-            <span className="text-sm font-medium text-bolt-elements-textPrimary truncate">
-              {prdDocument?.title || 'PRD Workbench'}
-            </span>
+        {/* Workbench Header */}
+        <div className="flex justify-between items-center p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0">
+          <div className="flex items-center">
+            <h2 className="text-lg font-semibold text-bolt-elements-textPrimary ml-2">
+              PRD Workbench
+            </h2>
             {hasUnsavedChanges && (
-                 <span className="text-xs text-yellow-500 dark:text-yellow-400 ml-1 flex-shrink-0" title="Unsaved changes">*</span>
+              <span className="ml-2 text-xs text-bolt-elements-textTertiary">(Unsaved changes)</span>
             )}
           </div>
-
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-xs text-bolt-elements-textTertiary mr-1 hidden md:inline">
-              {prdDocument ? `${fullPrdHtmlContent.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length} words` : ''}
-            </span>
-
-            <div className="h-4 w-px bg-bolt-elements-borderColor mx-1"></div>
-
+          
+          <div className="flex items-center space-x-1">
+            {/* Zoom controls */}
+            <div className="flex items-center mr-2">
+              <IconButton
+                title="Zoom out"
+                onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
+                className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary"
+              >
+                <div className="i-ph:minus-circle w-5 h-5" />
+              </IconButton>
+              <span className="mx-2 text-sm text-bolt-elements-textSecondary">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <IconButton
+                title="Zoom in"
+                onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
+                className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary"
+              >
+                <div className="i-ph:plus-circle w-5 h-5" />
+              </IconButton>
+            </div>
+            
+            {/* Save button */}
             <IconButton
-              title="Save Changes"
+              title="Save PRD"
               onClick={saveFullPrd}
-              disabled={!prdDocument || !hasUnsavedChanges}
-              className="text-green-500 hover:text-green-600 disabled:opacity-50 disabled:hover:text-green-500"
+              disabled={!hasUnsavedChanges}
+              className={classNames(
+                "text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary",
+                !hasUnsavedChanges ? "opacity-50" : ""
+              )}
             >
-              <div className="i-ph:floppy-disk-back w-5 h-5" />
+              <div className="i-ph:floppy-disk w-5 h-5" />
             </IconButton>
-
-            <div className="h-4 w-px bg-bolt-elements-borderColor mx-1"></div>
-
-            <IconButton title="Zoom Out" onClick={() => setZoomLevel(prev => Math.max(prev - 0.1, 0.5))} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:minus w-5 h-5" />
-            </IconButton>
-            <span className="text-xs text-bolt-elements-textSecondary px-1 w-10 text-center select-none">
-              {prdDocument ? `${Math.round(zoomLevel * 100)}%` : '-'}
-            </span>
-            <IconButton title="Zoom In" onClick={() => setZoomLevel(prev => Math.min(prev + 0.1, 2.0))} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:plus w-5 h-5" />
-            </IconButton>
-            <IconButton title="Reset Zoom" onClick={() => setZoomLevel(1)} disabled={!prdDocument || zoomLevel === 1} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
-              <div className="i-ph:frame-corners w-5 h-5" />
-            </IconButton>
-
-            <div className="h-4 w-px bg-bolt-elements-borderColor mx-1"></div>
-
+            
+            {/* Export options */}
             <IconButton title="Export as Markdown" onClick={() => {
               if (!prdDocument) { toast.error("No PRD loaded."); return; }
-              const markdown = "Markdown export requires HTML-to-Markdown conversion (e.g., using turndown library)";
-              console.warn("Markdown export needs implementation using an HTML-to-Markdown library.");
-              toast.info("Markdown export not fully implemented.");
+              const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${prdDocument.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
             }} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-markdown w-5 h-5" />
             </IconButton>
@@ -651,6 +818,15 @@ const PRDWorkbench = () => {
             }} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-html w-5 h-5" />
             </IconButton>
+            
+            {/* Close button */}
+            <IconButton
+              title="Close PRD Workbench"
+              onClick={() => workbenchStore.showWorkbench.set(false)}
+              className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2"
+            >
+              <div className="i-ph:x w-5 h-5" />
+            </IconButton>
           </div>
         </div>
 
@@ -668,7 +844,7 @@ const PRDWorkbench = () => {
           >
             {prdDocument ? (
               <div className="w-full max-w-4xl mx-auto">
-                {/* Editor Content */}
+                {/* WYSIWYG Editor with Preview Styling */}
                 <div
                   ref={editorContainerRef}
                   className="bg-white dark:bg-gray-900 rounded shadow-lg transition-transform w-full mb-6"
@@ -679,11 +855,11 @@ const PRDWorkbench = () => {
                   }}
                 >
                   <PRDTipTapEditor
-                    content={fullPrdHtmlContent}
+                    content={markdownContent}
                     onChange={handleEditorChange}
                     readOnly={false}
                     className="w-full flex flex-col"
-                    placeholder={"Start writing your PRD..."}
+                    placeholder="Start writing your PRD..."
                     onEditorReady={setEditor}
                   />
                 </div>
