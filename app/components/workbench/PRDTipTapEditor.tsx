@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -11,6 +11,7 @@ import Highlight from '@tiptap/extension-highlight';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { classNames } from '~/utils/classNames';
+import styles from './PRDMarkdown.module.scss';
 
 interface PRDTipTapEditorProps {
   content: string;
@@ -19,6 +20,7 @@ interface PRDTipTapEditorProps {
   className?: string;
   placeholder?: string;
   onEditorReady?: (editor: Editor) => void;
+  useMarkdownMode?: boolean;
 }
 
 // Toolbar Button Component - Refined Styling
@@ -271,95 +273,242 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
   );
 };
 
-// Markdown parser function
+// Markdown parser function - improved for better stability and consistency
 const parseMarkdownToProseMirror = (markdown: string): string => {
-  // This is a simplified conversion - in a real implementation,
-  // you would use a proper markdown parser like remark/rehype
-  const html = markdown
-    .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-    .replace(/^#### (.*$)/gm, '<h4>$1</h4>')
-    .replace(/^##### (.*$)/gm, '<h5>$1</h5>')
-    .replace(/^###### (.*$)/gm, '<h6>$1</h6>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/~~(.*?)~~/g, '<s>$1</s>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    // Basic paragraph handling, might need refinement for complex cases
-    .split('\n\n') // Split into paragraphs based on double newline
-    .map(p => p.trim())
-    .filter(p => p) // Remove empty paragraphs
-    .map(p => {
-       // Check if it's already a block element (basic check)
-       if (p.match(/^<(h[1-6]|ul|ol|li|p|blockquote|pre)/)) {
-         return p;
-       }
-       // Wrap in paragraph if not already identified as block
-       return `<p>${p}</p>`;
-     })
-    .join('') // Join paragraphs back
-    // Simplified list conversion - needs improvement for nested lists etc.
-    .replace(/<\/p>\n?<p>- (.*)/g, '<ul><li>$1</li></ul>') // Very basic unordered list start
-    .replace(/<\/li><\/ul>\n?<p>- (.*)/g, '</li><li>$1</li></ul>') // Basic subsequent item
-    .replace(/<\/p>\n?<p>\d+\. (.*)/g, '<ol><li>$1</li></ol>') // Very basic ordered list start
-    .replace(/<\/li><\/ol>\n?<p>\d+\. (.*)/g, '</li><li>$1</li></ol>') // Basic subsequent item
-    // Ensure lists are closed properly (might need more logic)
-    .replace(/<\/li>\n(?!<li>)/g, '</li></ul>') // Close ul if next line is not li
-    .replace(/<\/li>\n(?!<li>)/g, '</li></ol>'); // Close ol if next line is not li
-
-
-  return html;
+  if (!markdown || typeof markdown !== 'string') return '';
+  
+  try {
+    // Use a more robust approach with DOMParser for consistent results
+    const tempDiv = document.createElement('div');
+    
+    // First, escape any existing HTML to prevent injection
+    const escapedMarkdown = markdown.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    
+    // Process headings with careful regex to avoid capturing too much
+    let processedMarkdown = escapedMarkdown
+      .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
+      .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
+      .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
+      .replace(/^#### (.*?)$/gm, '<h4>$1</h4>')
+      .replace(/^##### (.*?)$/gm, '<h5>$1</h5>')
+      .replace(/^###### (.*?)$/gm, '<h6>$1</h6>');
+    
+    // Process bold and italic with non-greedy matching
+    processedMarkdown = processedMarkdown
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/__(.*?)__/g, '<strong>$1</strong>')
+      .replace(/_(.*?)_/g, '<em>$1</em>');
+    
+    // Process code blocks with careful handling of content
+    processedMarkdown = processedMarkdown
+      .replace(/```(.*?)\n([\s\S]*?)```/g, (match, lang, code) => {
+        return `<pre><code>${code.replace(/&lt;/g, '<').replace(/&gt;/g, '>')}</code></pre>`;
+      })
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+    
+    // Process lists with better handling of nested items
+    processedMarkdown = processedMarkdown
+      .replace(/^- (.*?)$/gm, '<ul><li>$1</li></ul>')
+      .replace(/^(\d+)\. (.*?)$/gm, '<ol><li>$2</li></ol>');
+    
+    // Combine adjacent list items
+    processedMarkdown = processedMarkdown
+      .replace(/<\/ul>\s*<ul>/g, '')
+      .replace(/<\/ol>\s*<ol>/g, '');
+    
+    // Process blockquotes with better multiline support
+    processedMarkdown = processedMarkdown
+      .replace(/^> (.*?)$/gm, '<blockquote>$1</blockquote>')
+      .replace(/<\/blockquote>\s*<blockquote>/g, '<br>');
+    
+    // Process horizontal rules
+    processedMarkdown = processedMarkdown
+      .replace(/^---$/gm, '<hr>');
+    
+    // Process links and images with careful URL handling
+    processedMarkdown = processedMarkdown
+      .replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
+        return `<a href="${url}">${text}</a>`;
+      })
+      .replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+        return `<img src="${url}" alt="${alt}">`;
+      });
+    
+    // Process paragraphs with better handling of block elements
+    const paragraphs = processedMarkdown.split(/\n{2,}/);
+    processedMarkdown = paragraphs.map(para => {
+      para = para.trim();
+      if (!para || 
+          para.startsWith('<h') || 
+          para.startsWith('<ul') || 
+          para.startsWith('<ol') || 
+          para.startsWith('<blockquote') || 
+          para.startsWith('<pre') || 
+          para.startsWith('<hr')) {
+        return para;
+      }
+      // Handle single line breaks within paragraphs
+      return `<p>${para.replace(/\n/g, '<br>')}</p>`;
+    }).join('\n\n');
+    
+    tempDiv.innerHTML = processedMarkdown;
+    
+    // Add enhanced classes to all elements
+    tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(el => {
+      el.classList.add('enhanced-heading');
+      el.classList.add(`level-${el.tagName.toLowerCase().replace('h', '')}`);
+    });
+    
+    tempDiv.querySelectorAll('p').forEach(el => {
+      el.classList.add('enhanced-paragraph');
+    });
+    
+    tempDiv.querySelectorAll('blockquote').forEach(el => {
+      el.classList.add('enhanced-blockquote');
+    });
+    
+    tempDiv.querySelectorAll('code').forEach(el => {
+      el.classList.add('enhanced-code');
+    });
+    
+    tempDiv.querySelectorAll('pre').forEach(el => {
+      el.classList.add('enhanced-code-block');
+    });
+    
+    tempDiv.querySelectorAll('hr').forEach(el => {
+      el.classList.add('enhanced-hr');
+    });
+    
+    tempDiv.querySelectorAll('ul').forEach(el => {
+      el.classList.add('enhanced-ul');
+    });
+    
+    tempDiv.querySelectorAll('ol').forEach(el => {
+      el.classList.add('enhanced-ol');
+    });
+    
+    tempDiv.querySelectorAll('li').forEach(el => {
+      el.classList.add('enhanced-li');
+    });
+    
+    tempDiv.querySelectorAll('a').forEach(el => {
+      el.classList.add('enhanced-link');
+    });
+    
+    tempDiv.querySelectorAll('img').forEach(el => {
+      el.classList.add('enhanced-image');
+    });
+    
+    return tempDiv.innerHTML;
+  } catch (error) {
+    console.error('Error parsing markdown:', error);
+    return markdown;
+  }
 };
 
-// Convert ProseMirror content to markdown
+// Convert ProseMirror content to markdown - improved for better stability
 const parseProseMirrorToMarkdown = (editor: Editor): string => {
-  // Get the HTML content from the editor
-  const html = editor.getHTML();
+  try {
+    const html = editor.getHTML();
+    
+    // Use a more direct approach to convert HTML to markdown
+    let markdown = '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    // Process each element in order
+    Array.from(doc.body.children).forEach(node => {
+      markdown += processNodeToMarkdown(node);
+    });
+    
+    return markdown;
+  } catch (error) {
+    console.error('Error converting to markdown:', error);
+    return editor.getText();
+  }
+};
 
-  // Use a simple HTML-to-Markdown conversion logic
-  // This is basic and may not cover all edge cases or formatting nuances.
-  // Consider a more robust library like `turndown` for production.
-  let markdown = html
-    // Headings
-    .replace(/<h1>(.*?)<\/h1>/gi, '# $1\n\n')
-    .replace(/<h2>(.*?)<\/h2>/gi, '## $1\n\n')
-    .replace(/<h3>(.*?)<\/h3>/gi, '### $1\n\n')
-    .replace(/<h4>(.*?)<\/h4>/gi, '#### $1\n\n')
-    .replace(/<h5>(.*?)<\/h5>/gi, '##### $1\n\n')
-    .replace(/<h6>(.*?)<\/h6>/gi, '###### $1\n\n')
-    // Bold
-    .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-    .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-    // Italic
-    .replace(/<em>(.*?)<\/em>/gi, '*$1*')
-    .replace(/<i>(.*?)<\/i>/gi, '*$1*')
-    // Strikethrough
-    .replace(/<s>(.*?)<\/s>/gi, '~~$1~~')
-    .replace(/<del>(.*?)<\/del>/gi, '~~$1~~')
-    // Underline (Note: Markdown doesn't have standard underline)
-    .replace(/<u>(.*?)<\/u>/gi, '$1') // Remove underline tags or use custom syntax if needed
-    // Links
-    .replace(/<a href="(.*?)">(.*?)<\/a>/gi, '[$2]($1)')
-    // Code blocks
-    .replace(/<pre><code>(.*?)<\/code><\/pre>/gis, '```\n$1\n```\n\n')
-    // Inline code
-    .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-    // Lists (basic conversion, might need refinement for nested lists)
-    .replace(/<ul>\n?<li>(.*?)<\/li>\n?<\/ul>/gis, (match, p1) => `- ${p1.replace(/<\/li>\n?<li>/g, '\n- ')}\n\n`)
-    .replace(/<ol>\n?<li>(.*?)<\/li>\n?<\/ol>/gis, (match, p1) => {
-      let count = 1;
-      return p1.replace(/<\/li>\n?<li>/g, () => `\n${++count}. `).replace(/^/, `${count}. `) + '\n\n';
-    })
-    // Paragraphs
-    .replace(/<p>(.*?)<\/p>/gi, '$1\n\n')
-    // Remove remaining HTML tags (simplistic)
-    .replace(/<[^>]+>/g, '')
-    // Clean up extra newlines
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  return markdown;
+// Helper function to process nodes to markdown
+const processNodeToMarkdown = (node: Element): string => {
+  if (!node) return '';
+  
+  const tagName = node.tagName.toLowerCase();
+  const content = node.textContent?.trim() || '';
+  
+  switch (tagName) {
+    case 'h1':
+      return `# ${content}\n\n`;
+    case 'h2':
+      return `## ${content}\n\n`;
+    case 'h3':
+      return `### ${content}\n\n`;
+    case 'h4':
+      return `#### ${content}\n\n`;
+    case 'h5':
+      return `##### ${content}\n\n`;
+    case 'h6':
+      return `###### ${content}\n\n`;
+    case 'p':
+      if (!content) return '';
+      
+      // Process inline elements
+      let paragraphContent = '';
+      Array.from(node.childNodes).forEach(child => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          paragraphContent += child.textContent;
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          const childEl = child as Element;
+          const childTag = childEl.tagName.toLowerCase();
+          
+          switch (childTag) {
+            case 'strong':
+            case 'b':
+              paragraphContent += `**${childEl.textContent}**`;
+              break;
+            case 'em':
+            case 'i':
+              paragraphContent += `*${childEl.textContent}*`;
+              break;
+            case 'code':
+              paragraphContent += `\`${childEl.textContent}\``;
+              break;
+            case 'a':
+              paragraphContent += `[${childEl.textContent}](${childEl.getAttribute('href')})`;
+              break;
+            default:
+              paragraphContent += childEl.textContent;
+          }
+        }
+      });
+      
+      return `${paragraphContent}\n\n`;
+    case 'blockquote':
+      return `> ${content}\n\n`;
+    case 'pre':
+      const codeEl = node.querySelector('code');
+      return `\`\`\`\n${codeEl?.textContent || content}\n\`\`\`\n\n`;
+    case 'code':
+      return `\`${content}\``;
+    case 'ul':
+      let ulContent = '';
+      Array.from(node.children).forEach(li => {
+        ulContent += `- ${li.textContent}\n`;
+      });
+      return `${ulContent}\n`;
+    case 'ol':
+      let olContent = '';
+      Array.from(node.children).forEach((li, index) => {
+        olContent += `${index + 1}. ${li.textContent}\n`;
+      });
+      return `${olContent}\n`;
+    case 'hr':
+      return `---\n\n`;
+    case 'img':
+      return `![${node.getAttribute('alt') || ''}](${node.getAttribute('src') || ''})\n\n`;
+    default:
+      return content ? `${content}\n\n` : '';
+  }
 };
 
 const PRDTipTapEditor = ({
@@ -368,30 +517,128 @@ const PRDTipTapEditor = ({
   readOnly = false,
   className = "",
   placeholder = "Start typing your PRD content...",
-  onEditorReady
+  onEditorReady,
+  useMarkdownMode = false // Parameter kept for backward compatibility
 }: PRDTipTapEditorProps) => {
+  // Track if the update is coming from internal or external source
+  const [internalContent, setInternalContent] = useState(content);
+  const isUpdatingRef = useRef(false);
+  const lastExternalContentRef = useRef(content);
+  
+  // Only update internal content when external content changes
+  useEffect(() => {
+    if (content !== lastExternalContentRef.current) {
+      lastExternalContentRef.current = content;
+      setInternalContent(content);
+    }
+  }, [content]);
+  
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3, 4, 5, 6],
+          HTMLAttributes: {
+            class: 'enhanced-heading',
+            // Add level-specific class when rendered
+            renderHTML: (attributes: { level: number }) => {
+              return {
+                level: attributes.level,
+                class: `enhanced-heading level-${attributes.level}`
+              };
+            }
+          }
+        },
+        paragraph: {
+          HTMLAttributes: {
+            class: 'enhanced-paragraph',
+          }
+        },
+        blockquote: {
+          HTMLAttributes: {
+            class: 'enhanced-blockquote',
+          }
+        },
+        code: {
+          HTMLAttributes: {
+            class: 'enhanced-code',
+          }
+        },
+        codeBlock: {
+          HTMLAttributes: {
+            class: 'enhanced-code-block',
+          }
+        },
+        horizontalRule: {
+          HTMLAttributes: {
+            class: 'enhanced-hr',
+          }
+        },
+        bulletList: {
+          HTMLAttributes: {
+            class: 'enhanced-ul',
+          }
+        },
+        orderedList: {
+          HTMLAttributes: {
+            class: 'enhanced-ol',
+          }
+        },
+        listItem: {
+          HTMLAttributes: {
+            class: 'enhanced-li',
+          }
+        },
+      }),
       Placeholder.configure({
         placeholder,
         emptyEditorClass: 'is-editor-empty',
       }),
-      Underline,
+      Underline.configure({
+        HTMLAttributes: {
+          class: 'enhanced-underline',
+        }
+      }),
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Image,
-      Link,
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'enhanced-image',
+        }
+      }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'enhanced-link text-blue-600 dark:text-blue-400 underline',
+        }
+      }),
       Typography,
-      Highlight,
-      TaskList,
+      Highlight.configure({
+        HTMLAttributes: {
+          class: 'enhanced-highlight bg-yellow-200 dark:bg-yellow-800 rounded px-1',
+        }
+      }),
+      TaskList.configure({
+        HTMLAttributes: {
+          class: 'enhanced-task-list',
+        }
+      }),
       TaskItem.configure({
         nested: true,
+        HTMLAttributes: {
+          class: 'enhanced-task-item',
+        }
       }),
     ],
-    content,
+    content: parseMarkdownToProseMirror(internalContent),
     onUpdate: ({ editor }) => {
+      // Prevent recursive updates
+      if (isUpdatingRef.current) return;
+      
+      // Convert to markdown for storage
       const markdown = parseProseMirrorToMarkdown(editor);
       onChange(markdown);
     },
@@ -400,24 +647,42 @@ const PRDTipTapEditor = ({
 
   // Update editor content when content prop changes
   useEffect(() => {
-    if (editor && content && editor.getHTML() !== content) {
-      // Only update if content has actually changed to avoid cursor jumping
-      const currentPosition = editor.view.state.selection.$head.pos;
-      editor.commands.setContent(content, false);
+    if (editor && internalContent !== undefined) {
+      // Only update if we're not already updating and content has changed
+      if (isUpdatingRef.current) return;
       
-      // Try to maintain cursor position if user is actively editing
-      if (document.activeElement === editor.view.dom) {
-        try {
-          // Only restore cursor position if it's valid in the new content
-          if (currentPosition <= editor.state.doc.content.size) {
-            editor.commands.setTextSelection(currentPosition);
+      try {
+        isUpdatingRef.current = true;
+        
+        // Get current selection and scroll position
+        const selection = editor.view.state.selection;
+        const scrollPosition = editor.view.dom.scrollTop;
+        
+        // Set content with transaction to maintain history
+        const newHTML = parseMarkdownToProseMirror(internalContent);
+        editor.commands.setContent(newHTML, false);
+        
+        // Restore selection and scroll position if user is actively editing
+        if (document.activeElement === editor.view.dom) {
+          try {
+            // Only restore cursor position if it's valid in the new content
+            if (selection.$head.pos <= editor.state.doc.content.size) {
+              editor.commands.setTextSelection(selection.$head.pos);
+            }
+            editor.view.dom.scrollTop = scrollPosition;
+          } catch (e) {
+            // Ignore cursor position errors - they're not critical
+            console.log('Error restoring cursor position:', e);
           }
-        } catch (e) {
-          // Ignore cursor position errors - they're not critical
         }
+      } finally {
+        // Always ensure we reset the updating flag
+        setTimeout(() => {
+          isUpdatingRef.current = false;
+        }, 0);
       }
     }
-  }, [editor, content]);
+  }, [editor, internalContent]);
 
   useEffect(() => {
     if (editor) {
@@ -440,7 +705,14 @@ const PRDTipTapEditor = ({
     <div className={`prd-editor w-full ${className}`}>
       {/* Editor content with proper styling */}
       <div className={`border ${readOnly ? 'border-transparent' : 'border-bolt-elements-borderColor'} rounded-md overflow-hidden`}>
-        <EditorContent editor={editor} className="prose max-w-none p-4" />
+        <EditorContent 
+          editor={editor} 
+          className={classNames(
+            "prose dark:prose-invert max-w-none p-4",
+            styles.markdownPreview, // Always apply markdown preview styles
+            "markdown-editor" // Always apply markdown editor class
+          )}
+        />
       </div>
     </div>
   );

@@ -206,6 +206,9 @@ importers:
       '@tiptap/extension-underline':
         specifier: ^2.11.9
         version: 2.11.9(@tiptap/core@2.11.9(@tiptap/pm@2.11.9))
+      '@tiptap/pm':
+        specifier: ^2.11.9
+        version: 2.11.9
       '@tiptap/react':
         specifier: ^2.11.9
         version: 2.11.9(@tiptap/core@2.11.9(@tiptap/pm@2.11.9))(@tiptap/pm@2.11.9)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -305,6 +308,9 @@ importers:
       lucide-react:
         specifier: ^0.485.0
         version: 0.485.0(react@18.3.1)
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.0
       marked:
         specifier: ^15.0.11
         version: 15.0.11
