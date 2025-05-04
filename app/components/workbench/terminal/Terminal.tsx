@@ -19,13 +19,15 @@ export interface TerminalProps {
   id: string;
   onTerminalReady?: (terminal: XTerm) => void;
   onTerminalResize?: (cols: number, rows: number) => void;
+  autoInstallDeps?: boolean;
 }
 
 export const Terminal = memo(
   forwardRef<TerminalRef, TerminalProps>(
-    ({ className, theme, readonly, id, onTerminalReady, onTerminalResize }, ref) => {
+    ({ className, theme, readonly, id, onTerminalReady, onTerminalResize, autoInstallDeps = true }, ref) => {
       const terminalElementRef = useRef<HTMLDivElement>(null);
       const terminalRef = useRef<XTerm>();
+      const depsInstalledRef = useRef(false);
 
       useEffect(() => {
         const element = terminalElementRef.current!;
@@ -57,7 +59,22 @@ export const Terminal = memo(
 
         logger.debug(`Attach [${id}]`);
 
-        onTerminalReady?.(terminal);
+        if (onTerminalReady) {
+          onTerminalReady(terminal);
+          
+          if (autoInstallDeps && !depsInstalledRef.current && id === 'main') {
+            depsInstalledRef.current = true;
+            
+            setTimeout(() => {
+              terminal.writeln('\r\n\x1b[33mInstalling dependencies...\x1b[0m');
+              
+              const event = new CustomEvent('terminal:auto-install', {
+                detail: { terminal }
+              });
+              element.dispatchEvent(event);
+            }, 500);
+          }
+        }
 
         return () => {
           resizeObserver.disconnect();
@@ -68,7 +85,6 @@ export const Terminal = memo(
       useEffect(() => {
         const terminal = terminalRef.current!;
 
-        // we render a transparent cursor in case the terminal is readonly
         terminal.options.theme = getTerminalTheme(readonly ? { cursor: '#00000000' } : {});
 
         terminal.options.disableStdin = readonly;
