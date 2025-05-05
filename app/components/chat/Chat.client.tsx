@@ -8,7 +8,7 @@ import { useChat } from 'ai/react';
 import { useAnimate } from 'framer-motion';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
-import { useMessageParser, usePromptEnhancer, useShortcuts, useSnapScroll } from '~/lib/hooks';
+import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
 import { chatStore } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
@@ -27,6 +27,7 @@ import { logStore } from '~/lib/stores/logs';
 import { streamingState } from '~/lib/stores/streaming';
 import { filesToArtifacts } from '~/utils/fileUtils';
 import { supabaseConnection } from '~/lib/stores/supabase';
+import { useStickToBottom } from '~/lib/hooks/useStickToBottom';
 
 const toastAnimation = cssTransition({
   enter: 'animated fadeInRight',
@@ -763,7 +764,7 @@ Please provide a comprehensive prototype design that addresses all the requireme
       [],
     );
 
-    const [messageRef, scrollRef] = useSnapScroll();
+    const { containerRef, isStickToBottom, scrollToBottom } = useStickToBottom();
 
     useEffect(() => {
       const storedApiKeys = Cookies.get('apiKeys');
@@ -803,8 +804,8 @@ Please provide a comprehensive prototype design that addresses all the requireme
         provider={provider}
         setProvider={handleProviderChange}
         providerList={activeProviders}
-        messageRef={messageRef}
-        scrollRef={scrollRef}
+        messageRef={containerRef}
+        scrollRef={scrollToBottom}
         handleInputChange={(e) => {
           onTextareaChange(e);
           debouncedCachePrompt(e);
