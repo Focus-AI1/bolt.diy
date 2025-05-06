@@ -1,0 +1,255 @@
+/* Modern Toolbar Styles */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--bolt-elements-background-depth-1);
+  border-bottom: 1px solid var(--bolt-elements-borderColor);
+  padding: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  
+  /* Toolbar container for button groups */
+  .toolbarContent {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    width: 100%;
+    padding: 0 0.5rem;
+  }
+  
+  /* Button group container */
+  .buttonGroup {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.25rem;
+    position: relative;
+    
+    &:not(:last-child) {
+      &::after {
+        content: '';
+        position: absolute;
+        right: -0.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+        height: 1.5rem;
+        width: 1px;
+        background: var(--bolt-elements-borderColor);
+        opacity: 0.6;
+      }
+    }
+  }
+}
+
+/* Modern toolbar button styling */
+.toolbarButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--bolt-elements-textSecondary);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  
+  &:hover {
+    background: var(--bolt-elements-background-depth-2);
+    color: var(--bolt-elements-textPrimary);
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+  
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bolt-elements-borderColorFocus);
+  }
+  
+  /* Active state */
+  &.active {
+    background: var(--bolt-elements-background-depth-3);
+    color: var(--bolt-elements-textPrimary);
+    font-weight: 500;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 16px;
+      height: 2px;
+      background: var(--bolt-accent-primary);
+      border-radius: 2px;
+    }
+  }
+  
+  /* Disabled state */
+  &.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+  
+  /* Icon styling */
+  i {
+    font-size: 0.875rem;
+    transition: transform 0.15s ease;
+  }
+  
+  &:hover i {
+    transform: scale(1.1);
+  }
+}
+
+/* Dropdown styling */
+.toolbarDropdown {
+  position: relative;
+  height: 2rem;
+  
+  select {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--bolt-elements-borderColor);
+    border-radius: 0.375rem;
+    color: var(--bolt-elements-textPrimary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0 2rem 0 0.75rem;
+    height: 100%;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    
+    &:hover {
+      border-color: var(--bolt-elements-borderColorHover);
+      background: var(--bolt-elements-background-depth-2);
+    }
+    
+    &:focus {
+      outline: none;
+      border-color: var(--bolt-elements-borderColorFocus);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+    
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+  
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 2px solid var(--bolt-elements-textSecondary);
+    border-bottom: 2px solid var(--bolt-elements-textSecondary);
+    transform: translateY(-70%) rotate(45deg);
+    pointer-events: none;
+    transition: transform 0.15s ease;
+  }
+  
+  &:hover::after {
+    border-color: var(--bolt-elements-textPrimary);
+  }
+}
+
+/* Tooltip styling */
+.tooltip {
+  position: absolute;
+  bottom: -2.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bolt-elements-background-depth-4);
+  color: var(--bolt-elements-textPrimary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 20;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -0.25rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 0.5rem;
+    height: 0.5rem;
+    background: inherit;
+  }
+}
+
+/* Show tooltip on hover */
+.toolbarButton:hover .tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Dark mode adjustments */
+:global(.dark) {
+  .toolbar {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .toolbarButton {
+    &.active::after {
+      background: var(--bolt-accent-primary-light);
+    }
+  }
+  
+  .tooltip {
+    background: var(--bolt-elements-background-depth-5);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .toolbar {
+    padding: 0.25rem;
+    
+    .toolbarContent {
+      gap: 0.125rem;
+    }
+    
+    .buttonGroup {
+      gap: 0.125rem;
+      padding: 0 0.125rem;
+    }
+  }
+  
+  .toolbarButton {
+    min-width: 1.75rem;
+    height: 1.75rem;
+  }
+  
+  .toolbarDropdown select {
+    padding: 0 1.75rem 0 0.5rem;
+    font-size: 0.75rem;
+  }
+}

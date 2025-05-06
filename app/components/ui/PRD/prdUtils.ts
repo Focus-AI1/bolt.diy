@@ -237,7 +237,7 @@ export const parseEditablePRDMarkdown = (markdown: string, existingDoc: PRDDocum
                 currentContent = '';
 
                 // Skip titles that are just numbers
-                if (/^\d+\.?\s*$/.test(currentTitle)) {
+                if (/^#+\s+\d+\.?\s*$/.test(currentTitle)) {
                      currentTitle = ''; // Reset title if invalid
                      state = 'description'; // Revert state if title was skipped
                      continue;
@@ -327,20 +327,38 @@ export const generateFullMarkdown = (doc: PRDDocument | null): string => {
         let markdown = '';
         markdown += `# ${doc.title || 'Untitled PRD'}\n\n`;
         if (doc.description) {
-            const descriptionText = doc.description.replace(/<[^>]*>/g, '').trim();
+            // Preserve line breaks and formatting in description
+            const descriptionText = doc.description
+                .replace(/<br\s*\/?>/gi, '\n') // Convert <br> tags to newlines
+                .replace(/<p>(.*?)<\/p>/gi, '$1\n\n') // Convert paragraphs to double newlines
+                .replace(/<[^>]*>/g, '') // Remove remaining HTML tags
+                .trim();
             markdown += `${descriptionText}\n\n`;
         }
         doc.sections.forEach(section => {
             if (!section.title) return; // Skip sections without title
             markdown += `## ${section.title}\n\n`;
             if (section.content) {
-                // Clean the content to remove any HTML and placeholder text
-                let contentText = section.content.replace(/<[^>]*>/g, '').trim();
+                // Preserve line breaks and formatting in section content
+                let contentText = section.content
+                    .replace(/<br\s*\/?>/gi, '\n') // Convert <br> tags to newlines
+                    .replace(/<p>(.*?)<\/p>/gi, '$1\n\n') // Convert paragraphs to double newlines
+                    .replace(/<li>(.*?)<\/li>/gi, '- $1\n') // Convert list items to markdown list items
+                    .replace(/<ul>|<\/ul>|<ol>|<\/ol>/gi, '') // Remove list container tags
+                    .replace(/<h3>(.*?)<\/h3>/gi, '### $1\n\n') // Convert h3 to markdown h3
+                    .replace(/<h4>(.*?)<\/h4>/gi, '#### $1\n\n') // Convert h4 to markdown h4
+                    .replace(/<strong>(.*?)<\/strong>/gi, '**$1**') // Convert strong to bold
+                    .replace(/<em>(.*?)<\/em>/gi, '*$1*') // Convert em to italic
+                    .replace(/<[^>]*>/g, '') // Remove remaining HTML tags
+                    .trim();
                 
                 // Remove any placeholder text that might have been preserved in the document structure
                 contentText = removePlaceholderText(contentText);
                 
-                markdown += `${contentText}\n\n`;
+                // Ensure there's content to add
+                if (contentText.trim()) {
+                    markdown += `${contentText}\n\n`;
+                }
             }
         });
         return markdown;
@@ -366,7 +384,7 @@ const removePlaceholderText = (content: string): string => {
         if (!trimmedLine) return true;
         
         // Comprehensive check for placeholder text
-        // Match patterns like "[Previous sections continue...]", "...content remains the same...", etc.
+        // Match patterns like "[Previous sections continue unchanged...]", "...content remains the same...", etc.
         const placeholderPatterns = [
             /\[\s*(?:previous|rest of|other|unchanged|remaining|existing).*?(?:section|content|document|prd).*?(?:continue|remain|same|unchanged|before|identical|exact).*?\]/i,
             /\[\s*(?:section|content|document|prd).*?(?:unchanged|continue|remain|same|before|identical|exact).*?\]/i,
@@ -384,6 +402,288 @@ const removePlaceholderText = (content: string): string => {
     return cleanedLines.join('\n');
 };
 
+// Helper function to clean markdown content of template string leakage
+export const cleanMarkdownFromTemplateLeakage = (markdown: string): string => {
+    if (!markdown) return '';
+    
+    try {
+        // First, remove lines containing template string patterns
+        let cleaned = markdown
+            .split('\n')
+            .filter(line => {
+                // Filter out lines with template string leakage
+                return !(
+                    line.includes('${attributes.level}') ||
+                    line.includes('return {') ||
+                    line.includes('class:') ||
+                    line.match(/enhanced-heading level-\$\{/) ||
+                    line.match(/^return \{/) ||
+                    line.match(/^\s*\}\;$/)
+                );
+            })
+            .join('\n');
+        
+        // STEP 1: Fix section headings with appended content
+        cleaned = fixSectionHeadings(cleaned);
+        
+        // STEP 2: Handle repetitive bullet points and list items
+        cleaned = cleanRepetitiveListItems(cleaned);
+        
+        // STEP 3: Handle repetitive paragraphs and sections
+        cleaned = cleanRepetitiveParagraphs(cleaned);
+        
+        return cleaned;
+        
+    } catch (error) {
+        // Log error but don't crash - return the original content with basic cleanup
+        logger.error('Error in cleanMarkdownFromTemplateLeakage:', error);
+        
+        // Fallback to basic cleanup if advanced cleaning fails
+        return markdown
+            .split('\n')
+            .filter(line => !line.includes('${') && !line.includes('return {'))
+            .join('\n');
+    }
+};
+
+/**
+ * Fixes section headings that have content directly appended to them
+ * @param content Markdown content to fix
+ * @returns Content with properly formatted section headings
+ */
+function fixSectionHeadings(content: string): string {
+    // Split the content into lines for analysis
+    const lines = content.split('\n');
+    const result: string[] = [];
+    
+    // Regex to identify numbered headings (e.g., "1. Heading Title")
+    const headingRegex = /^(\d+\.\s+)([A-Z][a-zA-Z0-9\s]+)(.*)$/;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const headingMatch = line.match(headingRegex);
+        
+        if (headingMatch) {
+            const [, numberPrefix, headingText, remainingText] = headingMatch;
+            
+            // Check if there's content directly appended to the heading
+            if (remainingText && remainingText.trim()) {
+                // Analyze the remaining text to determine if it should be separated
+                const shouldSeparate = detectAppendedContent(headingText, remainingText);
+                
+                if (shouldSeparate) {
+                    // Add the heading by itself
+                    result.push(`${numberPrefix}${headingText}`);
+                    
+                    // Add a blank line for proper markdown formatting
+                    result.push('');
+                    
+                    // Add the content as a separate paragraph
+                    result.push(remainingText.trim());
+                    continue;
+                }
+            }
+        }
+        
+        // If no special handling needed, keep the line as is
+        result.push(line);
+    }
+    
+    return result.join('\n');
+}
+
+/**
+ * Intelligently detects if text appended to a heading should be separated
+ * @param heading The heading text
+ * @param appended The text appended to the heading
+ * @returns True if the appended text should be separated from the heading
+ */
+function detectAppendedContent(heading: string, appended: string): boolean {
+    // Clean the inputs
+    heading = heading.trim();
+    appended = appended.trim();
+    
+    if (!appended) return false;
+    
+    // Case 1: Appended text starts with a capital letter (likely a new sentence/concept)
+    if (/^[A-Z]/.test(appended)) {
+        return true;
+    }
+    
+    // Case 2: Heading ends with a complete word and appended text starts with a complete word
+    // This indicates they're likely separate concepts
+    const lastHeadingChar = heading.charAt(heading.length - 1);
+    const firstAppendedChar = appended.charAt(0);
+    
+    if (/[a-zA-Z]/.test(lastHeadingChar) && /[a-zA-Z]/.test(firstAppendedChar)) {
+        // Check if there's a natural word break between them
+        // Natural word breaks include spaces, punctuation, or case changes
+        
+        // Check for camelCase or PascalCase transition (lowercase to uppercase)
+        if (/[a-z]$/.test(heading) && /^[A-Z]/.test(appended)) {
+            return true;
+        }
+        
+        // Check for clear semantic separation
+        // If appended text forms a complete phrase/sentence, it's likely separate
+        if (appended.split(' ').length >= 3) {
+            return true;
+        }
+        
+        // Check for common connecting words that might indicate a continuation
+        const continuationWords = ['and', 'or', 'with', 'for', 'to', 'by', 'in', 'on', 'at'];
+        const firstAppendedWord = appended.split(' ')[0].toLowerCase();
+        
+        if (!continuationWords.includes(firstAppendedWord)) {
+            return true;
+        }
+    }
+    
+    // Case 3: Check for semantic differences using length and structure
+    // If heading is short (like a title) and appended text is long (like a description)
+    if (heading.split(' ').length <= 4 && appended.split(' ').length >= 5) {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Cleans repetitive list items in markdown content
+ * @param content Markdown content to clean
+ * @returns Cleaned content
+ */
+function cleanRepetitiveListItems(content: string): string {
+    // First, handle repetitive list items by detecting and removing duplicates
+    const listItemRegex = /^(\s*(?:-|\*|\+|\d+\.)\s+.+)$/gm;
+    const listItems = new Map<string, number>();
+    
+    // Count occurrences of each list item
+    let match;
+    while ((match = listItemRegex.exec(content)) !== null) {
+        const item = match[1].trim();
+        listItems.set(item, (listItems.get(item) || 0) + 1);
+    }
+    
+    // Replace items that appear more than once with a single occurrence
+    for (const [item, count] of listItems.entries()) {
+        if (count > 1) {
+            // Create a regex that matches this exact item multiple times
+            const escapedItem = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const duplicateRegex = new RegExp(`(${escapedItem}\\n)${escapedItem}(\\n${escapedItem})*`, 'g');
+            content = content.replace(duplicateRegex, '$1');
+        }
+    }
+    
+    // Then, fix ordered list numbering
+    return fixOrderedListNumbering(content);
+}
+
+/**
+ * Fixes ordered list numbering in markdown content
+ * @param content Markdown content to fix
+ * @returns Content with corrected list numbering
+ */
+function fixOrderedListNumbering(content: string): string {
+    // Split content into lines for processing
+    const lines = content.split('\n');
+    const result: string[] = [];
+    
+    // Track list contexts at different indentation levels
+    const listCounters: Map<number, number> = new Map();
+    const listTypes: Map<number, 'ordered' | 'unordered'> = new Map();
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Check if this line is a list item
+        const listMatch = line.match(/^(\s*)(\d+\.|[-*+])\s+(.+)$/);
+        
+        if (listMatch) {
+            const [, indent, marker, text] = listMatch;
+            const indentLevel = indent.length;
+            const isOrdered = marker.includes('.');
+            
+            // Determine list type at this indentation level
+            if (!listTypes.has(indentLevel) || 
+                (i > 0 && !lines[i-1].trim().match(/^\s*(\d+\.|[-*+])\s+/))) {
+                // Start of a new list or after a break in the list
+                listTypes.set(indentLevel, isOrdered ? 'ordered' : 'unordered');
+                listCounters.set(indentLevel, 1);
+            } else if (listTypes.get(indentLevel) === 'ordered') {
+                // Continue an existing ordered list
+                listCounters.set(indentLevel, (listCounters.get(indentLevel) || 0) + 1);
+            }
+            
+            // Reset counters for deeper indentation levels when we encounter a less indented item
+            for (const [level] of listCounters.entries()) {
+                if (level > indentLevel) {
+                    listCounters.delete(level);
+                    listTypes.delete(level);
+                }
+            }
+            
+            // Rebuild the line with correct numbering if it's an ordered list
+            if (isOrdered) {
+                const counter = listCounters.get(indentLevel) || 1;
+                result.push(`${indent}${counter}. ${text}`);
+            } else {
+                result.push(line); // Keep unordered list items as is
+            }
+        } else {
+            // Not a list item - check if it's a blank line
+            if (!line.trim()) {
+                // If we encounter a blank line, check if the next line is still part of the list
+                const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+                const nextIsListItem = nextLine.match(/^\s*(\d+\.|[-*+])\s+/);
+                
+                // If next line isn't a list item or has different indentation, reset counters
+                if (!nextIsListItem) {
+                    listCounters.clear();
+                    listTypes.clear();
+                }
+            }
+            
+            result.push(line);
+        }
+    }
+    
+    return result.join('\n');
+}
+
+/**
+ * Cleans repetitive paragraphs in markdown content
+ * @param content Markdown content to clean
+ * @returns Cleaned content
+ */
+function cleanRepetitiveParagraphs(content: string): string {
+    // First handle exact repetitions (3+ times) of medium-sized chunks (10-100 chars)
+    // This catches the most obvious repetitions
+    const exactRepetitionRegex = /(.{10,100})(\1){2,}/g;
+    content = content.replace(exactRepetitionRegex, '$1');
+    
+    // Then handle near-repetitions by splitting into paragraphs
+    const paragraphs = content.split(/\n\s*\n/);
+    const uniqueParagraphs: string[] = [];
+    const seenParagraphs = new Set<string>();
+    
+    for (const paragraph of paragraphs) {
+        // Skip empty paragraphs
+        if (!paragraph.trim()) continue;
+        
+        // Normalize paragraph for comparison (lowercase, remove extra whitespace)
+        const normalizedPara = paragraph.toLowerCase().replace(/\s+/g, ' ').trim();
+        
+        // If we haven't seen this paragraph before, add it
+        if (!seenParagraphs.has(normalizedPara)) {
+            uniqueParagraphs.push(paragraph);
+            seenParagraphs.add(normalizedPara);
+        }
+    }
+    
+    return uniqueParagraphs.join('\n\n');
+}
+
 // Function to parse HTML content (likely from editor) back into PRDDocument structure
 export const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocument => {
     try {
@@ -400,7 +700,7 @@ export const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocum
             title: existingDoc.title,
             description: '', // Reset description, parse from HTML
             sections: [],
-            lastUpdated: new Date().toISOString()
+            lastUpdated: new Date().toISOString(),
         };
 
         // Extract title (first h1)
@@ -463,7 +763,7 @@ export const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocum
         existingSectionsByTitle.forEach((section, titleLower) => {
             if (!processedTitles.has(titleLower) && section.content?.trim()) {
                  logger.info(`Preserving section not found in HTML: ${section.title}`);
-                 sections.push({...section});
+                 sections.push(section);
             }
         });
 
@@ -498,6 +798,11 @@ export const cleanHtml = (html: string): string => {
             if (!headingText || /^\d+\.?\s*$/.test(headingText)) {
                 heading.remove();
             }
+            
+            // Clean up any template string leakage in heading classes
+            if (heading.className && heading.className.includes('${attributes.level}')) {
+                heading.className = 'enhanced-heading';
+            }
         });
 
         // Remove empty paragraphs or paragraphs with just numbers/periods/spaces
@@ -515,10 +820,22 @@ export const cleanHtml = (html: string): string => {
          const placeholderTexts = [
              '[Previous sections continue unchanged...]',
              '[section unchanged]',
-             '[unchanged content]'
+             '[unchanged content]',
+             'return {',
+             'class:',
+             'enhanced-heading level-${attributes.level}'
          ];
          body.querySelectorAll('*').forEach(el => {
              const content = el.textContent?.trim() || '';
+             
+             // Check for template string leakage patterns
+             if (content.includes('${attributes.level}') || 
+                 content.includes('return {') || 
+                 content.match(/enhanced-heading level-\$\{/)) {
+                 el.remove();
+             }
+             
+             // Check for other placeholder patterns
              if (placeholderTexts.some(placeholder => content.includes(placeholder))) {
                 // More conservative removal: only remove if the element *only* contains the placeholder
                  if (placeholderTexts.includes(content)) {
@@ -527,18 +844,11 @@ export const cleanHtml = (html: string): string => {
              }
          });
 
-
         return body.innerHTML;
     } catch (error) {
         logger.error('Error cleaning HTML:', error);
         return html; // Return original if cleaning fails
     }
-};
-
-// Helper function to clean markdown content of specific known placeholder strings (e.g., for streaming)
-export const stripSimplePlaceholders = (content: string): string => {
-  if (!content) return '';
-  return content.replace(/(\[Previous sections continue unchanged...\]|\[section unchanged\]|\[unchanged content\])/g, '');
 };
 
 // Helper function to sort sections by numerical prefix
@@ -585,9 +895,13 @@ export const parseChatMarkdownToPRDWithMerge = (markdown: string, existingPRD: P
     lines.forEach((line, index) => {
       const trimmedLine = line.trim();
 
-      if (trimmedLine.includes('[Previous sections continue unchanged...]') || 
-          trimmedLine.includes('[section unchanged]') || 
-          trimmedLine.includes('[unchanged content]')) {
+      // Using a more general placeholder check before processing the line.
+      // This relies on removePlaceholderText being called later if this is not sufficient,
+      // or enhancing this check if needed.
+      if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']') && 
+          (trimmedLine.toLowerCase().includes('unchanged') || 
+           trimmedLine.toLowerCase().includes('continue') ||
+           trimmedLine.toLowerCase().includes('same'))) {
         return;
       }
 
@@ -704,22 +1018,24 @@ export const extractStreamingMarkdown = (messages: Message[]): string | null => 
       const extractedContent = content.substring(startIndex + '<prd_document>'.length, endIndex).trim();
       const sectionHeadingMatches = extractedContent.match(/^##\s+.+$/gm);
       if (sectionHeadingMatches && sectionHeadingMatches.length >= 2) {
-        return stripSimplePlaceholders(extractedContent); // Use stripSimplePlaceholders
+        return removePlaceholderText(extractedContent); // Replaced stripSimplePlaceholders
       } else {
         logger.warn("Extracted content appears to be incomplete - attempting to restore from storage"); // Use prdUtils logger
         try {
           const storedPRD = sessionStorage.getItem('current_prd');
           if (storedPRD) {
             const parsedPRD = JSON.parse(storedPRD) as PRDDocument; // Added type assertion
-            return generateFullMarkdown(parsedPRD);
+            // Generate full markdown and then clean placeholders from it
+            return removePlaceholderText(generateFullMarkdown(parsedPRD)); 
           }
         } catch (error) {
           logger.error('Error accessing stored PRD while extracting markdown', error); // Use prdUtils logger
         }
-        return stripSimplePlaceholders(extractedContent); // Use stripSimplePlaceholders
+        return removePlaceholderText(extractedContent); // Replaced stripSimplePlaceholders
       }
     } else {
-      return stripSimplePlaceholders(content.substring(startIndex + '<prd_document>'.length).trim()); // Use stripSimplePlaceholders
+      // Content is partial (no closing tag), clean what we have
+      return removePlaceholderText(content.substring(startIndex + '<prd_document>'.length).trim()); // Replaced stripSimplePlaceholders
     }
   }
   return null;
