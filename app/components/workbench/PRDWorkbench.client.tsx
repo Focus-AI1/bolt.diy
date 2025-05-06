@@ -1,15 +1,30 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { motion, type Variants } from 'framer-motion';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { motion, type Variants, AnimatePresence } from 'framer-motion';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { streamingState } from '~/lib/stores/streaming';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { IconButton } from '~/components/ui/IconButton';
 import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import PRDTipTapEditor, { EditorToolbar } from './PRDTipTapEditor';
-import styles from './PRDMarkdown.module.scss';
+import PRDTipTapEditor, { EditorToolbar, Editor } from '~/components/ui/PRD/PRDTipTapEditor';
+import PRDLoadingAnimation from '~/components/ui/PRD/PRDLoadingAnimation';
+import {
+    type PRDDocument,
+    type PRDSection,
+    cleanStreamingContent,
+    parseEditablePRDMarkdown,
+    generateFullMarkdown,
+    parseHtmlToPrd,
+    cleanHtml
+} from '~/components/ui/PRD/prdUtils';
+
+// Extend the PRDDocument type to include _source
+interface ExtendedPRDDocument extends PRDDocument {
+    _source?: string;
+}
 
 const logger = createScopedLogger('PRDWorkbench');
 
@@ -31,687 +46,453 @@ const workbenchVariants = {
   },
 } satisfies Variants;
 
-// PRD document interfaces
-interface PRDSection {
-  id: string;
-  title: string;
-  content: string;
-}
-
-interface PRDDocument {
-  title: string;
-  description: string;
-  sections: PRDSection[];
-  lastUpdated: string;
-}
-
 // PRD Workbench component that displays the PRD document
 const PRDWorkbench = () => {
   const showWorkbench = useStore(workbenchStore.showWorkbench);
-  const [fullPrdHtmlContent, setFullPrdHtmlContent] = useState('');
+  const streamingMarkdownContent = useStore(workbenchStore.streamingPRDContent);
+  const isStreaming = useStore(streamingState);
+
+  const [prdDocument, setPrdDocument] = useState<ExtendedPRDDocument | null>(null);
+  const [editorContent, setEditorContent] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState(1.2);
+  const [isManuallyEdited, setIsManuallyEdited] = useState(false);
+  const [editMode, setEditMode] = useState(true); // Default to edit mode
   const contentRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
-  const [editor, setEditor] = useState<any>(null);
-  const streamingPRDContent = useStore(workbenchStore.streamingPRDContent);
-  const [markdownContent, setMarkdownContent] = useState('');
+  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
+  const [showEditorToolbar, setShowEditorToolbar] = useState(false);
+  const initialMountRef = useRef(false);
 
-  const [prdDocument, setPrdDocument] = useState<PRDDocument | null>(null);
-
-  // Set the chat type to 'prd' when the PRD workbench is shown
-  useEffect(() => {
-    if (showWorkbench) {
-      chatType.set('prd');
-      logger.debug('Workbench visible: Chat type set to PRD');
-    }
-  }, [showWorkbench]);
-
-  // Load PRD from sessionStorage and listen for changes
-  useEffect(() => {
-    // Load initial PRD
-    const loadPrd = () => {
+  // Define loadPrdFromStorage - This handles loading from sessionStorage
+  const loadPrdFromStorage = useCallback((ignoreIfManuallyEdited = true) => {
       try {
         const storedPRD = sessionStorage.getItem('current_prd');
-        if (storedPRD) {
-          const parsedPRD: PRDDocument = JSON.parse(storedPRD);
-          // Basic validation
-          if (parsedPRD && typeof parsedPRD.title === 'string' && Array.isArray(parsedPRD.sections)) {
-            setPrdDocument(currentDoc => {
-              const newContent = JSON.stringify(parsedPRD);
-              if (JSON.stringify(currentDoc) !== newContent) {
-                logger.debug('PRD updated from sessionStorage:', parsedPRD.title);
-                const generatedHtml = generateFullHtml(parsedPRD);
-                setFullPrdHtmlContent(generatedHtml);
-                // Generate markdown content
-                setMarkdownContent(generateFullMarkdown(parsedPRD));
-                setHasUnsavedChanges(false);
-                return parsedPRD;
-              }
-              return currentDoc;
-            });
-          } else {
-            logger.warn('Invalid PRD structure found in sessionStorage');
+
+        if (!storedPRD) {
+          // If storage is empty, clear state only if not manually edited or forced
+          if (prdDocument !== null && (!isManuallyEdited || !ignoreIfManuallyEdited)) {
+            logger.debug('sessionStorage empty or explicitly cleared, clearing PRD state.');
             setPrdDocument(null);
-            setFullPrdHtmlContent('');
-            setMarkdownContent('');
+            setEditorContent(''); // Clear editor
             setHasUnsavedChanges(false);
-            sessionStorage.removeItem('current_prd');
+            setIsManuallyEdited(false);
           }
+          return;
+        }
+
+        const parsedPRD: ExtendedPRDDocument = JSON.parse(storedPRD);
+        const isChatUpdate = parsedPRD._source === "chat_update";
+
+        // If manually edited with unsaved changes, only update if it's from chat or forced
+        if (ignoreIfManuallyEdited && isManuallyEdited && hasUnsavedChanges && !isChatUpdate) {
+          logger.debug('Skipping PRD reload from storage due to unsaved manual edits');
+          return;
+        }
+
+        // Basic validation
+        if (parsedPRD && typeof parsedPRD.title === 'string' && Array.isArray(parsedPRD.sections)) {
+           // Remove the _source attribute before setting the document state
+           const { _source, ...prdWithoutSource } = parsedPRD;
+           const newMarkdown = generateFullMarkdown(prdWithoutSource);
+
+           // Only update state if the content is different
+           // Compare generated markdown to prevent unnecessary updates if structure is same
+           if (newMarkdown !== editorContent || JSON.stringify(prdDocument) !== JSON.stringify(prdWithoutSource)) {
+               logger.debug('PRD updated from sessionStorage:', parsedPRD.title);
+               setPrdDocument(prdWithoutSource);
+               setEditorContent(newMarkdown); // Update editor content from parsed structure
+
+               // Reset edit flags only if this update originated from the chat or forced reload
+               if (isChatUpdate || !ignoreIfManuallyEdited) {
+                 setHasUnsavedChanges(false);
+                 setIsManuallyEdited(false);
+               }
+           }
         } else {
-          setPrdDocument(currentDoc => {
-            if (currentDoc !== null) {
-              setFullPrdHtmlContent('');
-              setMarkdownContent('');
-              setHasUnsavedChanges(false);
-              return null;
-            }
-            return currentDoc;
-          });
+          logger.warn('Invalid PRD structure in sessionStorage, removing.');
+          sessionStorage.removeItem('current_prd');
+          if (prdDocument !== null) {
+            logger.debug('Clearing PRD state due to invalid structure.');
+            setPrdDocument(null);
+            setEditorContent('');
+            setHasUnsavedChanges(false);
+            setIsManuallyEdited(false);
+          }
         }
       } catch (error) {
         logger.error('Error loading PRD from sessionStorage:', error);
-        setPrdDocument(null);
-        setFullPrdHtmlContent('');
-        setMarkdownContent('');
-        setHasUnsavedChanges(false);
         sessionStorage.removeItem('current_prd');
+        setPrdDocument(null);
+        setEditorContent('');
+        setHasUnsavedChanges(false);
+        setIsManuallyEdited(false);
       }
-    };
+  }, [prdDocument, isManuallyEdited, hasUnsavedChanges, editorContent]); // Added editorContent dependency
 
-    loadPrd(); // Initial load
+  // --- Effects ---
 
+  // Load PRD from sessionStorage initially and when workbench becomes visible
+  useEffect(() => {
+    if (showWorkbench) {
+      chatType.set('prd');
+      logger.debug('Workbench visible: Chat type set to PRD, loading initial PRD.');
+      // Don't ignore manual edits on initial load/show
+      loadPrdFromStorage(false);
+    }
+  }, [showWorkbench, loadPrdFromStorage]);
+
+  // Listen for external storage changes (e.g., manual save, other tabs)
+  useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'current_prd' && event.storageArea === sessionStorage) {
-        logger.debug('sessionStorage changed (event), reloading PRD for workbench.');
-        loadPrd();
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
+        if (event.key === 'current_prd' && event.storageArea === sessionStorage) {
+            // If a chat stream is active, we primarily rely on the streamingMarkdownContent effect.
+            // We might ignore storage events marked as 'chat_update' here to prevent double updates,
+            // as the streaming effect will handle the final content update from the store.
+            // However, let's allow it for now but ensure loadPrdFromStorage checks content difference.
+            const isChatUpdate = event.newValue && event.newValue.includes('"_source":"chat_update"');
 
-    // Add a listener for streaming content changes
-    const streamingContentListener = workbenchStore.streamingPRDContent.listen((content) => {
-      if (content && prdDocument) {
-        try {
-          // Clean the streaming content to remove any remnants
-          const cleanedContent = cleanStreamingContent(content);
-          
-          if (cleanedContent.trim()) {
-            // Create a temporary document with streaming content
-            const tempDoc = { ...prdDocument };
-            
-            // Parse the streaming markdown content into sections
-            const lines = cleanedContent.split('\n');
-            let currentTitle = '';
-            let currentContent = '';
-            let inSection = false;
-            let updatedSections = [...tempDoc.sections];
-            
-            // Create a map of existing sections by title for easier lookup
-            const sectionsByTitle = new Map<string, PRDSection>();
-            updatedSections.forEach((section, index) => {
-              sectionsByTitle.set(section.title.toLowerCase(), section);
-            });
-            
-            // Simple parsing logic for streaming content
-            lines.forEach(line => {
-              const trimmedLine = line.trim();
-              
-              // Skip placeholder lines and empty lines
-              if (!trimmedLine || 
-                  trimmedLine.includes('[Previous sections continue unchanged...]') || 
-                  trimmedLine.includes('[section unchanged]') || 
-                  trimmedLine.includes('[unchanged content]')) {
+            // Always process storage updates from chat, as they contain the authoritative full document
+            if (isChatUpdate) {
+                logger.debug('Chat update detected in storage - reloading PRD.');
+                loadPrdFromStorage(false); // Force reload chat updates, ignoring manual edits
                 return;
-              }
-              
-              // Skip lines that are just numbers
-              if (/^\s*\d+\.?\s*$/.test(trimmedLine)) {
-                return;
-              }
-              
-              if (trimmedLine.startsWith('# ')) {
-                // Main title - update document title
-                tempDoc.title = trimmedLine.substring(2).trim();
-              } else if (trimmedLine.startsWith('## ')) {
-                // Section title - if we were in a section, save it
-                if (inSection && currentTitle) {
-                  // Find existing section or create new one
-                  const existingSection = sectionsByTitle.get(currentTitle.toLowerCase());
-                  if (existingSection) {
-                    existingSection.content = currentContent.trim();
-                  } else {
-                    const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-                    updatedSections.push({
-                      id: newId,
-                      title: currentTitle,
-                      content: currentContent.trim()
-                    });
-                    sectionsByTitle.set(currentTitle.toLowerCase(), updatedSections[updatedSections.length - 1]);
-                  }
+            }
+
+            // For non-chat updates, respect manual edits
+            logger.debug('sessionStorage changed externally, reloading PRD for workbench.');
+            loadPrdFromStorage(true);
+        }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+        window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [loadPrdFromStorage]);
+
+  // Simplified effect to handle streaming markdown content updates
+  useEffect(() => {
+    // Only process if streaming content exists
+    if (streamingMarkdownContent !== null) {
+        // If user has manually edited, preserve their changes during the stream
+        if (isManuallyEdited && hasUnsavedChanges) {
+            logger.debug('Manual edits detected, preserving user changes during stream.');
+            return;
+        }
+
+        // Reset manual edit flags when processing new streaming content
+        if (isManuallyEdited || hasUnsavedChanges) {
+            setIsManuallyEdited(false);
+            setHasUnsavedChanges(false);
+        }
+
+        // Clean the incoming markdown - this now removes all placeholder text
+        const cleanedMarkdown = cleanStreamingContent(streamingMarkdownContent);
+        
+        // Verify if the streaming markdown is a complete PRD or just a section
+        const hasMultipleSections = /^##\s+.+$/gm.test(cleanedMarkdown);
+        const hasTitle = /^#\s+.+$/m.test(cleanedMarkdown);
+        
+        if (hasTitle && hasMultipleSections) {
+            // This is likely a complete PRD, update as usual
+            logger.debug('Received complete PRD content in stream - updating editor');
+            setEditorContent(cleanedMarkdown);
+            
+            // Also update the document state to ensure consistency
+            try {
+                const parsedDoc = parseEditablePRDMarkdown(cleanedMarkdown, null);
+                if (parsedDoc) {
+                    setPrdDocument(parsedDoc);
+                }
+            } catch (error) {
+                logger.error("Error parsing complete PRD:", error);
+            }
+        } else {
+            // This might be just a section update - attempt to merge with existing content
+            logger.debug('Received partial PRD content - attempting to merge with existing');
+            try {
+                // Get any existing PRD to merge with
+                let existingPRD: PRDDocument | null = prdDocument;
+                
+                if (!existingPRD) {
+                    // Try loading from storage if we don't have one in state
+                    const storedPRD = sessionStorage.getItem('current_prd');
+                    if (storedPRD) {
+                        existingPRD = JSON.parse(storedPRD);
+                    }
                 }
                 
-                // Start new section if the title is not just a number
-                const sectionTitle = trimmedLine.substring(3).trim();
-                if (!/^\s*\d+\.?\s*$/.test(sectionTitle)) {
-                  currentTitle = sectionTitle;
-                  currentContent = '';
-                  inSection = true;
+                if (existingPRD) {
+                    // Parse the cleaned markdown, merging with the existing PRD
+                    const parsedDoc = parseEditablePRDMarkdown(cleanedMarkdown, existingPRD);
+                    if (parsedDoc) {
+                        // Generate full markdown with the merged content - this will remove any placeholders
+                        const fullMarkdown = generateFullMarkdown(parsedDoc);
+                        setEditorContent(fullMarkdown);
+                        setPrdDocument(parsedDoc);
+                        
+                        // CRITICAL: Save the merged document to storage to ensure persistence
+                        // This prevents the content from reverting when streaming ends
+                        const docToSave = {...parsedDoc};
+                        sessionStorage.setItem('current_prd', JSON.stringify(docToSave));
+                    } else {
+                        // Fallback to just showing the cleaned markdown
+                        setEditorContent(cleanedMarkdown);
+                    }
+                } else {
+                    // No existing PRD to merge with, just show the content
+                    setEditorContent(cleanedMarkdown);
                 }
-              } else if (inSection) {
-                // Add to current section content
-                currentContent += line + '\n';
-              }
-            });
-            
-            // Add the last section if we were in one
-            if (inSection && currentTitle) {
-              const existingSection = sectionsByTitle.get(currentTitle.toLowerCase());
-              if (existingSection) {
-                existingSection.content = currentContent.trim();
-              } else {
-                const newId = `section-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-                updatedSections.push({
-                  id: newId,
-                  title: currentTitle,
-                  content: currentContent.trim()
-                });
-              }
+            } catch (error) {
+                logger.error("Error processing streaming content:", error);
+                // Fallback to the cleaned content
+                setEditorContent(cleanedMarkdown);
             }
-            
-            // Filter out any sections with just numbers or empty content
-            updatedSections = updatedSections.filter(section => {
-              // Skip sections that are just numbers or empty
-              const isTitleJustNumber = /^\d+\.?\s*$/.test(section.title.trim());
-              const hasContent = section.content.trim().length > 0;
-              
-              // Additional check for content that's just numbers
-              const isContentJustNumbers = /^[\d\.\s]+$/.test(section.content.trim());
-              
-              return !isTitleJustNumber && hasContent && !isContentJustNumbers;
-            });
-            
-            tempDoc.sections = updatedSections;
-            tempDoc.lastUpdated = new Date().toISOString();
-            
-            // Generate HTML from the updated document
-            const generatedHtml = generateFullHtml(tempDoc);
-            setFullPrdHtmlContent(generatedHtml);
-          }
+        }
+    }
+    // When streamingMarkdownContent becomes null (stream ended),
+    // we need to ensure the prdDocument state reflects the final content.
+    else if (streamingMarkdownContent === null && editorContent && isStreaming === false) {
+        // This condition triggers after the stream ends and the store is cleared.
+        logger.debug('Stream ended, ensuring document state matches editor content');
+        
+        // First check if there's a recent update in storage
+        try {
+            const storedPRD = sessionStorage.getItem('current_prd');
+            if (storedPRD) {
+                const parsedStoredPRD = JSON.parse(storedPRD);
+                if (parsedStoredPRD._source === "chat_update") {
+                    // This is a fresh update from chat, prioritize it
+                    logger.debug('Found recent chat update in storage, using that as source of truth');
+                    const { _source, ...prdWithoutSource } = parsedStoredPRD;
+                    setPrdDocument(prdWithoutSource);
+                    
+                    // Update editor content to match the stored document - this will remove any placeholders
+                    const fullMarkdown = generateFullMarkdown(prdWithoutSource);
+                    if (fullMarkdown !== editorContent) {
+                        setEditorContent(fullMarkdown);
+                    }
+                    return;
+                }
+            }
         } catch (error) {
-          logger.error('Error processing streaming PRD content:', error);
+            logger.error("Error checking storage for updates:", error);
         }
-      }
-    });
+        
+        // If no recent chat update in storage, parse the current editor content
+        try {
+            // Make sure we remove any placeholder text that might have been preserved
+            const cleanedEditorContent = cleanStreamingContent(editorContent);
+            const finalParsedDoc = parseEditablePRDMarkdown(cleanedEditorContent, prdDocument);
+            
+            if (finalParsedDoc && JSON.stringify(finalParsedDoc) !== JSON.stringify(prdDocument)) {
+                logger.debug('Updating final prdDocument state from editor content after stream.');
+                setPrdDocument(finalParsedDoc);
+                
+                // Generate clean markdown without placeholders
+                const cleanMarkdown = generateFullMarkdown(finalParsedDoc);
+                if (cleanMarkdown !== editorContent) {
+                    setEditorContent(cleanMarkdown);
+                }
+                
+                // Save this to storage as well to ensure persistence
+                sessionStorage.setItem('current_prd', JSON.stringify(finalParsedDoc));
+            }
+        } catch (error) {
+            logger.error("Error parsing final editor content into PRDDocument:", error);
+        }
+    }
 
-    // Cleanup function
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      streamingContentListener();
-    };
-  }, [prdDocument]);
+  }, [streamingMarkdownContent, prdDocument, isManuallyEdited, hasUnsavedChanges, isStreaming, editorContent]);
 
-  // Watch for streaming PRD content updates
+  // Effect to handle streaming state changes
   useEffect(() => {
-    if (streamingPRDContent && streamingPRDContent.trim()) {
-      // If we don't have a PRD document yet, create one
-      if (!prdDocument) {
-        const newPRD: PRDDocument = {
-          title: 'New PRD',
-          description: '',
-          sections: [],
-          lastUpdated: new Date().toISOString()
-        };
-        setPrdDocument(newPRD);
+    if (isStreaming) {
+      // When streaming starts, hide the toolbar
+      setShowEditorToolbar(false);
+      
+      // Update editor instance read-only state if it exists
+      if (editorInstance) {
+        editorInstance.setEditable(false);
       }
       
-      // Clean streaming content and update the markdown
-      const cleanedContent = cleanStreamingContent(streamingPRDContent);
+      logger.debug('Streaming started, disabling edit mode');
+    } else {
+      // When streaming ends, show the toolbar with a slight delay for smooth transition
+      const timer = setTimeout(() => {
+        setShowEditorToolbar(true);
+      }, 300);
       
-      // Only update if content has changed to prevent unnecessary re-renders
-      if (cleanedContent !== markdownContent) {
-        setMarkdownContent(cleanedContent);
-        
-        // Parse the markdown to update the PRD document structure
-        const updatedDoc = parseMarkdownToPrd(cleanedContent, prdDocument || {
-          title: 'New PRD',
-          description: '',
-          sections: [],
-          lastUpdated: new Date().toISOString()
-        });
-        
-        // Update the HTML content for export
-        setFullPrdHtmlContent(generateFullHtml(updatedDoc));
-        
-        // Mark as having unsaved changes
-        setHasUnsavedChanges(true);
+      // Update editor instance read-only state if it exists
+      if (editorInstance) {
+        editorInstance.setEditable(true);
+      }
+      
+      logger.debug('Streaming ended, enabling edit mode');
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, editorInstance]);
+
+  // Effect to handle streaming content updates
+  useEffect(() => {
+    if (streamingMarkdownContent && isStreaming) {
+      // Clean the streaming content
+      const cleanedContent = cleanStreamingContent(streamingMarkdownContent);
+      if (cleanedContent) {
+        setEditorContent(cleanedContent);
       }
     }
-  }, [streamingPRDContent]);
+  }, [streamingMarkdownContent, isStreaming]);
 
-  // Helper function to clean streaming content of remnants
-  const cleanStreamingContent = (content: string): string => {
-    if (!content) return '';
-    
-    // Split by lines to process
-    const lines = content.split('\n');
-    const cleanedLines: string[] = [];
-    
-    // Track if we're in a valid section
-    let inValidSection = false;
-    let validSectionCount = 0;
-    
-    // Process each line
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmedLine = line.trim();
-      
-      // Skip empty lines
-      if (!trimmedLine) {
-        // Only keep empty lines if they're within a valid section
-        if (inValidSection) {
-          cleanedLines.push('');
-        }
-        continue;
-      }
-      
-      // Skip placeholder lines
-      if (trimmedLine.includes('[Previous sections continue unchanged...]') || 
-          trimmedLine.includes('[section unchanged]') || 
-          trimmedLine.includes('[unchanged content]')) {
-        continue;
-      }
-      
-      // Check for section headers
-      if (trimmedLine.startsWith('# ') || trimmedLine.startsWith('## ')) {
-        // If it's just a number or number + period, skip it
-        if (/^#+\s+\d+\.?\s*$/.test(trimmedLine)) {
-          continue;
-        }
-        
-        // If it's a section header with actual content, keep it
-        if (trimmedLine.length > 3) {
-          inValidSection = true;
-          validSectionCount++;
-          cleanedLines.push(line);
-        }
-        continue;
-      }
-      
-      // Check for lines that are just section numbers (more aggressive pattern)
-      // This catches standalone numbers like "1.", "2.", "3." etc.
-      if (/^\s*\d+\.?\s*$/.test(trimmedLine)) {
-        continue;
-      }
-      
-      // Include all other lines that have meaningful content
-      if (trimmedLine.length > 0) {
-        cleanedLines.push(line);
-      }
+  // Effect to handle initial mount
+  useEffect(() => {
+    if (!initialMountRef.current && !isStreaming) {
+      initialMountRef.current = true;
+      // Slight delay to ensure smooth initial appearance
+      const timer = setTimeout(() => {
+        setShowEditorToolbar(true);
+      }, 100);
+      return () => clearTimeout(timer);
     }
-    
-    // If we didn't find any valid sections but have content, it might be just remnants
-    // In this case, return an empty string to avoid displaying garbage
-    if (validSectionCount === 0 && cleanedLines.length < 5) {
-      return '';
+  }, [isStreaming]);
+
+  // --- Save/Export Callbacks ( Largely unchanged, but use editorContent/prdDocument state carefully ) ---
+
+  const saveFullPrd = useCallback(() => {
+    if (!editorInstance) { // Check editorInstance first
+      logger.warn('Save attempt failed: Editor not ready.');
+      toast.error('Cannot save PRD: Editor not ready.');
+      return;
     }
-    
-    return cleanedLines.join('\n');
-  };
+     // Use current editor content as the source of truth for saving
+     const currentHtml = editorInstance.getHTML();
+     const cleaned = cleanHtml(currentHtml);
 
-  // Generate combined HTML content for the editor
-  const generateFullHtml = (doc: PRDDocument): string => {
-    if (!doc) return '';
-    
-    try {
-      let html = '';
-      
-      // Add title with proper heading class
-      html += `<h1 class="enhanced-heading level-1">${doc.title}</h1>\n\n`;
-      
-      // Add description with proper paragraph class
-      if (doc.description) {
-        // Process description - it might already have HTML tags
-        const descHtml = doc.description.startsWith('<') 
-          ? doc.description 
-          : `<p class="enhanced-paragraph">${doc.description}</p>`;
-        html += `${descHtml}\n\n`;
-      }
-      
-      // Add sections with proper heading and content classes
-      doc.sections.forEach(section => {
-        // Add section title with proper heading class
-        html += `<h2 class="enhanced-heading level-2">${section.title}</h2>\n\n`;
-        
-        // Add section content - it might already have HTML tags
-        const contentHtml = section.content.startsWith('<') 
-          ? section.content 
-          : `<p class="enhanced-paragraph">${section.content}</p>`;
-        html += `${contentHtml}\n\n`;
-      });
-      
-      return html;
-    } catch (error) {
-      logger.error('Error generating HTML:', error);
-      return '';
+     // Parse the *current* HTML into a PRD structure.
+     // Pass the *latest* prdDocument state as the base for merging metadata or unparsed sections.
+     const baseDocForParsing = prdDocument; // Use state as base
+     let updatedPrd = parseHtmlToPrd(cleaned, baseDocForParsing);
+
+    if (!updatedPrd) {
+        logger.error('Save attempt failed: Could not parse HTML to PRD.');
+        toast.error('Error saving PRD: Could not parse content.');
+        return;
     }
-  };
-
-  // Generate combined Markdown content for preview
-  const generateFullMarkdown = (doc: PRDDocument): string => {
-    if (!doc) return '';
-    
-    try {
-      let markdown = '';
-      
-      // Add title
-      markdown += `# ${doc.title}\n\n`;
-      
-      // Add description - strip HTML tags if present
-      if (doc.description) {
-        const descriptionText = doc.description.replace(/<[^>]*>/g, '').trim();
-        markdown += `${descriptionText}\n\n`;
-      }
-      
-      // Add sections
-      doc.sections.forEach(section => {
-        // Add section title
-        markdown += `## ${section.title}\n\n`;
-        
-        // Add section content - strip HTML tags if present
-        if (section.content) {
-          const contentText = section.content.replace(/<[^>]*>/g, '').trim();
-          markdown += `${contentText}\n\n`;
-        }
-      });
-      
-      return markdown;
-    } catch (error) {
-      logger.error('Error generating markdown:', error);
-      return '';
-    }
-  };
-
-  // Function to parse HTML back into PRDDocument structure
-  const parseHtmlToPrd = (html: string, existingDoc: PRDDocument): PRDDocument => {
-    try {
-      const parser = new DOMParser();
-      // Wrap the HTML in a div to ensure proper parsing
-      const doc = parser.parseFromString(`<div id="prd-root">${html}</div>`, 'text/html');
-      const rootDiv = doc.getElementById('prd-root');
-      
-      if (!rootDiv) {
-        console.error('Failed to parse HTML: root element not found');
-        return existingDoc;
-      }
-      
-      const result: PRDDocument = { 
-        title: existingDoc.title,
-        description: existingDoc.description,
-        sections: [],
-        lastUpdated: new Date().toISOString()
-      };
-
-      // Extract title (h1)
-      const titleElem = rootDiv.querySelector('h1');
-      if (titleElem && titleElem.textContent) {
-        result.title = titleElem.textContent.trim();
-      }
-
-      // Extract description (content between h1 and first h2)
-      let descriptionContent = '';
-      let currentElem = titleElem?.nextElementSibling;
-      while (currentElem && currentElem.tagName !== 'H2') {
-        if (currentElem.textContent) {
-          descriptionContent += currentElem.outerHTML;
-        }
-        currentElem = currentElem.nextElementSibling;
-      }
-
-      if (descriptionContent) {
-        result.description = descriptionContent.trim();
-      }
-
-      // Extract sections (h2 and all content until next h2)
-      const sections: PRDSection[] = [];
-      const h2Elements = rootDiv.querySelectorAll('h2');
-
-      // Create a map of existing sections by title for easier lookup
-      const existingSectionsByTitle = new Map<string, PRDSection>();
-      existingDoc.sections.forEach(section => {
-        existingSectionsByTitle.set(section.title.toLowerCase(), section);
-      });
-
-      h2Elements.forEach((h2Elem, index) => {
-        if (!h2Elem.textContent) return; // Skip empty headings
-        
-        const sectionTitle = h2Elem.textContent.trim();
-        let sectionContent = '';
-        let currentNode = h2Elem.nextElementSibling;
-
-        while (currentNode && currentNode.tagName !== 'H2') {
-          if (currentNode.textContent) {
-            sectionContent += currentNode.outerHTML;
-          }
-          currentNode = currentNode.nextElementSibling;
-        }
-
-        // Look for existing section with same title to preserve ID
-        const existingSection = existingSectionsByTitle.get(sectionTitle.toLowerCase());
-        const sectionId = existingSection ? existingSection.id : `section-${index}-${Date.now()}`;
-
-        sections.push({
-          id: sectionId,
-          title: sectionTitle,
-          content: sectionContent.trim()
-        });
-
-        // Remove from map to track which we've processed
-        if (existingSection) {
-          existingSectionsByTitle.delete(sectionTitle.toLowerCase());
-        }
-      });
-
-      // Add any remaining existing sections that weren't in the new content
-      // This ensures we preserve sections that weren't included in the partial update
-      existingSectionsByTitle.forEach(section => {
-        // Only add non-empty sections that weren't processed above
-        if (section.title && section.content) {
-          sections.push({...section});
-        }
-      });
-
-      // Sort sections to maintain consistent order
-      result.sections = sections;
-      return result;
-    } catch (error) {
-      console.error('Error parsing HTML to PRD:', error);
-      // Return the existing document if parsing fails
-      return existingDoc;
-    }
-  };
-
-  // Function to save the entire PRD
-  const saveFullPrd = () => {
-    if (!prdDocument) return;
 
     try {
-      // Get the current HTML content from the editor
-      const currentHtml = editor?.getHTML() || fullPrdHtmlContent;
-      
-      // Clean the HTML to remove any empty sections or remnants
-      const cleanedHtml = cleanHtml(currentHtml);
-      
-      // Parse the HTML back into a PRD document structure
-      const updatedPrd = parseHtmlToPrd(cleanedHtml, prdDocument);
-      
-      // Ensure we're not losing any sections
-      if (updatedPrd.sections.length < prdDocument.sections.length) {
-        logger.warn('Potential data loss detected - section count decreased');
-        
-        // Create a map of updated sections by title
-        const updatedSectionsByTitle = new Map<string, PRDSection>();
-        updatedPrd.sections.forEach(section => {
-          updatedSectionsByTitle.set(section.title.toLowerCase(), section);
-        });
-        
-        // Add any missing sections from the original document that have content
-        prdDocument.sections.forEach(originalSection => {
-          if (!updatedSectionsByTitle.has(originalSection.title.toLowerCase()) && originalSection.content.trim()) {
-            logger.info(`Preserving potentially missing section: ${originalSection.title}`);
-            updatedPrd.sections.push(originalSection);
-          }
-        });
-      }
-      
-      // Filter out any sections with just numbers or empty content
-      updatedPrd.sections = updatedPrd.sections.filter(section => {
-        // Skip sections that are just numbers or empty
-        const isTitleJustNumber = /^\d+\.?\s*$/.test(section.title.trim());
-        const hasContent = section.content.trim().length > 0;
-        
-        // Additional check for content that's just numbers
-        const isContentJustNumbers = /^[\d\.\s]+$/.test(section.content.trim());
-        
-        return !isTitleJustNumber && hasContent && !isContentJustNumbers;
-      });
-      
-      // Update the lastUpdated timestamp
+       // Optional: Preserve sections logic (if needed, ensure it uses baseDocForParsing correctly)
+       if (baseDocForParsing) {
+           const currentTitles = new Set(updatedPrd.sections.map(s => s.title.toLowerCase()));
+           baseDocForParsing.sections.forEach(originalSection => {
+               if (!currentTitles.has(originalSection.title.toLowerCase()) && originalSection.content?.trim()) {
+                   logger.info(`Preserving section not re-parsed from HTML: ${originalSection.title}`);
+                   updatedPrd.sections.push(originalSection);
+               }
+           });
+       }
+
       updatedPrd.lastUpdated = new Date().toISOString();
-      
-      // Save to session storage
+
+      // Save the final structure to sessionStorage
       sessionStorage.setItem('current_prd', JSON.stringify(updatedPrd));
-      
-      // Update state
+
+      // Update internal state to reflect the saved document
       setPrdDocument(updatedPrd);
-      setHasUnsavedChanges(false);
-      
-      // Generate clean HTML for the editor
-      const newHtml = generateFullHtml(updatedPrd);
-      setFullPrdHtmlContent(newHtml);
-      
+      // Re-generate markdown from the *saved* structure to ensure consistency
+      const newMarkdown = generateFullMarkdown(updatedPrd);
+      setEditorContent(newMarkdown); // Update editor content to match saved state
+
+      setHasUnsavedChanges(false); // Reset unsaved changes flag
+      setIsManuallyEdited(false); // Reset manual edit flag after saving
+
       logger.debug('PRD saved successfully');
       toast.success('PRD saved successfully');
     } catch (error) {
       logger.error('Error saving PRD:', error);
       toast.error('Error saving PRD. Please try again.');
     }
-  };
+  }, [editorInstance, prdDocument]); // Keep dependencies
 
-  // Helper function to clean HTML of remnants and empty sections
-  const cleanHtml = (html: string): string => {
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      
-      // Remove empty headings or headings with just numbers
-      const headings = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
-      headings.forEach(heading => {
-        const headingText = heading.textContent?.trim() || '';
-        // Check if heading is empty or just contains a number or number + period
-        if (!headingText || /^\d+\.?\s*$/.test(headingText)) {
-          heading.remove();
-        }
-      });
-      
-      // Remove any elements that might be remnants
-      const allElements = doc.body.querySelectorAll('*');
-      allElements.forEach(el => {
-        const content = el.textContent?.trim() || '';
-        // Remove elements that just contain section numbers or empty content
-        if (/^(\d+\.?\s*)+$/.test(content) || content === '') {
-          el.remove();
-        }
-      });
-      
-      // Additional cleanup for stray numbers that might be in paragraphs
-      const paragraphs = doc.querySelectorAll('p');
-      paragraphs.forEach(p => {
-        const content = p.textContent?.trim() || '';
-        // If paragraph only contains numbers and periods, remove it
-        if (/^[\d\.\s]+$/.test(content)) {
-          p.remove();
-        }
-      });
-      
-      return doc.body.innerHTML;
-    } catch (error) {
-      console.error('Error cleaning HTML:', error);
-      return html; // Return original if cleaning fails
-    }
-  };
+  // Handler for editor content changes (Receives Markdown from TipTap)
+  const handleEditorChange = useCallback((newMarkdownContent: string) => {
+    // If a chat stream is active, ignore manual edits to prevent conflicts
+    if (isStreaming) return;
 
-  // Handler for editor content changes
-  const handleEditorChange = (newContent: string) => {
-    // Only update if content has actually changed to prevent unnecessary re-renders
-    if (newContent !== markdownContent) {
-      setMarkdownContent(newContent);
+    setEditorContent(newMarkdownContent); // Update the editor's content state
+
+    // Determine if change is from user vs. programmatically
+    // Compare with markdown generated from the *current* PRD document state.
+    // Or simpler: if !isStreaming, any change is manual.
+    const isDifferentFromState = !prdDocument || newMarkdownContent !== generateFullMarkdown(prdDocument);
+
+    if (isDifferentFromState) {
       setHasUnsavedChanges(true);
-      
-      // Debounce the HTML content update to reduce processing load during rapid typing
-      if (prdDocument) {
-        // Use a more efficient approach for frequent updates
-        const updatedDoc = parseMarkdownToPrd(newContent, prdDocument);
-        setFullPrdHtmlContent(generateFullHtml(updatedDoc));
+      // Mark as manually edited only if the change is significant and not during loading
+      if (!isStreaming) { // Check against global loading state
+          setIsManuallyEdited(true);
       }
     }
-  };
+  }, [prdDocument, isStreaming]); // Added isStreaming dependency
 
-  // Parse markdown content to PRD document structure
-  const parseMarkdownToPrd = (markdown: string, existingDoc: PRDDocument): PRDDocument => {
-    try {
-      // Create a copy of the existing document to update
-      const updatedDoc: PRDDocument = {
-        ...existingDoc,
-        sections: [...existingDoc.sections],
-        lastUpdated: new Date().toISOString()
-      };
+  // Export logic (use current editorContent)
+  const exportMarkdown = useCallback(() => {
+    if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
+    const titleForFilename = prdDocument?.title || 'prd';
+    const blob = new Blob([editorContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titleForFilename.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [prdDocument, editorContent]); // Depends on latest content
 
-      // Extract title from the first h1 heading
-      const titleMatch = markdown.match(/^# (.*?)$/m);
-      if (titleMatch && titleMatch[1]) {
-        updatedDoc.title = titleMatch[1].trim();
-      }
+  const exportHtml = useCallback(() => {
+    if (!editorInstance) { toast.error("Editor not ready for export."); return; }
+    if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
 
-      // Extract description from content between title and first h2 heading
-      const descriptionMatch = markdown.match(/^# .*?\n\n([\s\S]*?)(?=\n## |$)/);
-      if (descriptionMatch && descriptionMatch[1]) {
-        updatedDoc.description = descriptionMatch[1].trim();
-      } else {
-        updatedDoc.description = '';
-      }
+    const editorHtml = editorInstance.getHTML();
+    const cleanedContent = cleanHtml(editorHtml);
+    const title = prdDocument?.title || 'PRD';
+    const lastUpdated = prdDocument?.lastUpdated ? new Date(prdDocument.lastUpdated).toLocaleString() : 'N/A';
 
-      // Extract sections (h2 headings and their content)
-      const sectionMatches = markdown.matchAll(/^## (.*?)$([\s\S]*?)(?=\n## |$)/gm);
-      const sections: PRDSection[] = [];
-      
-      for (const match of sectionMatches) {
-        const title = match[1].trim();
-        const content = match[2].trim();
-        
-        // Try to find existing section with same title to preserve ID
-        const existingSection = existingDoc.sections.find(s => s.title === title);
-        
-        sections.push({
-          id: existingSection?.id || `section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          title,
-          content
-        });
-      }
-      
-      // If we found sections, update the document
-      if (sections.length > 0) {
-        updatedDoc.sections = sections;
-      }
-      
-      return updatedDoc;
-    } catch (error) {
-      logger.error('Error parsing markdown to PRD:', error);
-      return existingDoc;
-    }
-  };
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>${title}</title>
+ <style> body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 20px auto; padding: 15px; } h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; } /* Add more basic styles if needed */ </style>
+</head>
+<body>
+ ${cleanedContent}
+ <hr>
+ <p style="font-size: 0.8em; color: #777;">Last updated: ${lastUpdated}</p>
+</body>
+</html>`;
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [prdDocument, editorInstance, editorContent]); // Depends on latest content
+
+  // --- Render ---
 
   if (!showWorkbench) return null;
+
+  // Determine if we should show the editor or the loading/placeholder state
+  // Show editor if there's content, or if PRD document exists (even if content is empty initially),
+  // or if chat is actively loading (we expect content soon).
+  const shouldShowEditor = editorContent || prdDocument !== null || isStreaming;
 
   return (
     <motion.div
@@ -729,7 +510,7 @@ const PRDWorkbench = () => {
       }}
     >
       <div className="h-full flex flex-col">
-        {/* Workbench Header */}
+        {/* Header */}
         <div className="flex justify-between items-center p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0">
           <div className="flex items-center">
             <h2 className="text-lg font-semibold text-bolt-elements-textPrimary ml-2">
@@ -739,141 +520,95 @@ const PRDWorkbench = () => {
               <span className="ml-2 text-xs text-bolt-elements-textTertiary">(Unsaved changes)</span>
             )}
           </div>
-          
+          {/* Controls */}
           <div className="flex items-center space-x-1">
-            {/* Zoom controls */}
+            {/* Zoom */}
             <div className="flex items-center mr-2">
-              <IconButton
-                title="Zoom out"
-                onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))}
-                className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary"
-              >
+               <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
                 <div className="i-ph:minus-circle w-5 h-5" />
               </IconButton>
-              <span className="mx-2 text-sm text-bolt-elements-textSecondary">
-                {Math.round(zoomLevel * 100)}%
-              </span>
-              <IconButton
-                title="Zoom in"
-                onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))}
-                className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary"
-              >
+               <span className="mx-2 text-sm text-bolt-elements-textSecondary">{Math.round(zoomLevel * 100)}%</span>
+               <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
                 <div className="i-ph:plus-circle w-5 h-5" />
               </IconButton>
             </div>
-            
-            {/* Save button */}
+            {/* Save */}
             <IconButton
               title="Save PRD"
               onClick={saveFullPrd}
-              disabled={!hasUnsavedChanges}
+              disabled={!hasUnsavedChanges || !editorInstance} // Disable if no changes or editor not ready
               className={classNames(
                 "text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary",
-                !hasUnsavedChanges ? "opacity-50" : ""
+                (!hasUnsavedChanges || !editorInstance) ? "opacity-50 cursor-not-allowed" : ""
               )}
             >
               <div className="i-ph:floppy-disk w-5 h-5" />
             </IconButton>
-            
-            {/* Export options */}
-            <IconButton title="Export as Markdown" onClick={() => {
-              if (!prdDocument) { toast.error("No PRD loaded."); return; }
-              const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${prdDocument.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-            }} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+            {/* Export MD */}
+            <IconButton title="Export as Markdown" onClick={exportMarkdown} disabled={!editorContent && !prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-markdown w-5 h-5" />
             </IconButton>
-            <IconButton title="Export as HTML" onClick={() => {
-              if (!prdDocument) { toast.error("No PRD loaded."); return; }
-              const fullHtml = `<!DOCTYPE html>
- <html lang="en">
- <head>
-   <meta charset="UTF-8">
-   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>${prdDocument.title}</title>
-   <style> body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 20px auto; padding: 15px; } h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; } /* Add more basic styles if needed */ </style>
- </head>
- <body>
-   ${fullPrdHtmlContent}
-   <hr>
-   <p style="font-size: 0.8em; color: #777;">Last updated: ${new Date(prdDocument.lastUpdated).toLocaleString()}</p>
- </body>
- </html>`;
-              const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${prdDocument.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              URL.revokeObjectURL(url);
-            }} disabled={!prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+            {/* Export HTML */}
+            <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-html w-5 h-5" />
             </IconButton>
-            
-            {/* Close button */}
-            <IconButton
-              title="Close PRD Workbench"
-              onClick={() => workbenchStore.showWorkbench.set(false)}
-              className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2"
-            >
+            {/* Close */}
+            <IconButton title="Close PRD Workbench" onClick={() => workbenchStore.showWorkbench.set(false)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2">
               <div className="i-ph:x w-5 h-5" />
             </IconButton>
           </div>
         </div>
 
+        {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Editor Toolbar positioned as a full-width banner */}
-          {prdDocument && editor && (
-            <div className="w-full bg-white dark:bg-gray-900 border-b border-bolt-elements-borderColor shadow-sm">
-              <EditorToolbar editor={editor} readOnly={false} />
-            </div>
-          )}
+           {/* Toolbar: Show if editor instance exists and not streaming */}
+           <AnimatePresence>
+             {editorInstance && showEditorToolbar && !isStreaming && (
+               <motion.div 
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0 }}
+                 transition={{ duration: 0.15 }}
+                 className="w-full bg-white dark:bg-gray-900 border-b border-bolt-elements-borderColor shadow-sm flex-shrink-0"
+               >
+                 <EditorToolbar editor={editorInstance} readOnly={isStreaming} />
+               </motion.div>
+             )}
+           </AnimatePresence>
           
-          <div
-            ref={contentRef}
-            className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6"
-          >
-            {prdDocument ? (
+           {/* Editor Content Area */}
+           <div ref={contentRef} className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6">
+             {/* Use simpler condition: show editor if content/doc exists OR chat is loading */}
+             {shouldShowEditor ? (
               <div className="w-full max-w-4xl mx-auto">
-                {/* WYSIWYG Editor with Preview Styling */}
                 <div
                   ref={editorContainerRef}
-                  className="bg-white dark:bg-gray-900 rounded shadow-lg transition-transform w-full mb-6"
-                  style={{
-                    transform: `scale(${zoomLevel})`,
-                    transformOrigin: 'top center',
-                    minHeight: 'calc(100% - 2rem)',
-                  }}
+                  className={classNames(
+                    "bg-white dark:bg-gray-900 rounded shadow-lg transition-all w-full mb-6",
+                    isStreaming ? "opacity-90" : ""
+                  )}
+                   style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', minHeight: 'calc(100% - 2rem)' }}
                 >
+                  {/* Streaming indicator */}
+                  {isStreaming && (
+                    <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor px-4 py-2 flex items-center text-bolt-elements-textSecondary">
+                      <div className="animate-pulse mr-2 w-2 h-2 rounded-full bg-bolt-elements-textSecondary"></div>
+                      <span className="text-sm font-medium">Generating PRD content...</span>
+                    </div>
+                  )}
                   <PRDTipTapEditor
-                    content={markdownContent}
+                    content={editorContent}
                     onChange={handleEditorChange}
-                    readOnly={false}
+                    readOnly={isStreaming}
                     className="w-full flex flex-col"
-                    placeholder="Start writing your PRD..."
-                    onEditorReady={setEditor}
+                    placeholder={isStreaming ? "Generating PRD..." : "Start writing your PRD..."}
+                    onEditorReady={setEditorInstance}
                   />
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center h-full">
-                <div className="text-center p-10">
-                  <div className="i-ph:clipboard-text text-6xl text-bolt-elements-textTertiary mb-6 mx-auto"></div>
-                  <h3 className="text-xl font-semibold text-bolt-elements-textPrimary mb-2">No PRD Loaded</h3>
-                  <p className="text-bolt-elements-textSecondary max-w-md">
-                    Use the PRD Assistant chat to generate or load a Product Requirements Document.
-                  </p>
-                </div>
-              </div>
+              // Show placeholder only if no content/doc AND not loading
+              <PRDLoadingAnimation message="No PRD Loaded. Ask the assistant to create one." />
             )}
           </div>
         </div>
