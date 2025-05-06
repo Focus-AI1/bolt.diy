@@ -8,7 +8,7 @@ import { IconButton } from '~/components/ui/IconButton';
 import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import PRDTipTapEditor, { EditorToolbar } from './PRDTipTapEditor';
+import PRDTipTapEditor, { EditorToolbar } from '~/components/ui/PRD/PRDTipTapEditor';
 
 const logger = createScopedLogger('ResearchWorkbench');
 
