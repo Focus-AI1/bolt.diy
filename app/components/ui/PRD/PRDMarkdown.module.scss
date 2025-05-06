@@ -41,7 +41,7 @@
   
   /* Lists - Enhanced for better hierarchy */
   :global(ul), :global(ol), :global(.enhanced-ul), :global(.enhanced-ol) {
-    padding-left: 2em;
+    padding-left: 3.5em;
     margin-top: 0;
     margin-bottom: 1em;
   }
@@ -61,6 +61,7 @@
   :global(.enhanced-li > .enhanced-ul), :global(.enhanced-li > .enhanced-ol) {
     margin-top: 0.25em;
     margin-bottom: 0.5em;
+    padding-left: 3.5em;
   }
   
   /* Level-specific list styling */

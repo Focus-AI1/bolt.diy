@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, type Variants, AnimatePresence } from 'framer-motion';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { streamingState } from '~/lib/stores/streaming';
+import { prdEditorStore, registerManualEdit, saveEditorContent, updateContentProgrammatically, releaseUserEditLock, resetEditorState, initializeEditor, prdStreamingState } from '~/lib/stores/prdEditor';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { IconButton } from '~/components/ui/IconButton';
@@ -10,7 +10,6 @@ import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
 import PRDTipTapEditor, { EditorToolbar, Editor } from '~/components/ui/PRD/PRDTipTapEditor';
-import PRDLoadingAnimation from '~/components/ui/PRD/PRDLoadingAnimation';
 import {
     type PRDDocument,
     type PRDSection,
@@ -18,8 +17,10 @@ import {
     parseEditablePRDMarkdown,
     generateFullMarkdown,
     parseHtmlToPrd,
-    cleanHtml
+    cleanHtml,
+    cleanMarkdownFromTemplateLeakage
 } from '~/components/ui/PRD/prdUtils';
+import PRDStreamingIndicator from '../ui/PRD/PRDStreamingIndicator';
 
 // Extend the PRDDocument type to include _source
 interface ExtendedPRDDocument extends PRDDocument {
@@ -50,19 +51,21 @@ const workbenchVariants = {
 const PRDWorkbench = () => {
   const showWorkbench = useStore(workbenchStore.showWorkbench);
   const streamingMarkdownContent = useStore(workbenchStore.streamingPRDContent);
-  const isStreaming = useStore(streamingState);
+  const isStreaming = useStore(prdStreamingState);
+  
+  // Use the prdEditorStore for state management
+  const editorState = useStore(prdEditorStore);
 
   const [prdDocument, setPrdDocument] = useState<ExtendedPRDDocument | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1.2);
-  const [isManuallyEdited, setIsManuallyEdited] = useState(false);
   const [editMode, setEditMode] = useState(true); // Default to edit mode
   const contentRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [showEditorToolbar, setShowEditorToolbar] = useState(false);
   const initialMountRef = useRef(false);
+  const domEventsAttachedRef = useRef(false);
 
   // Define loadPrdFromStorage - This handles loading from sessionStorage
   const loadPrdFromStorage = useCallback((ignoreIfManuallyEdited = true) => {
@@ -71,12 +74,11 @@ const PRDWorkbench = () => {
 
         if (!storedPRD) {
           // If storage is empty, clear state only if not manually edited or forced
-          if (prdDocument !== null && (!isManuallyEdited || !ignoreIfManuallyEdited)) {
+          if (prdDocument !== null && (!editorState.isManuallyEdited || !ignoreIfManuallyEdited)) {
             logger.debug('sessionStorage empty or explicitly cleared, clearing PRD state.');
             setPrdDocument(null);
             setEditorContent(''); // Clear editor
-            setHasUnsavedChanges(false);
-            setIsManuallyEdited(false);
+            resetEditorState(); // Reset editor state
           }
           return;
         }
@@ -85,8 +87,15 @@ const PRDWorkbench = () => {
         const isChatUpdate = parsedPRD._source === "chat_update";
 
         // If manually edited with unsaved changes, only update if it's from chat or forced
-        if (ignoreIfManuallyEdited && isManuallyEdited && hasUnsavedChanges && !isChatUpdate) {
+        if (ignoreIfManuallyEdited && editorState.isManuallyEdited && editorState.hasUnsavedChanges && !isChatUpdate) {
           logger.debug('Skipping PRD reload from storage due to unsaved manual edits');
+          return;
+        }
+        
+        // If we just saved (no unsaved changes but manually edited), don't reload
+        // This prevents the brief flicker when saving
+        if (ignoreIfManuallyEdited && editorState.isManuallyEdited && !editorState.hasUnsavedChanges) {
+          logger.debug('Skipping PRD reload from storage after save');
           return;
         }
 
@@ -95,40 +104,19 @@ const PRDWorkbench = () => {
            // Remove the _source attribute before setting the document state
            const { _source, ...prdWithoutSource } = parsedPRD;
            const newMarkdown = generateFullMarkdown(prdWithoutSource);
-
-           // Only update state if the content is different
-           // Compare generated markdown to prevent unnecessary updates if structure is same
-           if (newMarkdown !== editorContent || JSON.stringify(prdDocument) !== JSON.stringify(prdWithoutSource)) {
-               logger.debug('PRD updated from sessionStorage:', parsedPRD.title);
-               setPrdDocument(prdWithoutSource);
-               setEditorContent(newMarkdown); // Update editor content from parsed structure
-
-               // Reset edit flags only if this update originated from the chat or forced reload
-               if (isChatUpdate || !ignoreIfManuallyEdited) {
-                 setHasUnsavedChanges(false);
-                 setIsManuallyEdited(false);
-               }
+           
+           // Update the editor state using the store
+           if (updateContentProgrammatically(newMarkdown)) {
+             setPrdDocument(prdWithoutSource);
+             setEditorContent(newMarkdown);
+           } else {
+             logger.debug('Programmatic update blocked due to user edit lock');
            }
-        } else {
-          logger.warn('Invalid PRD structure in sessionStorage, removing.');
-          sessionStorage.removeItem('current_prd');
-          if (prdDocument !== null) {
-            logger.debug('Clearing PRD state due to invalid structure.');
-            setPrdDocument(null);
-            setEditorContent('');
-            setHasUnsavedChanges(false);
-            setIsManuallyEdited(false);
-          }
         }
       } catch (error) {
-        logger.error('Error loading PRD from sessionStorage:', error);
-        sessionStorage.removeItem('current_prd');
-        setPrdDocument(null);
-        setEditorContent('');
-        setHasUnsavedChanges(false);
-        setIsManuallyEdited(false);
+        logger.error('Error loading PRD from storage:', error);
       }
-  }, [prdDocument, isManuallyEdited, hasUnsavedChanges, editorContent]); // Added editorContent dependency
+  }, [prdDocument, editorState.isManuallyEdited, editorState.hasUnsavedChanges]);
 
   // --- Effects ---
 
@@ -142,299 +130,101 @@ const PRDWorkbench = () => {
     }
   }, [showWorkbench, loadPrdFromStorage]);
 
-  // Listen for external storage changes (e.g., manual save, other tabs)
-  useEffect(() => {
-    const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'current_prd' && event.storageArea === sessionStorage) {
-            // If a chat stream is active, we primarily rely on the streamingMarkdownContent effect.
-            // We might ignore storage events marked as 'chat_update' here to prevent double updates,
-            // as the streaming effect will handle the final content update from the store.
-            // However, let's allow it for now but ensure loadPrdFromStorage checks content difference.
-            const isChatUpdate = event.newValue && event.newValue.includes('"_source":"chat_update"');
-
-            // Always process storage updates from chat, as they contain the authoritative full document
-            if (isChatUpdate) {
-                logger.debug('Chat update detected in storage - reloading PRD.');
-                loadPrdFromStorage(false); // Force reload chat updates, ignoring manual edits
-                return;
-            }
-
-            // For non-chat updates, respect manual edits
-            logger.debug('sessionStorage changed externally, reloading PRD for workbench.');
-            loadPrdFromStorage(true);
-        }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-        window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [loadPrdFromStorage]);
-
-  // Simplified effect to handle streaming markdown content updates
-  useEffect(() => {
-    // Only process if streaming content exists
-    if (streamingMarkdownContent !== null) {
-        // If user has manually edited, preserve their changes during the stream
-        if (isManuallyEdited && hasUnsavedChanges) {
-            logger.debug('Manual edits detected, preserving user changes during stream.');
-            return;
-        }
-
-        // Reset manual edit flags when processing new streaming content
-        if (isManuallyEdited || hasUnsavedChanges) {
-            setIsManuallyEdited(false);
-            setHasUnsavedChanges(false);
-        }
-
-        // Clean the incoming markdown - this now removes all placeholder text
-        const cleanedMarkdown = cleanStreamingContent(streamingMarkdownContent);
-        
-        // Verify if the streaming markdown is a complete PRD or just a section
-        const hasMultipleSections = /^##\s+.+$/gm.test(cleanedMarkdown);
-        const hasTitle = /^#\s+.+$/m.test(cleanedMarkdown);
-        
-        if (hasTitle && hasMultipleSections) {
-            // This is likely a complete PRD, update as usual
-            logger.debug('Received complete PRD content in stream - updating editor');
-            setEditorContent(cleanedMarkdown);
-            
-            // Also update the document state to ensure consistency
-            try {
-                const parsedDoc = parseEditablePRDMarkdown(cleanedMarkdown, null);
-                if (parsedDoc) {
-                    setPrdDocument(parsedDoc);
-                }
-            } catch (error) {
-                logger.error("Error parsing complete PRD:", error);
-            }
-        } else {
-            // This might be just a section update - attempt to merge with existing content
-            logger.debug('Received partial PRD content - attempting to merge with existing');
-            try {
-                // Get any existing PRD to merge with
-                let existingPRD: PRDDocument | null = prdDocument;
-                
-                if (!existingPRD) {
-                    // Try loading from storage if we don't have one in state
-                    const storedPRD = sessionStorage.getItem('current_prd');
-                    if (storedPRD) {
-                        existingPRD = JSON.parse(storedPRD);
-                    }
-                }
-                
-                if (existingPRD) {
-                    // Parse the cleaned markdown, merging with the existing PRD
-                    const parsedDoc = parseEditablePRDMarkdown(cleanedMarkdown, existingPRD);
-                    if (parsedDoc) {
-                        // Generate full markdown with the merged content - this will remove any placeholders
-                        const fullMarkdown = generateFullMarkdown(parsedDoc);
-                        setEditorContent(fullMarkdown);
-                        setPrdDocument(parsedDoc);
-                        
-                        // CRITICAL: Save the merged document to storage to ensure persistence
-                        // This prevents the content from reverting when streaming ends
-                        const docToSave = {...parsedDoc};
-                        sessionStorage.setItem('current_prd', JSON.stringify(docToSave));
-                    } else {
-                        // Fallback to just showing the cleaned markdown
-                        setEditorContent(cleanedMarkdown);
-                    }
-                } else {
-                    // No existing PRD to merge with, just show the content
-                    setEditorContent(cleanedMarkdown);
-                }
-            } catch (error) {
-                logger.error("Error processing streaming content:", error);
-                // Fallback to the cleaned content
-                setEditorContent(cleanedMarkdown);
-            }
-        }
-    }
-    // When streamingMarkdownContent becomes null (stream ended),
-    // we need to ensure the prdDocument state reflects the final content.
-    else if (streamingMarkdownContent === null && editorContent && isStreaming === false) {
-        // This condition triggers after the stream ends and the store is cleared.
-        logger.debug('Stream ended, ensuring document state matches editor content');
-        
-        // First check if there's a recent update in storage
-        try {
-            const storedPRD = sessionStorage.getItem('current_prd');
-            if (storedPRD) {
-                const parsedStoredPRD = JSON.parse(storedPRD);
-                if (parsedStoredPRD._source === "chat_update") {
-                    // This is a fresh update from chat, prioritize it
-                    logger.debug('Found recent chat update in storage, using that as source of truth');
-                    const { _source, ...prdWithoutSource } = parsedStoredPRD;
-                    setPrdDocument(prdWithoutSource);
-                    
-                    // Update editor content to match the stored document - this will remove any placeholders
-                    const fullMarkdown = generateFullMarkdown(prdWithoutSource);
-                    if (fullMarkdown !== editorContent) {
-                        setEditorContent(fullMarkdown);
-                    }
-                    return;
-                }
-            }
-        } catch (error) {
-            logger.error("Error checking storage for updates:", error);
-        }
-        
-        // If no recent chat update in storage, parse the current editor content
-        try {
-            // Make sure we remove any placeholder text that might have been preserved
-            const cleanedEditorContent = cleanStreamingContent(editorContent);
-            const finalParsedDoc = parseEditablePRDMarkdown(cleanedEditorContent, prdDocument);
-            
-            if (finalParsedDoc && JSON.stringify(finalParsedDoc) !== JSON.stringify(prdDocument)) {
-                logger.debug('Updating final prdDocument state from editor content after stream.');
-                setPrdDocument(finalParsedDoc);
-                
-                // Generate clean markdown without placeholders
-                const cleanMarkdown = generateFullMarkdown(finalParsedDoc);
-                if (cleanMarkdown !== editorContent) {
-                    setEditorContent(cleanMarkdown);
-                }
-                
-                // Save this to storage as well to ensure persistence
-                sessionStorage.setItem('current_prd', JSON.stringify(finalParsedDoc));
-            }
-        } catch (error) {
-            logger.error("Error parsing final editor content into PRDDocument:", error);
-        }
-    }
-
-  }, [streamingMarkdownContent, prdDocument, isManuallyEdited, hasUnsavedChanges, isStreaming, editorContent]);
-
-  // Effect to handle streaming state changes
-  useEffect(() => {
-    if (isStreaming) {
-      // When streaming starts, hide the toolbar
-      setShowEditorToolbar(false);
-      
-      // Update editor instance read-only state if it exists
-      if (editorInstance) {
-        editorInstance.setEditable(false);
-      }
-      
-      logger.debug('Streaming started, disabling edit mode');
-    } else {
-      // When streaming ends, show the toolbar with a slight delay for smooth transition
-      const timer = setTimeout(() => {
-        setShowEditorToolbar(true);
-      }, 300);
-      
-      // Update editor instance read-only state if it exists
-      if (editorInstance) {
-        editorInstance.setEditable(true);
-      }
-      
-      logger.debug('Streaming ended, enabling edit mode');
-      
-      return () => clearTimeout(timer);
-    }
-  }, [isStreaming, editorInstance]);
-
-  // Effect to handle streaming content updates
-  useEffect(() => {
-    if (streamingMarkdownContent && isStreaming) {
-      // Clean the streaming content
-      const cleanedContent = cleanStreamingContent(streamingMarkdownContent);
-      if (cleanedContent) {
-        setEditorContent(cleanedContent);
-      }
-    }
-  }, [streamingMarkdownContent, isStreaming]);
-
-  // Effect to handle initial mount
-  useEffect(() => {
-    if (!initialMountRef.current && !isStreaming) {
-      initialMountRef.current = true;
-      // Slight delay to ensure smooth initial appearance
-      const timer = setTimeout(() => {
-        setShowEditorToolbar(true);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+  // Handle editor change with debounce
+  const handleEditorChange = useCallback((content: string) => {
+    if (isStreaming) return; // Don't process changes during streaming
+    
+    // Clean the content to remove any template string leakage
+    const cleanedContent = cleanMarkdownFromTemplateLeakage(content);
+    
+    // Update the editor content in React state
+    setEditorContent(cleanedContent);
+    
+    // Register the edit in the store
+    registerManualEdit(cleanedContent);
   }, [isStreaming]);
 
-  // --- Save/Export Callbacks ( Largely unchanged, but use editorContent/prdDocument state carefully ) ---
+  // Attach DOM-level event listeners to the editor for reliable edit detection
+  const attachDomEventListeners = useCallback(() => {
+    if (!editorInstance || domEventsAttachedRef.current) return;
+    
+    const editorDom = editorInstance.view.dom;
+    
+    // Use input event for immediate detection of changes
+    editorDom.addEventListener('input', () => {
+      if (isStreaming) return;
+      
+      // Get the current HTML content directly from the editor
+      const currentContent = editorInstance.getHTML();
+      
+      // Register the manual edit
+      registerManualEdit(currentContent);
+    });
+    
+    // Use keyup event as a fallback
+    editorDom.addEventListener('keyup', () => {
+      if (isStreaming) return;
+      
+      // Get the current HTML content directly from the editor
+      const currentContent = editorInstance.getHTML();
+      
+      // Register the manual edit
+      registerManualEdit(currentContent);
+    });
+    
+    // Mark as attached
+    domEventsAttachedRef.current = true;
+    logger.debug('DOM event listeners attached to editor');
+  }, [editorInstance, isStreaming]);
 
+  // Effect to attach DOM event listeners when editor is ready
+  useEffect(() => {
+    if (editorInstance && !domEventsAttachedRef.current) {
+      attachDomEventListeners();
+    }
+  }, [editorInstance, attachDomEventListeners]);
+
+  // Save the full PRD document
   const saveFullPrd = useCallback(() => {
-    if (!editorInstance) { // Check editorInstance first
-      logger.warn('Save attempt failed: Editor not ready.');
-      toast.error('Cannot save PRD: Editor not ready.');
-      return;
-    }
-     // Use current editor content as the source of truth for saving
-     const currentHtml = editorInstance.getHTML();
-     const cleaned = cleanHtml(currentHtml);
-
-     // Parse the *current* HTML into a PRD structure.
-     // Pass the *latest* prdDocument state as the base for merging metadata or unparsed sections.
-     const baseDocForParsing = prdDocument; // Use state as base
-     let updatedPrd = parseHtmlToPrd(cleaned, baseDocForParsing);
-
-    if (!updatedPrd) {
-        logger.error('Save attempt failed: Could not parse HTML to PRD.');
-        toast.error('Error saving PRD: Could not parse content.');
-        return;
-    }
-
+    if (!editorInstance) return;
+    
     try {
-       // Optional: Preserve sections logic (if needed, ensure it uses baseDocForParsing correctly)
-       if (baseDocForParsing) {
-           const currentTitles = new Set(updatedPrd.sections.map(s => s.title.toLowerCase()));
-           baseDocForParsing.sections.forEach(originalSection => {
-               if (!currentTitles.has(originalSection.title.toLowerCase()) && originalSection.content?.trim()) {
-                   logger.info(`Preserving section not re-parsed from HTML: ${originalSection.title}`);
-                   updatedPrd.sections.push(originalSection);
-               }
-           });
-       }
-
+      // Get the current HTML content directly from the editor
+      const currentContent = editorInstance.getHTML();
+      
+      // Clean the content to remove any template string leakage
+      const cleanedHtml = cleanHtml(currentContent);
+      
+      // Parse the HTML back to PRD structure
+      const updatedPrd = parseHtmlToPrd(cleanedHtml, prdDocument || {
+        title: 'New PRD',
+        description: '',
+        sections: [],
+        lastUpdated: new Date().toISOString()
+      });
+      
+      // Update the lastUpdated timestamp
       updatedPrd.lastUpdated = new Date().toISOString();
-
-      // Save the final structure to sessionStorage
-      sessionStorage.setItem('current_prd', JSON.stringify(updatedPrd));
-
-      // Update internal state to reflect the saved document
+      
+      // First, update the document state in React
       setPrdDocument(updatedPrd);
-      // Re-generate markdown from the *saved* structure to ensure consistency
-      const newMarkdown = generateFullMarkdown(updatedPrd);
-      setEditorContent(newMarkdown); // Update editor content to match saved state
-
-      setHasUnsavedChanges(false); // Reset unsaved changes flag
-      setIsManuallyEdited(false); // Reset manual edit flag after saving
-
-      logger.debug('PRD saved successfully');
+      
+      // Save the content in the editor store BEFORE updating session storage
+      // This ensures the editor state is updated before any potential reloads
+      saveEditorContent();
+      
+      // Save to session storage
+      sessionStorage.setItem('current_prd', JSON.stringify(updatedPrd));
+      
+      // Update the workbench store timestamp
+      workbenchStore.updatePRD();
+      
       toast.success('PRD saved successfully');
     } catch (error) {
       logger.error('Error saving PRD:', error);
-      toast.error('Error saving PRD. Please try again.');
+      toast.error('Failed to save PRD');
     }
-  }, [editorInstance, prdDocument]); // Keep dependencies
-
-  // Handler for editor content changes (Receives Markdown from TipTap)
-  const handleEditorChange = useCallback((newMarkdownContent: string) => {
-    // If a chat stream is active, ignore manual edits to prevent conflicts
-    if (isStreaming) return;
-
-    setEditorContent(newMarkdownContent); // Update the editor's content state
-
-    // Determine if change is from user vs. programmatically
-    // Compare with markdown generated from the *current* PRD document state.
-    // Or simpler: if !isStreaming, any change is manual.
-    const isDifferentFromState = !prdDocument || newMarkdownContent !== generateFullMarkdown(prdDocument);
-
-    if (isDifferentFromState) {
-      setHasUnsavedChanges(true);
-      // Mark as manually edited only if the change is significant and not during loading
-      if (!isStreaming) { // Check against global loading state
-          setIsManuallyEdited(true);
-      }
-    }
-  }, [prdDocument, isStreaming]); // Added isStreaming dependency
+  }, [editorInstance, prdDocument]);
 
   // Export logic (use current editorContent)
   const exportMarkdown = useCallback(() => {
@@ -485,14 +275,188 @@ const PRDWorkbench = () => {
     URL.revokeObjectURL(url);
   }, [prdDocument, editorInstance, editorContent]); // Depends on latest content
 
+  // Effect to handle streaming state changes
+  useEffect(() => {
+    if (isStreaming) {
+      // When streaming starts, hide the toolbar
+      setShowEditorToolbar(false);
+      
+      // Update editor instance read-only state if it exists
+      if (editorInstance) {
+        editorInstance.setEditable(false);
+      }
+      
+      logger.debug('Streaming started, disabling edit mode');
+    } else {
+      // When streaming ends, show the toolbar with a slight delay for smooth transition
+      const timer = setTimeout(() => {
+        setShowEditorToolbar(true);
+      }, 300);
+      
+      // Update editor instance read-only state if it exists
+      if (editorInstance) {
+        editorInstance.setEditable(true);
+      }
+      
+      logger.debug('Streaming ended, enabling edit mode');
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, editorInstance]);
+
+  // Effect to handle streaming content updates
+  useEffect(() => {
+    if (streamingMarkdownContent) {
+      try {
+        const cleanedContent = cleanStreamingContent(streamingMarkdownContent);
+        
+        // Clean the content to remove any template string leakage
+        const sanitizedContent = cleanMarkdownFromTemplateLeakage(cleanedContent);
+        
+        // Only update if we have meaningful content
+        if (sanitizedContent.trim()) {
+          // Update the editor content
+          setEditorContent(sanitizedContent);
+          
+          // Don't register as a manual edit, but update the original content
+          if (updateContentProgrammatically(sanitizedContent)) {
+            // Parse the markdown to PRD structure
+            const updatedPrd = parseEditablePRDMarkdown(sanitizedContent, prdDocument);
+            if (updatedPrd) {
+              // Add source marker to identify this as a chat update
+              const prdWithSource: ExtendedPRDDocument = {
+                ...updatedPrd,
+                _source: 'chat_update'
+              };
+              
+              // Save to session storage
+              sessionStorage.setItem('current_prd', JSON.stringify(prdWithSource));
+              
+              // Update the document state
+              setPrdDocument(updatedPrd);
+            }
+          } else {
+            logger.debug('Streaming update blocked due to user edit lock');
+          }
+        }
+      } catch (error) {
+        logger.error('Error processing streaming content:', error);
+      }
+    }
+  }, [streamingMarkdownContent, prdDocument]);
+
+  // Effect to handle initial mount and sync with persisted editor state
+  useEffect(() => {
+    // Check if we have persisted editor state with content
+    const editorState = prdEditorStore.get();
+    
+    if (editorState.currentContent) {
+      logger.debug('Found persisted editor state with content, restoring');
+      
+      // Set the editor content from the persisted state
+      setEditorContent(editorState.currentContent);
+      
+      // If we don't have a document yet, try to parse one from the content
+      if (!prdDocument && editorState.currentContent) {
+        try {
+          const parsedDoc = parseEditablePRDMarkdown(editorState.currentContent, null);
+          if (parsedDoc) {
+            setPrdDocument(parsedDoc);
+            logger.debug('Restored PRD document from persisted editor content');
+          }
+        } catch (error) {
+          logger.error('Error parsing persisted editor content:', error);
+        }
+      }
+    } else {
+      // If no persisted state, load from storage
+      loadPrdFromStorage(false);
+    }
+    
+    // Clean up function to ensure editor state is saved when component unmounts
+    return () => {
+      // If we have unsaved changes, make sure they're persisted
+      const currentState = prdEditorStore.get();
+      if (currentState.hasUnsavedChanges && editorInstance) {
+        // Get the latest content directly from the editor
+        const latestContent = editorInstance.getHTML();
+        prdEditorStore.setKey('currentContent', latestContent);
+        logger.debug('Saved latest editor content to store on unmount');
+      }
+    };
+  }, []);
+
+  // Effect to initialize the editor when it's ready
+  useEffect(() => {
+    if (editorInstance && !initialMountRef.current) {
+      // If we have persisted content, use that
+      const state = prdEditorStore.get();
+      
+      if (state.currentContent) {
+        // Editor already has content from the persisted state
+        logger.debug('Editor initialized with persisted content');
+      } else if (editorContent) {
+        // Initialize with current content from React state
+        initializeEditor(editorContent);
+        logger.debug('Editor initialized with current content');
+      }
+      
+      initialMountRef.current = true;
+      
+      // Attach DOM event listeners
+      attachDomEventListeners();
+    }
+  }, [editorInstance, editorContent, attachDomEventListeners]);
+
+  // Handle storage events (for cross-tab sync)
+  const handleStorageChange = useCallback((event: StorageEvent) => {
+    if (event.key === 'current_prd' && event.storageArea === sessionStorage) {
+      // Check if reload is prevented (set by PRDChat during updates)
+      const preventReload = sessionStorage.getItem('prd_prevent_reload') === 'true';
+      if (preventReload) {
+        logger.debug('Storage change detected but reload prevented by flag');
+        return;
+      }
+      
+      // If a chat stream is active, we primarily rely on the streamingMarkdownContent effect.
+      // We might ignore storage events marked as 'chat_update' here to prevent double updates,
+      // as the streaming effect will handle the final content update from the store.
+      const isChatUpdate = event.newValue && event.newValue.includes('"_source":"chat_update"');
+      const isForceReload = event.newValue && event.newValue.includes('"_forceReload":true');
+
+      // Always process storage updates from chat, as they contain the authoritative full document
+      if (isChatUpdate || isForceReload) {
+        logger.debug('Chat update or force reload detected in storage - reloading PRD.');
+        loadPrdFromStorage(false); // Force reload chat updates, ignoring manual edits
+        return;
+      }
+
+      // For non-chat updates, respect manual edits
+      logger.debug('sessionStorage changed externally, reloading PRD for workbench.');
+      loadPrdFromStorage(true);
+    }
+  }, [loadPrdFromStorage]);
+
+  useEffect(() => {
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [handleStorageChange]);
+
+  // Load PRD from storage on initial mount
+  useEffect(() => {
+    loadPrdFromStorage(false); // Force load on initial mount
+  }, [loadPrdFromStorage]);
+
+  // Compute if we should show the editor
+  const shouldShowEditor = useMemo(() => {
+    return !!editorContent || !!prdDocument || isStreaming;
+  }, [editorContent, prdDocument, isStreaming]);
+
   // --- Render ---
 
   if (!showWorkbench) return null;
-
-  // Determine if we should show the editor or the loading/placeholder state
-  // Show editor if there's content, or if PRD document exists (even if content is empty initially),
-  // or if chat is actively loading (we expect content soon).
-  const shouldShowEditor = editorContent || prdDocument !== null || isStreaming;
 
   return (
     <motion.div
@@ -516,7 +480,7 @@ const PRDWorkbench = () => {
             <h2 className="text-lg font-semibold text-bolt-elements-textPrimary ml-2">
               PRD Workbench
             </h2>
-            {hasUnsavedChanges && (
+            {editorState.hasUnsavedChanges && (
               <span className="ml-2 text-xs text-bolt-elements-textTertiary">(Unsaved changes)</span>
             )}
           </div>
@@ -536,10 +500,10 @@ const PRDWorkbench = () => {
             <IconButton
               title="Save PRD"
               onClick={saveFullPrd}
-              disabled={!hasUnsavedChanges || !editorInstance} // Disable if no changes or editor not ready
+              disabled={!editorState.hasUnsavedChanges || !editorInstance} // Use store state
               className={classNames(
                 "text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary",
-                (!hasUnsavedChanges || !editorInstance) ? "opacity-50 cursor-not-allowed" : ""
+                (!editorState.hasUnsavedChanges || !editorInstance) ? "opacity-50 cursor-not-allowed" : ""
               )}
             >
               <div className="i-ph:floppy-disk w-5 h-5" />
@@ -560,7 +524,7 @@ const PRDWorkbench = () => {
         </div>
 
         {/* Editor Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden h-full">
            {/* Toolbar: Show if editor instance exists and not streaming */}
            <AnimatePresence>
              {editorInstance && showEditorToolbar && !isStreaming && (
@@ -590,12 +554,7 @@ const PRDWorkbench = () => {
                    style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', minHeight: 'calc(100% - 2rem)' }}
                 >
                   {/* Streaming indicator */}
-                  {isStreaming && (
-                    <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor px-4 py-2 flex items-center text-bolt-elements-textSecondary">
-                      <div className="animate-pulse mr-2 w-2 h-2 rounded-full bg-bolt-elements-textSecondary"></div>
-                      <span className="text-sm font-medium">Generating PRD content...</span>
-                    </div>
-                  )}
+                  {isStreaming && <PRDStreamingIndicator />}
                   <PRDTipTapEditor
                     content={editorContent}
                     onChange={handleEditorChange}
@@ -607,8 +566,7 @@ const PRDWorkbench = () => {
                 </div>
               </div>
             ) : (
-              // Show placeholder only if no content/doc AND not loading
-              <PRDLoadingAnimation message="No PRD Loaded. Ask the assistant to create one." />
+              <div></div>
             )}
           </div>
         </div>

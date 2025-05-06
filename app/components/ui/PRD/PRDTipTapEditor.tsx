@@ -12,6 +12,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { classNames } from '~/utils/classNames';
 import styles from './PRDMarkdown.module.scss';
+import toolbarStyles from './PRDToolbar.module.scss';
 
 interface PRDTipTapEditorProps {
   content: string;
@@ -23,12 +24,12 @@ interface PRDTipTapEditorProps {
   useMarkdownMode?: boolean;
 }
 
-// Toolbar Button Component - Refined Styling
+// Modern Toolbar Button Component
 const ToolbarButton = ({
   onClick,
   active = false,
   disabled = false,
-  title, // Add title for tooltips
+  title,
   children
 }: {
   onClick: () => void;
@@ -38,30 +39,28 @@ const ToolbarButton = ({
   children: React.ReactNode
 }) => (
   <button
-    type="button" // Explicitly set type
+    type="button"
     onClick={onClick}
     disabled={disabled}
-    title={title} // Add title attribute
+    title={title}
     className={classNames(
-      "p-1.5 rounded transition-colors duration-150 ease-in-out", // Slightly smaller padding, smoother transition
-      active
-        ? "bg-bolt-elements-background-depth-3 text-bolt-elements-textPrimary"
-        : "text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-2 hover:text-bolt-elements-textPrimary",
-      disabled ? "opacity-40 cursor-not-allowed" : "hover:opacity-100", // Clearer disabled state
-      "focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus" // Consistent focus ring
+      toolbarStyles.toolbarButton,
+      active ? toolbarStyles.active : '',
+      disabled ? toolbarStyles.disabled : ''
     )}
   >
     {children}
+    {title && <span className={toolbarStyles.tooltip}>{title}</span>}
   </button>
 );
 
-// Toolbar Dropdown Component - Refined Styling
+// Modern Toolbar Dropdown Component
 const ToolbarDropdown = ({
   value,
   onChange,
   options,
   disabled = false,
-  title // Add title for tooltips
+  title
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -69,28 +68,20 @@ const ToolbarDropdown = ({
   disabled?: boolean;
   title?: string;
 }) => (
-  <select
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    disabled={disabled}
-    title={title} // Add title attribute
-    className={classNames(
-      "px-2 py-1 rounded bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor text-sm font-medium", // Adjusted padding and style
-      "text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus",
-      disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-bolt-elements-background-depth-2"
-    )}
-  >
-    {options.map((option) => (
-      <option key={option.value} value={option.value}>
-        {option.label}
-      </option>
-    ))}
-  </select>
-);
-
-// Toolbar Divider Component
-const ToolbarDivider = () => (
-  <div className="h-5 w-px bg-bolt-elements-borderColor mx-1" /> // Vertical divider
+  <div className={toolbarStyles.toolbarDropdown} title={title}>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className={disabled ? toolbarStyles.disabled : ''}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </div>
 );
 
 // Separate Editor Toolbar Component
@@ -100,195 +91,202 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
   const toolbarDisabled = readOnly;
   
   return (
-    <div className="flex items-center justify-between w-full border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 sticky top-0 z-10 px-4 py-2 shadow-sm">
-      <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
-        <ToolbarDropdown
-          title="Text Style"
-          value={editor.isActive('heading', { level: 1 }) ? 'h1' :
-                 editor.isActive('heading', { level: 2 }) ? 'h2' :
-                 editor.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph'}
-          onChange={(value) => {
-            if (toolbarDisabled) return;
-            editor.chain().focus();
-            if (value === 'paragraph') {
-              editor.chain().focus().setParagraph().run();
-            } else if (value === 'h1') {
-              editor.chain().focus().setHeading({ level: 1 }).run();
-            } else if (value === 'h2') {
-              editor.chain().focus().setHeading({ level: 2 }).run();
-            } else if (value === 'h3') {
-              editor.chain().focus().setHeading({ level: 3 }).run();
-            }
-          }}
-          options={[
-            { value: 'paragraph', label: 'Normal Text' },
-            { value: 'h1', label: 'Heading 1' },
-            { value: 'h2', label: 'Heading 2' },
-            { value: 'h3', label: 'Heading 3' },
-          ]}
-          disabled={toolbarDisabled}
-        />
-        
-        <ToolbarDivider />
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          active={editor.isActive('bold')}
-          title="Bold"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-bold text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          active={editor.isActive('italic')}
-          title="Italic" 
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-italic text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          active={editor.isActive('underline')}
-          title="Underline"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-underline text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          active={editor.isActive('strike')}
-          title="Strikethrough"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-strikethrough text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleHighlight().run()}
-          active={editor.isActive('highlight')}
-          title="Highlight"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-highlighter text-sm" />
-        </ToolbarButton>
-                
-        <ToolbarDivider />
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          active={editor.isActive('bulletList')}
-          title="Bullet List"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-list-ul text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          active={editor.isActive('orderedList')}
-          title="Numbered List"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-list-ol text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleTaskList().run()}
-          active={editor.isActive('taskList')}
-          title="Task List"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-tasks text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarDivider />
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          active={editor.isActive('blockquote')}
-          title="Blockquote"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-quote-right text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarButton 
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          title="Horizontal Rule"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-minus text-sm" />
-        </ToolbarButton>
-        
-        {/* Add Diagram Button */}
-        <ToolbarButton 
-          onClick={() => {
-            const diagramContent = 'graph TD\n    A[Start] --> B[Process]\n    B --> C[End]';
-            editor.chain().focus().setCodeBlock({ language: 'mermaid' }).insertContent(diagramContent).run();
-          }}
-          active={editor.isActive('codeBlock', { language: 'mermaid' })}
-          title="Insert Diagram"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-project-diagram text-sm" />
-        </ToolbarButton>
-        
-        <ToolbarDivider />
-        
-        <ToolbarButton 
-          onClick={() => {
-            const url = window.prompt('Enter the URL:');
-            if (url) {
-              if (editor.isActive('link')) {
-                editor.chain().focus().unsetLink().run();
+    <div className={toolbarStyles.toolbar}>
+      <div className={toolbarStyles.toolbarContent}>
+        {/* Text Style Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarDropdown
+            title="Text Style"
+            value={editor.isActive('heading', { level: 1 }) ? 'h1' :
+                   editor.isActive('heading', { level: 2 }) ? 'h2' :
+                   editor.isActive('heading', { level: 3 }) ? 'h3' : 'paragraph'}
+            onChange={(value) => {
+              if (toolbarDisabled) return;
+              editor.chain().focus();
+              if (value === 'paragraph') {
+                editor.chain().focus().setParagraph().run();
+              } else if (value === 'h1') {
+                editor.chain().focus().setHeading({ level: 1 }).run();
+              } else if (value === 'h2') {
+                editor.chain().focus().setHeading({ level: 2 }).run();
+              } else if (value === 'h3') {
+                editor.chain().focus().setHeading({ level: 3 }).run();
               }
-              editor.chain().focus().setLink({ href: url }).run();
-            }
-          }}
-          active={editor.isActive('link')}
-          title="Insert Link"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-link text-sm" />
-        </ToolbarButton>
+            }}
+            options={[
+              { value: 'paragraph', label: 'Normal Text' },
+              { value: 'h1', label: 'Heading 1' },
+              { value: 'h2', label: 'Heading 2' },
+              { value: 'h3', label: 'Heading 3' },
+            ]}
+            disabled={toolbarDisabled}
+          />
+        </div>
         
-        <ToolbarButton 
-          onClick={() => {
-            const url = window.prompt('Enter the image URL:');
-            if (url) {
-              editor.chain().focus().setImage({ src: url }).run();
-            }
-          }}
-          title="Insert Image"
-          disabled={toolbarDisabled}
-        >
-          <i className="fas fa-image text-sm" />
-        </ToolbarButton>
+        {/* Text Formatting Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            active={editor.isActive('bold')}
+            title="Bold"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-bold" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            active={editor.isActive('italic')}
+            title="Italic" 
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-italic" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            active={editor.isActive('underline')}
+            title="Underline"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-underline" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            active={editor.isActive('strike')}
+            title="Strikethrough"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-strikethrough" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleHighlight().run()}
+            active={editor.isActive('highlight')}
+            title="Highlight"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-highlighter" />
+          </ToolbarButton>
+        </div>
         
-        <ToolbarDivider />
+        {/* List Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            active={editor.isActive('bulletList')}
+            title="Bullet List"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-list-ul" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            active={editor.isActive('orderedList')}
+            title="Numbered List"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-list-ol" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleTaskList().run()}
+            active={editor.isActive('taskList')}
+            title="Task List"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-tasks" />
+          </ToolbarButton>
+        </div>
         
-        <ToolbarDropdown
-          title="Text Align"
-          value={editor.isActive({ textAlign: 'left' }) ? 'left' :
-                 editor.isActive({ textAlign: 'center' }) ? 'center' :
-                 editor.isActive({ textAlign: 'right' }) ? 'right' :
-                 editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'}
-          onChange={(value) => {
-            if (toolbarDisabled) return;
-            editor.chain().focus().setTextAlign(value as 'left' | 'center' | 'right' | 'justify').run();
-          }}
-          options={[
-            { value: 'left', label: 'Align Left' },
-            { value: 'center', label: 'Align Center' },
-            { value: 'right', label: 'Align Right' },
-            { value: 'justify', label: 'Justify' },
-          ]}
-          disabled={toolbarDisabled}
-        />
+        {/* Block Elements Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            active={editor.isActive('blockquote')}
+            title="Blockquote"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-quote-right" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().setHorizontalRule().run()}
+            title="Horizontal Rule"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-minus" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => {
+              const diagramContent = 'graph TD\n    A[Start] --> B[Process]\n    B --> C[End]';
+              editor.chain().focus().setCodeBlock({ language: 'mermaid' }).insertContent(diagramContent).run();
+            }}
+            active={editor.isActive('codeBlock', { language: 'mermaid' })}
+            title="Insert Diagram"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-project-diagram" />
+          </ToolbarButton>
+        </div>
+        
+        {/* Media Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarButton 
+            onClick={() => {
+              const url = window.prompt('Enter the URL:');
+              if (url) {
+                if (editor.isActive('link')) {
+                  editor.chain().focus().unsetLink().run();
+                }
+                editor.chain().focus().setLink({ href: url }).run();
+              }
+            }}
+            active={editor.isActive('link')}
+            title="Insert Link"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-link" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => {
+              const url = window.prompt('Enter the image URL:');
+              if (url) {
+                editor.chain().focus().setImage({ src: url }).run();
+              }
+            }}
+            title="Insert Image"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-image" />
+          </ToolbarButton>
+        </div>
+        
+        {/* Alignment Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarDropdown
+            title="Text Align"
+            value={editor.isActive({ textAlign: 'left' }) ? 'left' :
+                   editor.isActive({ textAlign: 'center' }) ? 'center' :
+                   editor.isActive({ textAlign: 'right' }) ? 'right' :
+                   editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'}
+            onChange={(value) => {
+              if (toolbarDisabled) return;
+              editor.chain().focus().setTextAlign(value as 'left' | 'center' | 'right' | 'justify').run();
+            }}
+            options={[
+              { value: 'left', label: 'Align Left' },
+              { value: 'center', label: 'Align Center' },
+              { value: 'right', label: 'Align Right' },
+              { value: 'justify', label: 'Justify' },
+            ]}
+            disabled={toolbarDisabled}
+          />
+        </div>
       </div>
     </div>
   );
@@ -310,7 +308,7 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
     const codeBlocks: {[key: string]: string} = {};
     let codeBlockCount = 0;
     
-    normalizedMarkdown = normalizedMarkdown.replace(/```([a-z]*)\n([\s\S]*?)```/g, (match, language, content) => {
+    normalizedMarkdown = normalizedMarkdown.replace(/```([a-z]*)\n([\s\S]*?)```/g, (match: string, language: string, content: string) => {
       const placeholder = `CODE_BLOCK_PLACEHOLDER_${codeBlockCount}`;
       
       // Create properly formatted code block with language header if specified
@@ -324,7 +322,7 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         // Preserve leading spaces and tabs (crucial for code formatting)
-        .replace(/^([ \t]+)(.*)$/gm, (match, indent, line) => {
+        .replace(/^([ \t]+)(.*)$/gm, (match: string, indent: string, line: string) => {
           // Calculate the indentation level
           const indentLevel = indent.replace(/\t/g, '  ').length / 2;
           return `<span class="indented-code" style="padding-left: ${indentLevel}em;">${line}</span>`;
@@ -337,27 +335,27 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
     });
     
     // Special handling for mermaid diagrams
-    normalizedMarkdown = normalizedMarkdown.replace(/CODE_BLOCK_PLACEHOLDER_(\d+)/g, (match, index) => {
+    normalizedMarkdown = normalizedMarkdown.replace(/CODE_BLOCK_PLACEHOLDER_(\d+)/g, (match: string, index: string) => {
       if (codeBlocks[match]?.includes('language-mermaid')) {
         const content = codeBlocks[match]
           .replace(/<div class="code-block-header">mermaid<\/div>/, '')
-          .replace(/<\/?pre.*?>|<code.*?>|<\/code>/g, '')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/<span class="indented-code".*?>(.*?)<\/span>/g, '$1')
+          .replace(/<pre><code class="language-mermaid">/, '')
+          .replace(/<\/code><\/pre>/, '')
           .trim();
-        return `<div class="diagram-container"><div class="mermaid">${content}</div></div>`;
+        
+        return `<div class="mermaid">${content}</div>`;
       }
-      return match;
+      
+      return codeBlocks[match] || match;
     });
     
     // Process inline code
     normalizedMarkdown = normalizedMarkdown.replace(/`([^`]+)`/g, '<code class="enhanced-code">$1</code>');
     
     // Process headers
-    normalizedMarkdown = normalizedMarkdown.replace(/^(#{1,6})\s+(.+)$/gm, (match, hashes, content) => {
+    normalizedMarkdown = normalizedMarkdown.replace(/^(#{1,6})\s+(.+)$/gm, (match: string, hashes: string, content: string) => {
       const level = hashes.length;
-      return `<h${level} class="enhanced-heading level-${level}">${content.trim()}</h${level}>`;
+      return `<h${level} class="enhanced-heading">${content.trim()}</h${level}>`;
     });
     
     // Process bold and italic
@@ -604,7 +602,7 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
           .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="enhanced-link">$1</a>');
         
         // Re-insert code blocks
-        processedLine = processedLine.replace(/CODE_BLOCK_PLACEHOLDER_(\d+)/g, (match) => {
+        processedLine = processedLine.replace(/CODE_BLOCK_PLACEHOLDER_(\d+)/g, (match: string, index: string) => {
           return codeBlocks[match] || match;
         });
         
@@ -875,13 +873,7 @@ const PRDTipTapEditor = ({
         heading: {
           levels: [1, 2, 3, 4],
           HTMLAttributes: {
-            class: 'enhanced-heading',
-            // Add level-specific class when rendered
-            renderHTML: (attributes: { level: number }) => {
-              return {
-                class: `enhanced-heading level-${attributes.level}`,
-              };
-            },
+            class: 'enhanced-heading'
           }
         },
         paragraph: {
@@ -1032,6 +1024,11 @@ const PRDTipTapEditor = ({
             styles.markdownPreview, // Always apply markdown preview styles
             "markdown-editor" // Always apply markdown editor class
           )}
+          style={{
+            paddingTop: '0px',
+            paddingLeft: '30px',
+            paddingRight: '30px'
+          }}
         />
       </div>
     </div>
