@@ -477,49 +477,56 @@ const PRDWorkbench = () => {
         {/* Header */}
         <div className="flex justify-between items-center p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0">
           <div className="flex items-center">
-            <h2 className="text-lg font-semibold text-bolt-elements-textPrimary ml-2">
-              PRD Workbench
-            </h2>
+            <h1 className="text-xl font-semibold text-bolt-elements-textPrimary ml-2">
+              PRD Editor
+            </h1>
             {editorState.hasUnsavedChanges && (
-              <span className="ml-2 text-xs text-bolt-elements-textTertiary">(Unsaved changes)</span>
+              <span className="ml-2 text-md text-bolt-elements-textTertiary">(Unsaved changes)</span>
             )}
           </div>
           {/* Controls */}
-          <div className="flex items-center space-x-1">
-            {/* Zoom */}
-            <div className="flex items-center mr-2">
-               <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
-                <div className="i-ph:minus-circle w-5 h-5" />
-              </IconButton>
-               <span className="mx-2 text-sm text-bolt-elements-textSecondary">{Math.round(zoomLevel * 100)}%</span>
-               <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
-                <div className="i-ph:plus-circle w-5 h-5" />
-              </IconButton>
-            </div>
-            {/* Save */}
-            <IconButton
-              title="Save PRD"
+          <div className="flex items-center gap-4">
+            {/* Save Button - Prominently Displayed */}
+            <button
               onClick={saveFullPrd}
-              disabled={!editorState.hasUnsavedChanges || !editorInstance} // Use store state
+              disabled={!editorState.hasUnsavedChanges || !editorInstance}
               className={classNames(
-                "text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary",
-                (!editorState.hasUnsavedChanges || !editorInstance) ? "opacity-50 cursor-not-allowed" : ""
+                "flex items-center justify-center gap-2 rounded-md transition-all duration-200 font-medium py-2 px-4 min-w-[90px]",
+                editorState.hasUnsavedChanges && editorInstance
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md transform hover:scale-105"
+                  : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
               )}
+              title="Save PRD"
             >
               <div className="i-ph:floppy-disk w-5 h-5" />
-            </IconButton>
-            {/* Export MD */}
-            <IconButton title="Export as Markdown" onClick={exportMarkdown} disabled={!editorContent && !prdDocument} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:file-markdown w-5 h-5" />
-            </IconButton>
-            {/* Export HTML */}
-            <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:file-html w-5 h-5" />
-            </IconButton>
-            {/* Close */}
-            <IconButton title="Close PRD Workbench" onClick={() => workbenchStore.showWorkbench.set(false)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2">
-              <div className="i-ph:x w-5 h-5" />
-            </IconButton>
+              <span>Save</span>
+            </button>
+            
+            {/* Other controls grouped */}
+            <div className="flex items-center gap-2 border-l border-bolt-elements-borderColor pl-4">
+              {/* Zoom */}
+              <div className="flex items-center">
+                <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
+                  <div className="i-ph:minus-circle w-5 h-5" />
+                </IconButton>
+                <span className="mx-2 text-sm text-bolt-elements-textSecondary">{Math.round(zoomLevel * 100)}%</span>
+                <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
+                  <div className="i-ph:plus-circle w-5 h-5" />
+                </IconButton>
+              </div>
+              
+              {/* Export options */}
+              <div className="flex items-center gap-1 ml-2">
+                <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                  <div className="i-ph:file-html w-5 h-5" />
+                </IconButton>
+              </div>
+              
+              {/* Close */}
+              <IconButton title="Close PRD Workbench" onClick={() => workbenchStore.showWorkbench.set(false)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2">
+                <div className="i-ph:x w-5 h-5" />
+              </IconButton>
+            </div>
           </div>
         </div>
 

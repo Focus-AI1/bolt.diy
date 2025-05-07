@@ -279,14 +279,14 @@ Description: ${ticket.description.substring(0, 100)}...`
     }
 
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-    const updatePrompt = `Tickets have been updated. Please update the PRD considering these changes, ensuring the entire document is returned.
+    const updatePrompt = `We've detected updates to the requirement tickets. Please fix/refine the PRD to incorporate these changes while preserving the document's integrity.
 
-IMPORTANT: The existing PRD may have been manually edited by the user. When generating the updated PRD:
-1. Identify sections directly affected by the ticket changes.
-2. For affected sections, completely REPLACE the old content with the new, updated content reflecting the ticket changes. DO NOT append.
-3. Preserve the exact titles and content of all sections NOT affected by the ticket changes.
-4. Ensure ALL standard PRD sections (Executive Summary, Problem Statement, User Requirements, etc.) are present in the output. If a standard section was not affected by tickets and has existing content, preserve it. If it was affected, update it. If it's a standard section not previously present or without relevant updates, include its title and a brief note like 'No updates based on current context.' DO NOT OMIT ANY STANDARD SECTION.
-5. Return the COMPLETE PRD document, including ALL standard sections (updated, preserved, or with notes), wrapped in <prd_document> tags.
+IMPORTANT: Since the existing PRD may contain manual user edits, please follow these precise guidelines:
+1. Analyze which sections are directly impacted by the ticket modifications and focus your updates there.
+2. For affected sections, perform a complete REPLACEMENT of the content with refined text that reflects the ticket changes. Avoid simply appending to existing content.
+3. Meticulously preserve both titles and content of all unaffected sections exactly as they currently exist.
+4. Ensure the document maintains ALL standard PRD sections. For unaffected sections with existing content, preserve them intact. For affected sections, update accordingly. For any standard section not present or lacking relevant updates, include the section with a brief contextual note.
+5. Return the COMPLETE PRD document wrapped in <prd_document> tags, including all standard sections whether updated, preserved, or annotated.
 
 ${prdContext}
 
@@ -512,13 +512,14 @@ ${ticketsContext}
 
       // Create message content array with text and images
       // Vercel AI SDK expects content as a string, or structured data for multimodal
-      let messageContent: string | MessageContent[] = currentInput; // Start with text content
+      const prdReminder = "Please provide updated full PRD content including all sections in your response (Most Important!).";
+      let messageContent: string | MessageContent[] = currentInput ? `${currentInput}\n\n${prdReminder}` : prdReminder; // Add reminder to text content
 
       if (imageDataList.length > 0) {
          // Format for multimodal input if API supports it
          // Assuming API handles { type: 'text', text: ... } and { type: 'image', image: ... } structure
          // passed via the `data` field in handleSubmit options.
-         const contentParts: MessageContent[] = [{ type: 'text', text: currentInput }];
+         const contentParts: MessageContent[] = [{ type: 'text', text: currentInput ? `${currentInput}\n\n${prdReminder}` : prdReminder }];
          imageDataList.forEach(imageData => {
            contentParts.push({ type: 'image', image: imageData });
          });
