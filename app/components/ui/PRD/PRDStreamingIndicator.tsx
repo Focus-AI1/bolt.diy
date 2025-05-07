@@ -299,7 +299,7 @@ const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
               <path fillRule="evenodd" clipRule="evenodd" d="M8 7C7.44772 7 7 7.44772 7 8V16C7 16.5523 7.44772 17 8 17H10C10.5523 17 11 16.5523 11 16V8C11 7.44772 10.5523 7 10 7H8ZM5 8C5 6.34315 6.34315 5 8 5H10C11.6569 5 13 6.34315 13 8V16C13 17.6569 11.6569 19 10 19H8C6.34315 19 5 17.6569 5 16V8Z" fill="currentColor" />
               <path fillRule="evenodd" clipRule="evenodd" d="M1 8C1 6.34315 2.34315 5 4 5H6C7.65685 5 9 6.34315 9 8V16C9 17.6569 7.65685 19 6 19H4C2.34315 19 1 17.6569 1 16V8ZM4 7C3.44772 7 3 7.44772 3 8V16C3 16.5523 3.44772 17 4 17H6C6.55228 17 7 16.5523 7 16V8C7 7.44772 6.55228 7 6 7H4Z" fill="currentColor" />
             </svg>
-            <span className="whitespace-nowrap">AI Processing</span>
+            <span className="whitespace-nowrap">PRD Processing</span>
           </motion.div>
         </div>
         
