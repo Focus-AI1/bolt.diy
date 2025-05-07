@@ -623,26 +623,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             <div className="flex flex-col h-full">
                               <div className="flex flex-col flex-1 overflow-hidden">
                                 <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0 sm:px-6 sm:pt-6">
-                                  {/* Display PRD update notification */}
-                                  {showPRDUpdateNotification && (
-                                    <UpdateNotification
-                                      type="prd"
-                                      details={prdUpdateDetails}
-                                      onRegenerateClick={handleRegeneratePrototype || (() => {})}
-                                      onValidateClick={handleValidatePrototype || (() => {})}
-                                    />
-                                  )}
-
-                                  {/* Display Ticket update notification */}
-                                  {showTicketUpdateNotification && (
-                                    <UpdateNotification
-                                      type="ticket"
-                                      details={ticketUpdateDetails}
-                                      onRegenerateClick={handleRegeneratePrototype || (() => {})}
-                                      onValidateClick={handleValidatePrototype || (() => {})}
-                                    />
-                                  )}
-                                  
                                   <Messages
                                     ref={messageRef}
                                     messages={messages}
@@ -693,6 +673,26 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       />
                     )}
                   </div>
+                  {showPRDUpdateNotification && (
+                    <div className="px-4 pb-3 flex-shrink-0">
+                      <UpdateNotification
+                        type="ticket" // Ticket is CORRECT here!
+                        details={prdUpdateDetails}
+                        onRegenerateClick={handleRegeneratePrototype || (() => {})}
+                        onValidateClick={handleValidatePrototype || (() => {})}
+                        />
+                    </div>
+                  )}
+                  {showTicketUpdateNotification && (
+                    <div className="px-4 pb-3 flex-shrink-0">
+                      <UpdateNotification
+                        type="prd" // PRD is CORRECT here!
+                        details={ticketUpdateDetails}
+                        onRegenerateClick={handleRegeneratePrototype || (() => {})}
+                        onValidateClick={handleValidatePrototype || (() => {})}
+                        />
+                    </div>
+                  )}
                   {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
                   <div
                     className={classNames(

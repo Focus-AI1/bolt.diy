@@ -127,6 +127,16 @@ export const cleanStreamingContent = (content: string): string => {
                 /\bcontinues?\s+as\s+before\b/i.test(text) ||
                 /\bstays?\s+the\s+same\b/i.test(text) ||
                 /\bas\s+(?:before|above|earlier|previously)\b/i.test(text);
+            
+            // NARRATIVE PROTECTION: Don't flag text with sentences about people or personas
+            const containsNarrativeIndicators = 
+                /\b(?:named|customer|user|visit|person|company|compan(?:y|ies)|launch|implement|integrat|appreciat|present|enable|disable|feature)\b/i.test(text) ||
+                /\b(?:minute|second|compared|typical|receive|proper|option|process|approach)\b/i.test(text);
+                
+            // If text has narrative indicators, don't mark as placeholder regardless of other factors
+            if (containsNarrativeIndicators) {
+                return false;
+            }
                 
             return (hasContextWord && hasPlaceholderKeyword) || 
                    (hasStructuralIndicator && hasPlaceholderKeyword) ||
@@ -383,10 +393,20 @@ const removePlaceholderText = (content: string): string => {
         // Skip empty lines
         if (!trimmedLine) return true;
         
+        // Check for narrative indicators that should be preserved
+        const containsNarrativeIndicators = 
+            /\b(?:named|customer|user|visit|person|company|compan(?:y|ies)|launch|implement|integrat|appreciat|present|enable|disable|feature)\b/i.test(trimmedLine) ||
+            /\b(?:minute|second|compared|typical|receive|proper|option|process|approach)\b/i.test(trimmedLine);
+            
+        // Always preserve narrative content
+        if (containsNarrativeIndicators) {
+            return true;
+        }
+        
         // Comprehensive check for placeholder text
         // Match patterns like "[Previous sections continue unchanged...]", "...content remains the same...", etc.
         const placeholderPatterns = [
-            /\[\s*(?:previous|rest of|other|unchanged|remaining|existing).*?(?:section|content|document|prd).*?(?:continue|remain|same|unchanged|before|identical|exact).*?\]/i,
+            /\[\s*(?:previous|rest of|other|unchanged|remaining|existing).*?(?:section|content|document|prd).*?(?:continue|remain|same|before|identical|exact).*?\]/i,
             /\[\s*(?:section|content|document|prd).*?(?:unchanged|continue|remain|same|before|identical|exact).*?\]/i,
             /\[\s*\.{3,}\s*\]/i,
             /\[.*?\b(continue|remain|same|unchanged|before|identical|exact).*?\]/i,
@@ -575,8 +595,85 @@ function cleanRepetitiveListItems(content: string): string {
         }
     }
     
+    // Clean nested list items that are duplicated in parent items
+    content = cleanNestedListDuplication(content);
+    
     // Then, fix ordered list numbering
     return fixOrderedListNumbering(content);
+}
+
+/**
+ * Cleans cases where bullet points are duplicated within their parent numbered list items
+ * @param content Markdown content to clean
+ * @returns Cleaned content without duplicated nested lists
+ */
+function cleanNestedListDuplication(content: string): string {
+    const lines = content.split('\n');
+    const result: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const currentLine = lines[i];
+        
+        // Check if this is a numbered list item that might contain duplicated bullet points
+        const numberedItemMatch = currentLine.match(/^(\s*)(\d+\.)\s+(.+)$/);
+        
+        if (numberedItemMatch) {
+            const [, indent, marker, text] = numberedItemMatch;
+            
+            // Check if the text contains bullet points that might be duplicated in subsequent lines
+            const bulletPointsInText = text.match(/(?:[-*+]\s+[^-*+]+)+/g);
+            
+            if (bulletPointsInText) {
+                // Add the numbered item without the bullet points
+                const cleanedText = text.replace(/(?:[-*+]\s+[^-*+]+)+/g, '').trim();
+                result.push(`${indent}${marker} ${cleanedText}`);
+                
+                // Look ahead to see if the next lines are bullet points with the same content
+                let j = i + 1;
+                const nestedIndent = indent + '  '; // Expected indentation for nested items
+                
+                // Skip adding duplicated bullet points that already appear in the parent
+                while (j < lines.length) {
+                    const nextLine = lines[j];
+                    const bulletMatch = nextLine.match(/^(\s*)([-*+])\s+(.+)$/);
+                    
+                    if (bulletMatch && bulletMatch[1].length > indent.length) {
+                        // This is a nested bullet point
+                        const bulletText = bulletMatch[3].trim();
+                        
+                        // Check if this bullet point is duplicated in the parent text
+                        let isDuplicated = false;
+                        for (const bp of bulletPointsInText || []) {
+                            if (bp.includes(bulletText)) {
+                                isDuplicated = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!isDuplicated) {
+                            // Not duplicated, add it to the result
+                            result.push(nextLine);
+                        }
+                        j++;
+                    } else {
+                        // Not a nested bullet point or indentation doesn't match, stop looking
+                        break;
+                    }
+                }
+                
+                // Skip the lines we've processed
+                i = j - 1;
+            } else {
+                // No bullet points in the text, add the line as is
+                result.push(currentLine);
+            }
+        } else {
+            // Not a numbered list item, add the line as is
+            result.push(currentLine);
+        }
+    }
+    
+    return result.join('\n');
 }
 
 /**
@@ -592,6 +689,7 @@ function fixOrderedListNumbering(content: string): string {
     // Track list contexts at different indentation levels
     const listCounters: Map<number, number> = new Map();
     const listTypes: Map<number, 'ordered' | 'unordered'> = new Map();
+    let lastOrderedListLevel: number | null = null;
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -604,31 +702,62 @@ function fixOrderedListNumbering(content: string): string {
             const indentLevel = indent.length;
             const isOrdered = marker.includes('.');
             
-            // Determine list type at this indentation level
-            if (!listTypes.has(indentLevel) || 
-                (i > 0 && !lines[i-1].trim().match(/^\s*(\d+\.|[-*+])\s+/))) {
-                // Start of a new list or after a break in the list
-                listTypes.set(indentLevel, isOrdered ? 'ordered' : 'unordered');
-                listCounters.set(indentLevel, 1);
-            } else if (listTypes.get(indentLevel) === 'ordered') {
-                // Continue an existing ordered list
-                listCounters.set(indentLevel, (listCounters.get(indentLevel) || 0) + 1);
-            }
-            
-            // Reset counters for deeper indentation levels when we encounter a less indented item
-            for (const [level] of listCounters.entries()) {
-                if (level > indentLevel) {
-                    listCounters.delete(level);
-                    listTypes.delete(level);
-                }
-            }
-            
-            // Rebuild the line with correct numbering if it's an ordered list
+            // Handle ordered lists
             if (isOrdered) {
+                // Determine if this is a new list or continuing an existing one
+                const isNewList = !listTypes.has(indentLevel) || 
+                    (i > 0 && !lines[i-1].trim().match(/^\s*(\d+\.|[-*+])\s+/)) ||
+                    (listTypes.get(indentLevel) !== 'ordered');
+                
+                if (isNewList) {
+                    // Start a new ordered list
+                    listTypes.set(indentLevel, 'ordered');
+                    listCounters.set(indentLevel, 1);
+                    lastOrderedListLevel = indentLevel;
+                } else {
+                    // Continue existing ordered list
+                    listCounters.set(indentLevel, (listCounters.get(indentLevel) || 0) + 1);
+                    lastOrderedListLevel = indentLevel;
+                }
+                
+                // Reset counters for deeper indentation levels
+                for (const [level] of listCounters.entries()) {
+                    if (level > indentLevel) {
+                        listCounters.delete(level);
+                        listTypes.delete(level);
+                    }
+                }
+                
+                // Rebuild with correct numbering
                 const counter = listCounters.get(indentLevel) || 1;
                 result.push(`${indent}${counter}. ${text}`);
-            } else {
-                result.push(line); // Keep unordered list items as is
+            } 
+            // Handle unordered lists
+            else {
+                // For unordered lists, check if we're inside an ordered list
+                if (lastOrderedListLevel !== null && indentLevel > lastOrderedListLevel) {
+                    // This is a nested bullet under an ordered item
+                    listTypes.set(indentLevel, 'unordered');
+                    result.push(line); // Keep as is
+                } else {
+                    // This is a top-level bullet or a bullet after the ordered list ended
+                    lastOrderedListLevel = null;
+                    
+                    // Start a new unordered list at this level
+                    listTypes.set(indentLevel, 'unordered');
+                    
+                    // Reset counters for this and deeper levels
+                    for (const [level] of listCounters.entries()) {
+                        if (level >= indentLevel) {
+                            listCounters.delete(level);
+                            if (level > indentLevel) {
+                                listTypes.delete(level);
+                            }
+                        }
+                    }
+                    
+                    result.push(line); // Keep unordered list items as is
+                }
             }
         } else {
             // Not a list item - check if it's a blank line
@@ -637,10 +766,11 @@ function fixOrderedListNumbering(content: string): string {
                 const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
                 const nextIsListItem = nextLine.match(/^\s*(\d+\.|[-*+])\s+/);
                 
-                // If next line isn't a list item or has different indentation, reset counters
+                // If next line isn't a list item, reset all list tracking
                 if (!nextIsListItem) {
                     listCounters.clear();
                     listTypes.clear();
+                    lastOrderedListLevel = null;
                 }
             }
             
@@ -870,6 +1000,135 @@ export const sortSectionsByNumericalPrefix = (sections: PRDSection[]): PRDSectio
     // Otherwise, keep original order
     return 0;
   });
+};
+
+// Helper function to renumber sections after deletion
+export const renumberSectionsAfterDeletion = (sections: PRDSection[]): PRDSection[] => {
+  // First sort the sections by their current numerical prefix
+  const sortedSections = sortSectionsByNumericalPrefix([...sections]);
+  
+  // Create a new array to hold the renumbered sections
+  const renumberedSections: PRDSection[] = [];
+  
+  // Track sections with numerical prefixes and those without
+  const numericalSections: PRDSection[] = [];
+  const nonNumericalSections: PRDSection[] = [];
+  
+  // Separate sections with numerical prefixes from those without
+  sortedSections.forEach(section => {
+    const match = section.title.match(/^(\d+)\.\s(.*)/);
+    if (match) {
+      numericalSections.push({
+        ...section,
+        _originalTitle: section.title, // Store original for reference
+        _titleWithoutNumber: match[2]  // Store title without number
+      } as PRDSection & { _originalTitle: string; _titleWithoutNumber: string });
+    } else {
+      nonNumericalSections.push(section);
+    }
+  });
+  
+  // Renumber the numerical sections sequentially
+  numericalSections.forEach((section, index) => {
+    const newNumber = index + 1;
+    const newTitle = `${newNumber}. ${(section as any)._titleWithoutNumber}`;
+    
+    // Create a new section with the updated title
+    renumberedSections.push({
+      ...section,
+      title: newTitle
+    });
+    
+    // Clean up temporary properties
+    delete (renumberedSections[renumberedSections.length - 1] as any)._originalTitle;
+    delete (renumberedSections[renumberedSections.length - 1] as any)._titleWithoutNumber;
+  });
+  
+  // Add non-numerical sections at the end (maintaining their original order)
+  renumberedSections.push(...nonNumericalSections);
+  
+  return renumberedSections;
+};
+
+// Helper function to update section references in content after renumbering
+export const updateSectionReferencesInContent = (
+  sections: PRDSection[], 
+  originalSections: PRDSection[]
+): PRDSection[] => {
+  // Create a mapping from old section numbers to new ones
+  const numberMapping = new Map<string, string>();
+  
+  // Build the mapping by comparing original titles with new titles
+  originalSections.forEach(originalSection => {
+    const originalMatch = originalSection.title.match(/^(\d+)\.\s/);
+    if (originalMatch) {
+      const originalNumber = originalMatch[1];
+      
+      // Find the corresponding new section
+      const newSection = sections.find(s => 
+        s.id === originalSection.id || 
+        s.title.replace(/^\d+\.\s/, '') === originalSection.title.replace(/^\d+\.\s/, '')
+      );
+      
+      if (newSection) {
+        const newMatch = newSection.title.match(/^(\d+)\.\s/);
+        if (newMatch) {
+          const newNumber = newMatch[1];
+          if (originalNumber !== newNumber) {
+            numberMapping.set(originalNumber, newNumber);
+          }
+        }
+      }
+    }
+  });
+  
+  // If we don't have any mappings, no need to update references
+  if (numberMapping.size === 0) {
+    return sections;
+  }
+  
+  // Update references in all section content
+  return sections.map(section => {
+    let updatedContent = section.content;
+    
+    // Replace references like "Section X" or "section X" with updated numbers
+    numberMapping.forEach((newNum, oldNum) => {
+      const sectionRefRegex = new RegExp(`([Ss]ection\\s+)(${oldNum})([^\\d])`, 'g');
+      updatedContent = updatedContent.replace(sectionRefRegex, `$1${newNum}$3`);
+      
+      // Also replace references like "X." at the beginning of a line (for nested lists)
+      const listItemRegex = new RegExp(`(^|\\n)\\s*(${oldNum})\\.\\s`, 'g');
+      updatedContent = updatedContent.replace(listItemRegex, `$1 ${newNum}. `);
+    });
+    
+    return {
+      ...section,
+      content: updatedContent
+    };
+  });
+};
+
+// Combined function to handle section deletion and renumbering
+export const handleSectionDeletion = (
+  sections: PRDSection[], 
+  sectionIdToDelete: string
+): PRDSection[] => {
+  // Store original sections for reference mapping
+  const originalSections = [...sections];
+  
+  // Remove the specified section
+  const filteredSections = sections.filter(section => section.id !== sectionIdToDelete);
+  
+  // If no section was removed or there are no sections left, return as is
+  if (filteredSections.length === sections.length || filteredSections.length === 0) {
+    return filteredSections;
+  }
+  
+  // Renumber the remaining sections
+  const renumberedSections = renumberSectionsAfterDeletion(filteredSections);
+  
+  // Update references to sections in content
+  return updateSectionReferencesInContent(renumberedSections, originalSections);
 };
 
 // Helper function for PRDChat.client.tsx to parse markdown into PRD document structure, merging with an existing PRD
