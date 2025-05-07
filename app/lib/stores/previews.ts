@@ -282,6 +282,18 @@ export class PreviewsStore {
     this.#refreshTimeouts.set(previewId, timeout);
   }
 
+  refreshAllPreviews() {
+    const previews = this.previews.get();
+
+    for (const preview of previews) {
+      const previewId = this.getPreviewId(preview.baseUrl);
+
+      if (previewId) {
+        this.broadcastFileChange(previewId);
+      }
+    }
+  }
+
   // Generate a unique ID for this tab
   private _getTabId(): string {
     if (typeof window !== 'undefined') {

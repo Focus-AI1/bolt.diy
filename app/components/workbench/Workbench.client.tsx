@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { memo, useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { Popover, Transition } from '@headlessui/react';
 import { diffLines, type Change } from 'diff';
@@ -25,6 +25,7 @@ import { Preview } from './Preview';
 import useViewport from '~/lib/hooks';
 import { PushToGitHubDialog } from '~/components/@settings/tabs/connections/components/PushToGitHubDialog';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Terminal as XTerm } from '@xterm/xterm';
 
 interface WorkspaceProps {
   chatStarted?: boolean;
@@ -283,6 +284,8 @@ export const Workbench = memo(
     const [isSyncing, setIsSyncing] = useState(false);
     const [isPushDialogOpen, setIsPushDialogOpen] = useState(false);
     const [fileHistory, setFileHistory] = useState<Record<string, FileHistory>>({});
+    const terminalRef = useRef<HTMLDivElement>(null);
+    const xtermRef = useRef<XTerm | null>(null);
 
     // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
@@ -323,9 +326,16 @@ export const Workbench = memo(
     }, []);
 
     const onFileSave = useCallback(() => {
-      workbenchStore.saveCurrentDocument().catch(() => {
-        toast.error('Failed to update file content');
-      });
+      workbenchStore
+        .saveCurrentDocument()
+        .then(() => {
+          // Explicitly refresh all previews after a file save
+          const previewStore = usePreviewStore();
+          previewStore.refreshAllPreviews();
+        })
+        .catch(() => {
+          toast.error('Failed to update file content');
+        });
     }, []);
 
     const onFileReset = useCallback(() => {
@@ -351,6 +361,45 @@ export const Workbench = memo(
       workbenchStore.setSelectedFile(filePath);
       workbenchStore.currentView.set('diff');
     }, []);
+
+    useEffect(() => {
+      if (!terminalRef.current) return;
+      
+      const handleAutoInstall = async (event: CustomEvent) => {
+        const terminal = event.detail.terminal;
+        xtermRef.current = terminal;
+        
+        try {
+          // Execute npm install
+          await actionRunner.executeCommand('npm install', {
+            onData: (data) => terminal.write(data),
+            onError: (data) => terminal.write(data),
+            onExit: (code) => {
+              if (code === 0) {
+                terminal.writeln('\r\n\x1b[32mDependencies installed successfully!\x1b[0m');
+                terminal.writeln('\r\n\x1b[33mStarting development server...\x1b[0m');
+                
+                // After successful installation, run the dev server
+                actionRunner.executeCommand('npm run dev', {
+                  onData: (data) => terminal.write(data),
+                  onError: (data) => terminal.write(data)
+                });
+              } else {
+                terminal.writeln('\r\n\x1b[31mFailed to install dependencies. Please try manually with "npm install".\x1b[0m');
+              }
+            }
+          });
+        } catch (error) {
+          terminal.writeln(`\r\n\x1b[31mError: ${error.message}\x1b[0m`);
+        }
+      };
+      
+      terminalRef.current.addEventListener('terminal:auto-install', handleAutoInstall as EventListener);
+      
+      return () => {
+        terminalRef.current?.removeEventListener('terminal:auto-install', handleAutoInstall as EventListener);
+      };
+    }, [actionRunner]);
 
     return (
       chatStarted && (

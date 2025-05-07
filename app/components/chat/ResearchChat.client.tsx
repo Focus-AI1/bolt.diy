@@ -7,7 +7,7 @@ import { Messages } from './Messages.client';
 import { SendButton } from './SendButton.client';
 import { IconButton } from '~/components/ui/IconButton';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import { streamingState } from '~/lib/stores/streaming';
+import { researchStreamingState } from '~/lib/stores/streaming';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { createScopedLogger } from '~/utils/logger';
 import { createSampler } from '~/utils/sampler';
@@ -240,7 +240,7 @@ const ResearchChat = ({ backgroundMode = false }) => {
     initialMessages: initialMessages,
     onFinish: (message) => {
       setIsLoading(false);
-      streamingState.set(false);
+      researchStreamingState.set(false);
       
       // Attempt to extract Research document if not already extracted
       const extractedResearch = extractResearchFromMessages([...chatMessages, message]);
@@ -271,14 +271,14 @@ const ResearchChat = ({ backgroundMode = false }) => {
     },
     onError: (error) => {
       setIsLoading(false);
-      streamingState.set(false);
+      researchStreamingState.set(false);
       toast.error(`Error: ${error.message}`);
     },
     onResponse: (response) => {
       // onResponse is called when the server response starts
       if (response.status === 200) {
         // We start streaming - track this state
-        streamingState.set(true);
+        researchStreamingState.set(true);
       }
     },
   });
@@ -657,7 +657,13 @@ const ResearchChat = ({ backgroundMode = false }) => {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden relative">
+    <div className={classNames(
+      "flex flex-col h-full transition-all duration-200 ease-in-out",
+      {
+        "mr-[calc(var(--workbench-width)_+_3rem)]": workbenchVisible,
+        "hidden": backgroundMode
+      }
+    )}>
       {/* Left side - Chat UI */}
       <div className="flex-1 flex flex-col w-full max-w-full overflow-hidden">
         {/* Chat Header */}
@@ -757,7 +763,7 @@ const ResearchChat = ({ backgroundMode = false }) => {
                       e.preventDefault();
                       stop();
                       setIsLoading(false);
-                      streamingState.set(false);
+                      researchStreamingState.set(false);
                     }}
                   >
                     <div className="i-ph:square text-lg"></div>

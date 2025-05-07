@@ -1,0 +1,21 @@
+.MainLayout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.HeaderContainer {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  height: var(--header-height);
+}
+
+.ContentContainer {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  height: calc(100vh - var(--header-height));
+} 
