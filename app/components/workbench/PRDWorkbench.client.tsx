@@ -503,32 +503,45 @@ const PRDWorkbench = () => {
             </button>
             
             {/* Other controls grouped */}
-            <div className="flex items-center gap-2 border-l border-bolt-elements-borderColor pl-4">
+            <div className="flex items-center gap-1 border-l border-bolt-elements-borderColor pl-4">
               {/* Zoom */}
-              <div className="flex items-center">
-                <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
-                  <div className="i-ph:minus-circle w-5 h-5" />
-                </IconButton>
-                <span className="mx-2 text-sm text-bolt-elements-textSecondary">{Math.round(zoomLevel * 100)}%</span>
-                <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
-                  <div className="i-ph:plus-circle w-5 h-5" />
-                </IconButton>
-              </div>
+              <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                <div className="i-ph:minus" />
+              </IconButton>
+              <span className="mx-2 text-sm text-bolt-elements-textSecondary">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                <div className="i-ph:plus" />
+              </IconButton>
+              <IconButton title="Reset Zoom" onClick={() => setZoomLevel(1.2)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
+                <div className="i-ph:frame-corners" />
+              </IconButton>
+
+              <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
               
               {/* Export options */}
-              <div className="flex items-center gap-1 ml-2">
-                <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-                  <div className="i-ph:file-html w-5 h-5" />
-                </IconButton>
-              </div>
+              <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                <div className="i-ph:file-html" />
+              </IconButton>
+              <IconButton title="Export as Markdown" onClick={exportMarkdown} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50 ml-1">
+                <div className="i-ph:file-md" />
+              </IconButton>
               
               {/* Close */}
               <IconButton title="Close PRD Workbench" onClick={() => workbenchStore.showWorkbench.set(false)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2">
-                <div className="i-ph:x w-5 h-5" />
+                <div className="i-ph:x" />
               </IconButton>
             </div>
           </div>
         </div>
+
+        {/* Streaming indicator - positioned below header, above content */}
+        {isStreaming && (
+          <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor">
+            <PRDStreamingIndicator />
+          </div>
+        )}
 
         {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden h-full">
@@ -560,8 +573,7 @@ const PRDWorkbench = () => {
                   )}
                    style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', minHeight: 'calc(100% - 2rem)' }}
                 >
-                  {/* Streaming indicator */}
-                  {isStreaming && <PRDStreamingIndicator />}
+                  {/* Remove streaming indicator from here since we moved it above */}
                   <PRDTipTapEditor
                     content={editorContent}
                     onChange={handleEditorChange}

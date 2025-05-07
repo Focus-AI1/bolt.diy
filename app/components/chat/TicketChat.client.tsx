@@ -216,6 +216,7 @@ const TicketChat = ({ backgroundMode = false }) => {
   const initialMessageProcessedRef = useRef(false);
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
+  const isStreaming = useStore(ticketStreamingState);
   const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory();
 
   // Get the needsUpdate status from the store
@@ -555,11 +556,84 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
        if (event.key === 'tickets' && event.newValue !== null) {
          workbenchStore.updateTickets();
        }
+       
+       // Handle sync trigger from TicketWorkbench
+       if (event.key === 'trigger_ticket_sync' && event.newValue !== null) {
+         try {
+           const syncData = JSON.parse(event.newValue);
+           if (syncData && syncData.message) {
+             // Only trigger if we're not already streaming
+             if (!isLoading && !isStreaming) {
+               logger.debug('Sync request received from TicketWorkbench');
+               
+               // Submit the sync message
+               append({
+                 role: 'user',
+                 content: syncData.message
+               });
+               
+               // Ensure chat started flag is set
+               if (!chatStarted) {
+                 setChatStarted(true);
+               }
+               
+               // Show workbench if needed
+               if (!backgroundMode && !workbenchStore.showWorkbench.get()) {
+                 workbenchStore.showWorkbench.set(true);
+               }
+               
+               // Clear the trigger after processing
+               sessionStorage.removeItem('trigger_ticket_sync');
+             } else {
+               logger.debug('Sync request ignored - chat is currently streaming');
+               // Optionally show toast message
+               if (!backgroundMode) {
+                 toast.info('Please wait for current generation to complete before syncing');
+               }
+             }
+           }
+         } catch (error) {
+           logger.error('Error processing sync trigger:', error);
+         }
+       }
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []); // No dependencies needed as workbenchStore methods are stable
+  }, [append, chatStarted, isLoading, isStreaming, backgroundMode]); // Added dependencies
+  
+  // Also check for sync trigger on initial mount
+  useEffect(() => {
+    // Check if there's a pending sync request
+    const pendingSyncData = sessionStorage.getItem('trigger_ticket_sync');
+    if (pendingSyncData && !isLoading && !isStreaming) {
+      try {
+        const syncData = JSON.parse(pendingSyncData);
+        if (syncData && syncData.message) {
+          logger.debug('Processing pending sync request on mount');
+          
+          // Submit the sync message with slight delay to ensure component is fully mounted
+          setTimeout(() => {
+            append({
+              role: 'user',
+              content: syncData.message
+            });
+            
+            // Ensure chat started flag is set
+            if (!chatStarted) {
+              setChatStarted(true);
+            }
+            
+            // Clear the trigger after processing
+            sessionStorage.removeItem('trigger_ticket_sync');
+          }, 300);
+        }
+      } catch (error) {
+        logger.error('Error processing pending sync trigger:', error);
+        sessionStorage.removeItem('trigger_ticket_sync');
+      }
+    }
+  }, [append, chatStarted, isLoading, isStreaming]); // Dependencies
 
   // Handle file upload button click
   const handleFileUpload = () => {
@@ -728,8 +802,6 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
       }
       return msg;
   }).filter(msg => msg.content); // Filter out potentially empty messages
-
-  const isStreaming = useStore(ticketStreamingState);
 
   return (
     // Main container styling aligned with PRDChat
