@@ -55,7 +55,7 @@ const PRDWorkbench = () => {
   const [prdDocument, setPrdDocument] = useState<ExtendedPRDDocument | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1.2);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
   const [isManuallyEdited, setIsManuallyEdited] = useState(false);
   const [editMode, setEditMode] = useState(true); // Default to edit mode
   const contentRef = useRef<HTMLDivElement>(null);
