@@ -32,6 +32,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-astro-basic-template',
     tags: ['astro', 'blog', 'performance'],
     icon: 'i-bolt:astro',
+    image: '/templates/astrotemplate.jpg'
   },
   {
     name: 'bolt-nextjs-shadcn',
@@ -40,6 +41,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-nextjs-shadcn-template',
     tags: ['nextjs', 'react', 'typescript', 'shadcn', 'tailwind'],
     icon: 'i-bolt:nextjs',
+    image: '/templates/nextjstemplate.jpg'
   },
   {
     name: 'bolt-qwik-ts',
@@ -48,6 +50,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-qwik-ts-template',
     tags: ['qwik', 'typescript', 'performance', 'resumable'],
     icon: 'i-bolt:qwik',
+    image: '/templates/qwiktemplate.jpg'
   },
   {
     name: 'bolt-remix-ts',
@@ -56,6 +59,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-remix-ts-template',
     tags: ['remix', 'typescript', 'fullstack', 'react'],
     icon: 'i-bolt:remix',
+    image: '/templates/remixtemplate.jpg'
   },
   {
     name: 'bolt-slidev',
@@ -64,6 +68,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-slidev-template',
     tags: ['slidev', 'presentation', 'markdown'],
     icon: 'i-bolt:slidev',
+    image: '/templates/slidev.png'
   },
   {
     name: 'bolt-sveltekit',
@@ -72,6 +77,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'bolt-sveltekit-template',
     tags: ['svelte', 'sveltekit', 'typescript'],
     icon: 'i-bolt:svelte',
+    image: '/templates/sveltekit.jpg'
   },
   {
     name: 'vanilla-vite',
@@ -80,6 +86,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/vanilla-vite-template',
     tags: ['vite', 'vanilla-js', 'minimal'],
     icon: 'i-bolt:vite',
+    image: '/templates/vanillavite.png'
   },
   {
     name: 'bolt-vite-react',
@@ -88,6 +95,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-vite-react-ts-template',
     tags: ['react', 'vite', 'frontend'],
     icon: 'i-bolt:react',
+    image: '/templates/reactvitetypescript.png'
   },
   {
     name: 'bolt-vite-ts',
@@ -96,6 +104,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-vite-ts-template',
     tags: ['vite', 'typescript', 'minimal'],
     icon: 'i-bolt:typescript',
+    image: '/templates/vitetypescript.svg'
   },
   {
     name: 'bolt-vue',
@@ -104,6 +113,7 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-vue-template',
     tags: ['vue', 'typescript', 'frontend'],
     icon: 'i-bolt:vue',
+    image: '/templates/vue.jpg'
   },
   {
     name: 'bolt-angular',
@@ -112,5 +122,6 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-angular-template',
     tags: ['angular', 'typescript', 'frontend', 'spa'],
     icon: 'i-bolt:angular',
+    image: '/templates/angular.webp'
   },
 ];
