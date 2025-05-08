@@ -15,12 +15,19 @@ const StarterTemplates = () => {
             href={`/git?url=https://github.com/${template.githubRepo}.git`}
             className="group flex flex-col rounded-lg overflow-hidden border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
-            {/* Placeholder image */}
+            {/* Template image or icon fallback */}
             <div className="h-40 bg-bolt-elements-background-depth-2 relative overflow-hidden">
-              {/* This will be replaced with actual images later */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className={`text-4xl ${template.icon}`}></div>
-              </div>
+              {template.image ? (
+                <img 
+                  src={template.image} 
+                  alt={template.label}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className={`text-4xl ${template.icon}`}></div>
+                </div>
+              )}
             </div>
             
             {/* Content area with flex-grow to push button to bottom */}
