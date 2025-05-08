@@ -10,9 +10,10 @@ const StarterTemplates = () => {
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {STARTER_TEMPLATES.map((template) => (
-          <div 
+          <a 
             key={template.name}
-            className="group flex flex-col rounded-lg overflow-hidden border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 hover:shadow-md transition-all duration-200"
+            href={`/git?url=https://github.com/${template.githubRepo}.git`}
+            className="group flex flex-col rounded-lg overflow-hidden border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             {/* Placeholder image */}
             <div className="h-40 bg-bolt-elements-background-depth-2 relative overflow-hidden">
@@ -45,14 +46,11 @@ const StarterTemplates = () => {
               </div>
             </div>
             
-            {/* Button always at the bottom */}
-            <a 
-              href={`/git?url=https://github.com/${template.githubRepo}.git`}
-              className="block w-full py-2 text-center text-sm font-medium bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundAccent hover:text-bolt-elements-item-contentAccent transition-colors duration-200"
-            >
+            {/* Button at the bottom */}
+            <div className="block w-full py-2 text-center text-sm font-medium bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary group-hover:bg-bolt-elements-item-backgroundAccent group-hover:text-bolt-elements-item-contentAccent transition-colors duration-200">
               Use Template
-            </a>
-          </div>
+            </div>
+          </a>
         ))}
       </div>
     </div>
