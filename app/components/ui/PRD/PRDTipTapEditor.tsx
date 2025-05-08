@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -8,11 +8,15 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Typography from '@tiptap/extension-typography';
 import Highlight from '@tiptap/extension-highlight';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
+import ListItem from '@tiptap/extension-list-item';
 import { classNames } from '~/utils/classNames';
 import styles from './PRDMarkdown.module.scss';
 import toolbarStyles from './PRDToolbar.module.scss';
+import { Extension } from '@tiptap/core';
+import { Plugin, PluginKey } from 'prosemirror-state';
+import { Decoration, DecorationSet } from 'prosemirror-view';
+import FontFamily from '@tiptap/extension-font-family';
+import TextStyle from '@tiptap/extension-text-style';
 
 interface PRDTipTapEditorProps {
   content: string;
@@ -25,7 +29,7 @@ interface PRDTipTapEditorProps {
 }
 
 // Modern Toolbar Button Component
-const ToolbarButton = ({
+export const ToolbarButton = ({
   onClick,
   active = false,
   disabled = false,
@@ -55,25 +59,27 @@ const ToolbarButton = ({
 );
 
 // Modern Toolbar Dropdown Component
-const ToolbarDropdown = ({
+export const ToolbarDropdown = ({
   value,
   onChange,
   options,
   disabled = false,
-  title
+  title,
+  customSelectClass
 }: {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   disabled?: boolean;
   title?: string;
+  customSelectClass?: string;
 }) => (
   <div className={toolbarStyles.toolbarDropdown} title={title}>
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className={disabled ? toolbarStyles.disabled : ''}
+      className={`${disabled ? toolbarStyles.disabled : ''} ${customSelectClass ? toolbarStyles[customSelectClass] : ''}`}
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -104,7 +110,7 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
               if (toolbarDisabled) return;
               editor.chain().focus();
               if (value === 'paragraph') {
-                editor.chain().focus().setParagraph().run();
+                (editor.chain().focus() as any).setParagraph().run();
               } else if (value === 'h1') {
                 editor.chain().focus().setHeading({ level: 1 }).run();
               } else if (value === 'h2') {
@@ -118,6 +124,68 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
               { value: 'h1', label: 'Heading 1' },
               { value: 'h2', label: 'Heading 2' },
               { value: 'h3', label: 'Heading 3' },
+            ]}
+            disabled={toolbarDisabled}
+          />
+          
+          {/* Font Family Dropdown */}
+          <ToolbarDropdown
+            title="Font Family"
+            value={(() => {
+              // Get the current font family
+              const attrs = editor.getAttributes('textStyle');
+              return attrs.fontFamily || 'default';
+            })()}
+            onChange={(value) => {
+              if (toolbarDisabled) return;
+              if (value === 'default') {
+                // Remove font family by setting it to null
+                editor.chain().focus().setMark('textStyle', { fontFamily: null }).run();
+              } else {
+                // Set font family
+                editor.chain().focus().setMark('textStyle', { fontFamily: value }).run();
+              }
+            }}
+            customSelectClass="fontFamilyDropdown"
+            options={[
+              { value: 'default', label: 'Default Font' },
+              { value: 'Arial, sans-serif', label: 'Arial' },
+              { value: 'Georgia, serif', label: 'Georgia' },
+              { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
+              { value: 'Verdana, sans-serif', label: 'Verdana' },
+              { value: '"Courier New", Courier, monospace', label: 'Courier New' },
+              { value: 'system-ui, sans-serif', label: 'System UI' },
+            ]}
+            disabled={toolbarDisabled}
+          />
+          
+          {/* Font Size Dropdown */}
+          <ToolbarDropdown
+            title="Font Size"
+            value={(() => {
+              // Get the current font size from inline style
+              const attrs = editor.getAttributes('textStyle');
+              return attrs.fontSize || 'default';
+            })()}
+            onChange={(value) => {
+              if (toolbarDisabled) return;
+              if (value === 'default') {
+                // Remove font size by setting it to null
+                editor.chain().focus().setMark('textStyle', { fontSize: null }).run();
+              } else {
+                // Set font size
+                editor.chain().focus().setMark('textStyle', { fontSize: value }).run();
+              }
+            }}
+            customSelectClass="fontSizeDropdown"
+            options={[
+              { value: 'default', label: 'Default Size' },
+              { value: '8px', label: 'Tiny' },
+              { value: '12px', label: 'Small' },
+              { value: '16px', label: 'Normal' },
+              { value: '20px', label: 'Large' },
+              { value: '24px', label: 'X-Large' },
+              { value: '32px', label: 'XX-Large' },
             ]}
             disabled={toolbarDisabled}
           />
@@ -189,15 +257,6 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
             disabled={toolbarDisabled}
           >
             <i className="fas fa-list-ol" />
-          </ToolbarButton>
-          
-          <ToolbarButton 
-            onClick={() => editor.chain().focus().toggleTaskList().run()}
-            active={editor.isActive('taskList')}
-            title="Task List"
-            disabled={toolbarDisabled}
-          >
-            <i className="fas fa-tasks" />
           </ToolbarButton>
         </div>
         
@@ -365,35 +424,77 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
     // Process horizontal rule
     normalizedMarkdown = normalizedMarkdown.replace(/^---+$/gm, '<hr class="enhanced-hr">');
     
-    // Process blockquotes with better multiline support
-    let inBlockquote = false;
-    let blockquoteContent = '';
+    // Process blockquotes with better multiline support and nested content preservation
+    let blockquoteLevel = 0;
+    let blockquoteContents = [''];
     const bqLines = normalizedMarkdown.split('\n');
     const bqProcessedLines = [];
     
     for (let i = 0; i < bqLines.length; i++) {
       const line = bqLines[i];
-      const blockquoteMatch = line.match(/^>\s+(.+)$/);
+      // Match blockquotes with any number of '>' characters
+      const blockquoteMatch = line.match(/^(>+)\s*(.*)$/);
       
       if (blockquoteMatch) {
-        if (!inBlockquote) {
-          inBlockquote = true;
-          blockquoteContent = blockquoteMatch[1];
+        const quoteDepth = blockquoteMatch[1].length;
+        const content = blockquoteMatch[2];
+        
+        // Handle nested blockquotes
+        if (quoteDepth > blockquoteLevel) {
+          // Starting a new (possibly nested) blockquote
+          while (blockquoteLevel < quoteDepth) {
+            blockquoteLevel++;
+            blockquoteContents[blockquoteLevel] = content;
+          }
+        } else if (quoteDepth < blockquoteLevel) {
+          // Closing nested blockquotes
+          while (blockquoteLevel > quoteDepth) {
+            // Close each level of nesting
+            const nestedContent = blockquoteContents[blockquoteLevel];
+            blockquoteContents[blockquoteLevel - 1] += `<blockquote class="enhanced-blockquote">${nestedContent}</blockquote>`;
+            blockquoteContents[blockquoteLevel] = '';
+            blockquoteLevel--;
+          }
+          // Add content to current level
+          if (blockquoteContents[blockquoteLevel].length > 0) {
+            blockquoteContents[blockquoteLevel] += '<br/>';
+          }
+          blockquoteContents[blockquoteLevel] += content;
         } else {
-          blockquoteContent += ' ' + blockquoteMatch[1];
+          // Continue current blockquote level
+          if (blockquoteContents[blockquoteLevel].length > 0 && content.trim().length > 0) {
+            // Add paragraph break if not empty
+            blockquoteContents[blockquoteLevel] += '<br/>';
+          }
+          blockquoteContents[blockquoteLevel] += content;
         }
       } else {
-        if (inBlockquote) {
-          bqProcessedLines.push(`<blockquote class="enhanced-blockquote">${blockquoteContent}</blockquote>`);
-          inBlockquote = false;
-          blockquoteContent = '';
+        // Close all open blockquotes when reaching non-blockquote line
+        while (blockquoteLevel > 0) {
+          const content = blockquoteContents[blockquoteLevel];
+          if (blockquoteLevel > 1) {
+            blockquoteContents[blockquoteLevel - 1] += `<blockquote class="enhanced-blockquote">${content}</blockquote>`;
+          } else {
+            // Top level blockquote
+            bqProcessedLines.push(`<blockquote class="enhanced-blockquote">${content}</blockquote>`);
+          }
+          blockquoteContents[blockquoteLevel] = '';
+          blockquoteLevel--;
         }
         bqProcessedLines.push(line);
       }
     }
     
-    if (inBlockquote) {
-      bqProcessedLines.push(`<blockquote class="enhanced-blockquote">${blockquoteContent}</blockquote>`);
+    // Close any remaining open blockquotes
+    while (blockquoteLevel > 0) {
+      const content = blockquoteContents[blockquoteLevel];
+      if (blockquoteLevel > 1) {
+        blockquoteContents[blockquoteLevel - 1] += `<blockquote class="enhanced-blockquote">${content}</blockquote>`;
+      } else {
+        bqProcessedLines.push(`<blockquote class="enhanced-blockquote">${content}</blockquote>`);
+      }
+      blockquoteContents[blockquoteLevel] = '';
+      blockquoteLevel--;
     }
     
     normalizedMarkdown = bqProcessedLines.join('\n');
@@ -464,14 +565,25 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
     
     normalizedMarkdown = olLines.join('\n');
     
-    // Parse lists with proper nesting (complex task that requires tracking indentation)
-    // Track list processing separately for ordered, unordered and task lists
+    // Process nested lists with proper nesting (complex task that requires tracking indentation)
+    // Track list processing separately for ordered and unordered lists
     let result = '';
     const lines = normalizedMarkdown.split('\n');
     let i = 0;
     
     // Stack to track list nesting
     const listStack: {type: string, indent: number, counter: number}[] = [];
+    
+    // Helper function to get the correct list item attributes based on type
+    const getListItemAttributes = (type: string, number: number | null) => {
+      let attributes = 'class="enhanced-li"';
+      
+      if (type === 'ol' && number !== null) {
+        attributes = `value="${number}" class="enhanced-li"`;
+      }
+      
+      return attributes;
+    };
     
     while (i < lines.length) {
       const line = lines[i];
@@ -480,77 +592,8 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
       const ulMatch = line.match(/^(\s*)[-*]\s+(.+)$/);
       // Ordered list detection
       const olMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
-      // Task list detection
-      const taskMatch = line.match(/^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/);
       
-      if (taskMatch) {
-        // Handle task list item
-        const [, indent, checked, content] = taskMatch;
-        const indentLevel = indent.length;
-        const isChecked = checked.toLowerCase() === 'x';
-        
-        // Close deeper lists if needed
-        while (listStack.length > 0 && listStack[listStack.length - 1].indent > indentLevel) {
-          const item = listStack.pop();
-          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
-        }
-        
-        // Start a new task list if needed
-        if (listStack.length === 0 || listStack[listStack.length - 1].type !== 'task' || listStack[listStack.length - 1].indent !== indentLevel) {
-          if (listStack.length > 0 && listStack[listStack.length - 1].indent < indentLevel) {
-            // Nested within another list
-            result += `<ul data-type="taskList" class="enhanced-task-list" style="--list-level: ${indentLevel / 2}">`;
-          } else {
-            // New top-level task list
-            if (listStack.length > 0 && listStack[listStack.length - 1].indent === indentLevel) {
-              // Close previous list of different type at same level
-              const item = listStack.pop();
-              result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
-            }
-            result += `<ul data-type="taskList" class="enhanced-task-list" style="--list-level: ${indentLevel / 2}">`;
-          }
-          listStack.push({type: 'task', indent: indentLevel, counter: 1});
-        } else {
-          // Continue existing task list
-          result += '</li>';
-        }
-        
-        result += `<li data-checked="${isChecked}" class="enhanced-task-item">${content}`;
-      } else if (ulMatch) {
-        // Handle unordered list
-        const [, indent, content] = ulMatch;
-        const indentLevel = indent.length;
-        
-        // Close deeper lists if needed
-        while (listStack.length > 0 && listStack[listStack.length - 1].indent > indentLevel) {
-          const item = listStack.pop();
-          result += '</li>';
-          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '</ul>';
-        }
-        
-        // Start a new unordered list if needed
-        if (listStack.length === 0 || listStack[listStack.length - 1].type !== 'ul' || listStack[listStack.length - 1].indent !== indentLevel) {
-          if (listStack.length > 0 && listStack[listStack.length - 1].indent < indentLevel) {
-            // Nested within another list
-            result += `<ul class="enhanced-ul" style="--list-level: ${indentLevel / 2}">`;
-          } else {
-            // New top-level unordered list
-            if (listStack.length > 0 && listStack[listStack.length - 1].indent === indentLevel) {
-              // Close previous list of different type at same level
-              const item = listStack.pop();
-              result += '</li>';
-              result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '</ul>';
-            }
-            result += `<ul class="enhanced-ul" style="--list-level: ${indentLevel / 2}">`;
-          }
-          listStack.push({type: 'ul', indent: indentLevel, counter: 1});
-        } else {
-          // Continue existing list
-          result += '</li>';
-        }
-        
-        result += `<li class="enhanced-li">${content}`;
-      } else if (olMatch) {
+      if (olMatch) {
         // Handle ordered list
         const [, indent, number, content] = olMatch;
         const indentLevel = indent.length;
@@ -558,8 +601,7 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
         // Close deeper lists if needed
         while (listStack.length > 0 && listStack[listStack.length - 1].indent > indentLevel) {
           const item = listStack.pop();
-          result += '</li>';
-          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '</ul>';
+          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
         }
         
         // Start a new ordered list if needed
@@ -572,8 +614,7 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
             if (listStack.length > 0 && listStack[listStack.length - 1].indent === indentLevel) {
               // Close previous list of different type at same level
               const item = listStack.pop();
-              result += '</li>';
-              result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '</ul>';
+              result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
             }
             // Use the actual number from the markdown as the start attribute
             const startNum = parseInt(number);
@@ -587,13 +628,45 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
           listStack[listStack.length - 1].counter++;
         }
         
-        result += `<li class="enhanced-li" value="${parseInt(number)}">${content}`;
+        result += `<li ${getListItemAttributes('ol', listStack[listStack.length - 1].counter)}>${content}`;
+      } else if (ulMatch) {
+        // Handle unordered list
+        const [, indent, content] = ulMatch;
+        const indentLevel = indent.length;
+        
+        // Close deeper lists if needed
+        while (listStack.length > 0 && listStack[listStack.length - 1].indent > indentLevel) {
+          const item = listStack.pop();
+          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
+        }
+        
+        // Start a new unordered list if needed
+        if (listStack.length === 0 || listStack[listStack.length - 1].type !== 'ul' || listStack[listStack.length - 1].indent !== indentLevel) {
+          if (listStack.length > 0 && listStack[listStack.length - 1].indent < indentLevel) {
+            // Nested within another list
+            result += `<ul class="enhanced-ul" style="--list-level: ${indentLevel / 2}">`;
+          } else {
+            // New top-level unordered list
+            if (listStack.length > 0 && listStack[listStack.length - 1].indent === indentLevel) {
+              // Close previous list of different type at same level
+              const item = listStack.pop();
+              result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
+            }
+            result += `<ul class="enhanced-ul" style="--list-level: ${indentLevel / 2}">`;
+          }
+          listStack.push({type: 'ul', indent: indentLevel, counter: 1});
+        } else {
+          // Continue existing list
+          result += '</li>';
+        }
+        
+        result += `<li ${getListItemAttributes('ul', null)}>${content}`;
       } else {
         // Not a list item - close all open lists
         while (listStack.length > 0) {
           const item = listStack.pop();
           result += '</li>';
-          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '</ul>';
+          result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
         }
         
         // Process images and links before adding non-list content
@@ -627,7 +700,7 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
     while (listStack.length > 0) {
       const item = listStack.pop();
       result += '</li>';
-      result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '</ul>';
+      result += item?.type === 'ul' ? '</ul>' : item?.type === 'ol' ? '</ol>' : '';
     }
     
     return result;
@@ -706,7 +779,15 @@ const parseProseMirrorToMarkdown = (editor: Editor): string => {
           
           return `${paragraphContent}\n\n`;
         case 'blockquote':
-          return `> ${content}\n\n`;
+          // Handle nested blockquotes and preserve paragraph structure
+          // Split content by paragraphs and prefix each with '> '
+          const blockquoteLines = content.split('\n');
+          const formattedQuote = blockquoteLines
+            .map(line => line.trim())
+            .filter(line => line.length > 0)
+            .map(line => `> ${line}`)
+            .join('\n');
+          return `${formattedQuote}\n\n`;
         case 'pre':
           // Check if this is part of a code block with header
           const prevSibling = node.previousElementSibling;
@@ -749,26 +830,25 @@ const parseProseMirrorToMarkdown = (editor: Editor): string => {
         case 'code':
           return `\`${content}\``;
         case 'ul':
-          if (node.getAttribute('data-type') === 'taskList') {
-            // Handle task lists
-            let taskListContent = '';
-            Array.from(node.children).forEach(li => {
-              const isChecked = li.getAttribute('data-checked') === 'true';
-              const itemContent = li.textContent?.trim() || '';
-              const nestedContent = processNestedLists(li, level + 1);
-              taskListContent += `${indent}- [${isChecked ? 'x' : ' '}] ${itemContent}${nestedContent ? '\n' + nestedContent : ''}\n`;
+          let ulContent = '';
+          Array.from(node.children).forEach(li => {
+            // Extract direct content only (excluding nested lists)
+            let itemContent = '';
+            
+            // Extract the direct text content, excluding nested lists
+            Array.from(li.childNodes).forEach(child => {
+              if (child.nodeType === Node.TEXT_NODE || 
+                  (child.nodeType === Node.ELEMENT_NODE && 
+                   !(child as Element).tagName.toLowerCase().match(/^(ul|ol)$/))) {
+                itemContent += child.textContent;
+              }
             });
-            return taskListContent + (level === 0 ? '\n' : ''); 
-          } else {
-            // Regular unordered list
-            let ulContent = '';
-            Array.from(node.children).forEach(li => {
-              const itemContent = li.textContent?.replace(/[\n\r]/g, ' ').trim() || '';
-              const nestedContent = processNestedLists(li, level + 1);
-              ulContent += `${indent}- ${itemContent}${nestedContent ? '\n' + nestedContent : ''}\n`;
-            });
-            return ulContent + (level === 0 ? '\n' : '');
-          }
+            
+            itemContent = itemContent.trim();
+            const nestedContent = processNestedLists(li as Element, level + 1);
+            ulContent += `${indent}- ${itemContent}${nestedContent ? '\n' + nestedContent : ''}\n`;
+          });
+          return ulContent + (level === 0 ? '\n' : '');
         case 'ol':
           let olContent = '';
           // Get the start attribute if it exists
@@ -781,8 +861,20 @@ const parseProseMirrorToMarkdown = (editor: Editor): string => {
             const valueAttr = li.getAttribute('value');
             const itemNumber = valueAttr ? parseInt(valueAttr) : startNum + index;
             
-            const itemContent = li.textContent?.replace(/[\n\r]/g, ' ').trim() || '';
-            const nestedContent = processNestedLists(li, level + 1);
+            // Extract direct content only (excluding nested lists)
+            let itemContent = '';
+            
+            // Extract the direct text content, excluding nested lists
+            Array.from(li.childNodes).forEach(child => {
+              if (child.nodeType === Node.TEXT_NODE || 
+                  (child.nodeType === Node.ELEMENT_NODE && 
+                   !(child as Element).tagName.toLowerCase().match(/^(ul|ol)$/))) {
+                itemContent += child.textContent;
+              }
+            });
+            
+            itemContent = itemContent.trim();
+            const nestedContent = processNestedLists(li as Element, level + 1);
             olContent += `${indent}${itemNumber}. ${itemContent}${nestedContent ? '\n' + nestedContent : ''}\n`;
           });
           return olContent + (level === 0 ? '\n' : '');
@@ -824,10 +916,9 @@ const parseProseMirrorToMarkdown = (editor: Editor): string => {
       // Look for nested lists
       const nestedUl = node.querySelector(':scope > ul');
       const nestedOl = node.querySelector(':scope > ol');
-      const nestedTaskList = node.querySelector(':scope > ul[data-type="taskList"]');
       
-      if (nestedUl || nestedOl || nestedTaskList) {
-        const nestedList = nestedUl || nestedOl || nestedTaskList;
+      if (nestedUl || nestedOl) {
+        const nestedList = nestedUl || nestedOl;
         if (nestedList) {
           result = processNode(nestedList, level);
         }
@@ -847,6 +938,182 @@ const parseProseMirrorToMarkdown = (editor: Editor): string => {
   }
 };
 
+// Create a custom extension for line highlighting
+const CursorLineHighlight = Extension.create({
+  name: 'cursorLineHighlight',
+  
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('cursorLineHighlight'),
+        props: {
+          decorations(state) {
+            const { doc, selection } = state;
+            const decorations: any[] = [];
+
+            // Add the current cursor position decoration
+            if (selection.empty) {
+              doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+                // Find the parent paragraph or block element
+                const $from = state.doc.resolve(pos);
+                let parentDepth = $from.depth;
+                
+                // Find the appropriate block-level parent
+                while (parentDepth > 0) {
+                  const nodeAtDepth = $from.node(parentDepth);
+                  
+                  // Only highlight block elements for cleaner experience
+                  if (nodeAtDepth.isBlock) {
+                    const start = $from.before(parentDepth);
+                    const end = $from.after(parentDepth);
+                    
+                    const decoration = Decoration.node(start, end, {
+                      class: 'highlight-line'
+                    });
+                    
+                    decorations.push(decoration);
+                    return false; // Stop once we've found a suitable block
+                  }
+                  
+                  parentDepth--;
+                }
+                return true;
+              });
+            }
+
+            return DecorationSet.create(doc, decorations);
+          }
+        }
+      })
+    ];
+  }
+});
+
+// Custom Keyboard Handlers Extension for better indentation support
+const KeyboardExtension = Extension.create({
+  name: 'customKeyboard',
+
+  addKeyboardShortcuts() {
+    return {
+      // Handle Tab key for indentation
+      Tab: ({ editor }) => {
+        // If in a list, use built-in indentation
+        if (editor.isActive('bulletList') || editor.isActive('orderedList')) {
+          return editor.commands.sinkListItem('listItem');
+        }
+        
+        // In a code block, insert spaces or tab character
+        if (editor.isActive('codeBlock')) {
+          return editor.commands.insertContent('\t');
+        }
+        
+        // In normal text, insert spaces for indentation (4 spaces is standard)
+        return editor.commands.insertContent('    ');
+      },
+      
+      // Handle Shift+Tab for outdenting
+      'Shift-Tab': ({ editor }) => {
+        // If in a list, use built-in outdentation
+        if (editor.isActive('bulletList') || editor.isActive('orderedList')) {
+          return editor.commands.liftListItem('listItem');
+        }
+        
+        return false; // Let default behavior happen for other contexts
+      },
+      
+      // Ensure Enter key creates proper new lines
+      Enter: ({ editor }) => {
+        // Let the default behavior work in most cases
+        return false;
+      }
+    };
+  },
+});
+
+// Component for code block with copy button functionality
+const CodeBlockExtension = Extension.create({
+  name: 'codeBlockWithCopy',
+  
+  addNodeView() {
+    return ({ node, editor, getPos }: { node: any; editor: any; getPos: any }) => {
+      const dom = document.createElement('pre');
+      dom.classList.add('enhanced-code-block');
+      
+      const code = document.createElement('code');
+      code.innerHTML = node.textContent;
+      dom.appendChild(code);
+      
+      // Add copy button
+      const copyButton = document.createElement('button');
+      copyButton.classList.add('copy-button');
+      copyButton.textContent = 'Copy';
+      copyButton.style.display = 'none'; // Hide initially
+      
+      // Show button on hover
+      dom.addEventListener('mouseenter', () => {
+        copyButton.style.display = 'block';
+      });
+      
+      dom.addEventListener('mouseleave', () => {
+        copyButton.style.display = 'none';
+      });
+      
+      // Copy functionality
+      copyButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        navigator.clipboard.writeText(node.textContent);
+        
+        // Visual feedback
+        copyButton.textContent = 'Copied!';
+        setTimeout(() => {
+          copyButton.textContent = 'Copy';
+        }, 2000);
+      });
+      
+      dom.appendChild(copyButton);
+      
+      // Add line numbers
+      const codeLines = node.textContent ? node.textContent.split('\n') : [];
+      const codeWithLines = document.createElement('div');
+      codeWithLines.classList.add('code-with-lines');
+      
+      codeLines.forEach((line: string, index: number) => {
+        const lineElement = document.createElement('div');
+        lineElement.classList.add('code-line');
+        lineElement.setAttribute('data-line', (index + 1).toString());
+        lineElement.textContent = line;
+        codeWithLines.appendChild(lineElement);
+      });
+      
+      code.innerHTML = '';
+      code.appendChild(codeWithLines);
+      
+      return {
+        dom,
+        update: (updatedNode: any) => {
+          if (updatedNode.type.name !== 'codeBlock') return false;
+          
+          // Update content if node changes
+          const updatedLines = updatedNode.textContent.split('\n');
+          codeWithLines.innerHTML = '';
+          
+          updatedLines.forEach((line: string, index: number) => {
+            const lineElement = document.createElement('div');
+            lineElement.classList.add('code-line');
+            lineElement.setAttribute('data-line', (index + 1).toString());
+            lineElement.textContent = line;
+            codeWithLines.appendChild(lineElement);
+          });
+          
+          return true;
+        }
+      };
+    };
+  }
+});
+
 const PRDTipTapEditor = ({
   content,
   onChange,
@@ -856,37 +1123,36 @@ const PRDTipTapEditor = ({
   onEditorReady,
   useMarkdownMode = false // Parameter kept for backward compatibility
 }: PRDTipTapEditorProps) => {
-  const [internalContent, setInternalContent] = useState(content || '');
+  const [internalContent, setInternalContent] = useState<string>(content || '');
+  // Removed showEditorToolbar state since toolbar is moved to parent component
   const isUpdatingRef = useRef(false);
+  const [modeTransition, setModeTransition] = useState(false);
   
-  // Update internal content when content prop changes
+  // Update internal content when prop changes
   useEffect(() => {
-    if (content !== internalContent) {
-      setInternalContent(content || '');
-    }
+    setInternalContent(content);
   }, [content]);
-  
-  // Create the editor
+
+  // Initialize editor with enhanced features
   const editor = useEditor({
     extensions: [
+      // Configure StarterKit with our customizations
       StarterKit.configure({
+        // Configure heading levels
         heading: {
-          levels: [1, 2, 3, 4],
-          HTMLAttributes: {
-            class: 'enhanced-heading'
-          }
+          levels: [1, 2, 3],
         },
-        paragraph: {
-          HTMLAttributes: {
-            class: 'enhanced-paragraph',
-          }
-        },
+        // Disable codeBlock as we'll use our custom extension
+        codeBlock: false,
+        // Configure list items with custom classes
         bulletList: {
+          keepAttributes: true,
           HTMLAttributes: {
             class: 'enhanced-ul',
           }
         },
         orderedList: {
+          keepAttributes: true,
           HTMLAttributes: {
             class: 'enhanced-ol',
           }
@@ -896,53 +1162,58 @@ const PRDTipTapEditor = ({
             class: 'enhanced-li',
           }
         },
-        codeBlock: {
-          HTMLAttributes: {
-            class: 'enhanced-code-block',
-          }
-        },
       }),
+      // Add placeholder extension
       Placeholder.configure({
         placeholder,
-        emptyEditorClass: 'is-editor-empty',
       }),
-      Underline.configure({
-        HTMLAttributes: {
-          class: 'enhanced-underline',
-        }
-      }),
+      // Add extensions not included in StarterKit
+      Underline,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Image.configure({
-        inline: true,
-        allowBase64: true,
-        HTMLAttributes: {
-          class: 'enhanced-image',
-        }
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'enhanced-link text-blue-600 dark:text-blue-400 underline',
-        }
-      }),
+      Image,
+      Link,
       Typography,
-      Highlight.configure({
-        HTMLAttributes: {
-          class: 'enhanced-highlight bg-yellow-200 dark:bg-yellow-800 rounded px-1',
-        }
+      Highlight,
+      // Add our custom extensions
+      CursorLineHighlight,
+      KeyboardExtension,
+      CodeBlockExtension,
+      // Add text styling extensions
+      TextStyle,
+      FontFamily.configure({
+        types: ['textStyle'],
       }),
-      TaskList.configure({
-        HTMLAttributes: {
-          class: 'enhanced-task-list',
-        }
-      }),
-      TaskItem.configure({
-        nested: true,
-        HTMLAttributes: {
-          class: 'enhanced-task-item',
-        }
+      // Custom extension for font size support
+      Extension.create({
+        name: 'fontSize',
+        addOptions() {
+          return {
+            types: ['textStyle'],
+          };
+        },
+        addGlobalAttributes() {
+          return [
+            {
+              types: this.options.types,
+              attributes: {
+                fontSize: {
+                  default: null,
+                  parseHTML: (element: HTMLElement) => element.style.fontSize,
+                  renderHTML: (attributes: Record<string, any>) => {
+                    if (!attributes.fontSize) {
+                      return {};
+                    }
+                    return {
+                      style: `font-size: ${attributes.fontSize}`,
+                    };
+                  },
+                },
+              },
+            },
+          ];
+        },
       }),
     ],
     content: parseMarkdownToProseMirror(internalContent),
@@ -952,7 +1223,15 @@ const PRDTipTapEditor = ({
       
       // Convert to markdown for storage
       const markdown = parseProseMirrorToMarkdown(editor);
+      
+      // Set updating flag before triggering onChange
+      isUpdatingRef.current = true;
       onChange(markdown);
+      
+      // Reset flag after a short delay
+      setTimeout(() => {
+        isUpdatingRef.current = false;
+      }, 10);
     },
     editable: !readOnly,
   });
@@ -991,7 +1270,7 @@ const PRDTipTapEditor = ({
         // Always ensure we reset the updating flag
         setTimeout(() => {
           isUpdatingRef.current = false;
-        }, 0);
+        }, 10);
       }
     }
   }, [editor, internalContent]);
@@ -1009,26 +1288,29 @@ const PRDTipTapEditor = ({
     }
   }, [editor, onEditorReady]);
 
+  // Removed toolbar hover handlers since toolbar is moved to parent component
+
   if (!editor) {
     return null;
   }
 
   return (
-    <div className={`prd-editor w-full ${className}`}>
+    <div 
+      className={`prd-editor w-full ${className}`}
+    >
+      {/* Toolbar moved to PRDWorkbench.client.tsx */}
+      
       {/* Editor content with proper styling */}
-      <div className={`border ${readOnly ? 'border-transparent' : 'border-bolt-elements-borderColor'} rounded-md overflow-hidden`}>
+      <div className={`border rounded-md overflow-hidden relative ${readOnly ? 'border-transparent' : 'border-bolt-elements-borderColor'}`}>
         <EditorContent 
           editor={editor} 
           className={classNames(
-            "prose dark:prose-invert max-w-none p-4",
+            "prose dark:prose-invert max-w-none",
             styles.markdownPreview, // Always apply markdown preview styles
-            "markdown-editor" // Always apply markdown editor class
+            "markdown-editor document-editor", // Apply both markdown and document editor classes
+            modeTransition ? 'mode-transition' : '', // Add transition class when mode changes
+            readOnly ? 'opacity-95' : '' // Subtle opacity change for read mode
           )}
-          style={{
-            paddingTop: '0px',
-            paddingLeft: '30px',
-            paddingRight: '30px'
-          }}
         />
       </div>
     </div>

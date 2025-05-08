@@ -6,12 +6,26 @@
   width: 100%;
   background: var(--bolt-elements-background-depth-1);
   border-bottom: 1px solid var(--bolt-elements-borderColor);
-  padding: 0.5rem;
+  padding: 0.35rem 0.25rem;
   position: sticky;
   top: 0;
   z-index: 10;
   backdrop-filter: blur(8px);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--bolt-elements-background-depth-1);
+  border-bottom: 1px solid var(--bolt-elements-borderColor);
+  padding: 0.35rem 0.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  overflow: visible;
   
   &:hover {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -20,32 +34,71 @@
   /* Toolbar container for button groups */
   .toolbarContent {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 0.25rem;
     width: 100%;
-    padding: 0 0.5rem;
+    justify-content: space-between;
+    padding: 0 0.15rem;
+    
+    /* Use a more reliable flexbox approach for guaranteed row fit */
+    min-width: 0; /* Ensure flex items can shrink below content size */
+    
+    @media (min-width: 768px) {
+      gap: 0.15rem;
+    }
+    
+    @media (min-width: 1024px) {
+      gap: 0.25rem;
+    }
   }
   
   /* Button group container */
   .buttonGroup {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0 0.25rem;
+    gap: 0.1rem;
+    padding: 0 0.05rem;
     position: relative;
+    min-width: 0; /* Allow shrinking below content size */
+    flex-shrink: 1; /* Allow shrinking */
+    flex-grow: 0; /* Don't grow by default */
+    justify-content: center; /* Center buttons in each group */
+    
+    /* Distribute space based on content and importance */
+    &:nth-child(1) { flex-basis: auto; flex-shrink: 0.8; } /* Text style group */
+    &:nth-child(2) { flex-basis: auto; flex-shrink: 0.9; } /* Text formatting group */
+    &:nth-child(3) { flex-basis: auto; flex-shrink: 1.1; } /* List group */
+    &:nth-child(4) { flex-basis: auto; flex-shrink: 1.1; } /* Block elements */
+    &:nth-child(5) { flex-basis: auto; flex-shrink: 1.1; } /* Media group */
+    &:nth-child(6) { flex-basis: auto; flex-shrink: 1.2; } /* Alignment group */
+    
+    @media (min-width: 768px) {
+      gap: 0.2rem;
+      padding: 0 0.15rem;
+    }
+    
+    @media (min-width: 1024px) {
+      gap: 0.25rem;
+      padding: 0 0.2rem;
+    }
     
     &:not(:last-child) {
       &::after {
         content: '';
         position: absolute;
-        right: -0.25rem;
+        right: -0.05rem;
         top: 50%;
         transform: translateY(-50%);
-        height: 1.5rem;
+        height: 1.25rem;
         width: 1px;
         background: var(--bolt-elements-borderColor);
-        opacity: 0.6;
+        opacity: 0.4;
+        
+        @media (min-width: 768px) {
+          height: 1.5rem;
+          right: -0.075rem;
+          opacity: 0.6;
+        }
       }
     }
   }
@@ -56,15 +109,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 2rem;
-  height: 2rem;
-  border-radius: 0.375rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
   background: transparent;
   color: var(--bolt-elements-textSecondary);
   border: none;
   cursor: pointer;
   transition: all 0.15s ease;
   position: relative;
+  padding: 0;
+  margin: 0 0.025rem;
+  flex-shrink: 1; /* Allow button to shrink */
+  
+  @media (min-width: 480px) {
+    min-width: 1.6rem;
+    height: 1.6rem;
+  }
+  
+  @media (min-width: 768px) {
+    min-width: 1.75rem;
+    height: 1.75rem;
+    margin: 0 0.05rem;
+  }
+  
+  @media (min-width: 1024px) {
+    min-width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+  }
   
   &:hover {
     background: var(--bolt-elements-background-depth-2);
@@ -93,10 +166,18 @@
       bottom: -2px;
       left: 50%;
       transform: translateX(-50%);
-      width: 16px;
+      width: 8px;
       height: 2px;
       background: var(--bolt-accent-primary);
       border-radius: 2px;
+      
+      @media (min-width: 768px) {
+        width: 12px;
+      }
+      
+      @media (min-width: 1024px) {
+        width: 16px;
+      }
     }
   }
   
@@ -109,8 +190,16 @@
   
   /* Icon styling */
   i {
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     transition: transform 0.15s ease;
+    
+    @media (min-width: 768px) {
+      font-size: 0.8rem;
+    }
+    
+    @media (min-width: 1024px) {
+      font-size: 0.875rem;
+    }
   }
   
   &:hover i {
@@ -118,23 +207,112 @@
   }
 }
 
+/* Fixed Toolbar for PRDWorkbench */
+.fixedToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--bolt-elements-background-depth-1);
+  border-bottom: 1px solid var(--bolt-elements-borderColor);
+  padding: 0.5rem 0.5rem;
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  overflow: visible;
+  transition: box-shadow 0.3s ease, opacity 0.2s ease;
+  
+  /* Don't shrink on smaller screens */
+  flex-shrink: 0;
+  
+  /* Ensure it stays in place when scrolling */
+  position: sticky;
+  top: 0;
+  
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  
+  /* Make the toolbarContent fill the full width */
+  .toolbarContent {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 0 0.25rem;
+    
+    /* Hide scrollbar but allow scrolling */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    &::-webkit-scrollbar {
+      display: none; /* Chrome, Safari, Opera */
+    }
+  }
+}
+
 /* Dropdown styling */
 .toolbarDropdown {
   position: relative;
-  height: 2rem;
+  height: 1.5rem;
+  flex-shrink: 1; /* Allow dropdown to shrink */
+  min-width: 0; /* Critical for text-overflow to work */
+  
+  @media (min-width: 480px) {
+    height: 1.6rem;
+  }
+  
+  @media (min-width: 768px) {
+    height: 1.75rem;
+  }
+  
+  @media (min-width: 1024px) {
+    height: 2rem;
+  }
   
   select {
     appearance: none;
     background: transparent;
     border: 1px solid var(--bolt-elements-borderColor);
-    border-radius: 0.375rem;
+    border-radius: 0.25rem;
     color: var(--bolt-elements-textPrimary);
-    font-size: 0.875rem;
+    font-size: 0.65rem;
     font-weight: 500;
-    padding: 0 2rem 0 0.75rem;
+    padding: 0 1.2rem 0 0.3rem;
     height: 100%;
     cursor: pointer;
     transition: all 0.15s ease;
+    min-width: 42px;
+    max-width: 85px;
+    width: 100%;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    
+    @media (min-width: 480px) {
+      min-width: 70px;
+      max-width: 100px;
+      font-size: 0.725rem;
+      padding: 0 1.35rem 0 0.4rem;
+    }
+    
+    @media (min-width: 768px) {
+      min-width: 80px;
+      max-width: 110px;
+      font-size: 0.75rem;
+      padding: 0 1.5rem 0 0.5rem;
+      border-radius: 0.3rem;
+    }
+    
+    @media (min-width: 1024px) {
+      min-width: 100px;
+      max-width: 140px;
+      font-size: 0.8rem;
+      padding: 0 1.75rem 0 0.65rem;
+      border-radius: 0.375rem;
+    }
     
     &:hover {
       border-color: var(--bolt-elements-borderColorHover);
@@ -151,21 +329,84 @@
       opacity: 0.4;
       cursor: not-allowed;
     }
+    
+    /* Style for font family dropdown */
+    &.fontFamilyDropdown {
+      font-family: inherit;
+      max-width: 100px;
+      
+      @media (min-width: 480px) {
+        max-width: 110px;
+      }
+      
+      @media (min-width: 768px) {
+        max-width: 120px;
+      }
+      
+      @media (min-width: 1024px) {
+        max-width: 140px;
+      }
+    }
+    
+    /* Style for font size dropdown */
+    &.fontSizeDropdown {
+      max-width: 90px;
+      
+      @media (min-width: 768px) {
+        max-width: 100px;
+      }
+    }
+    
+    /* Style the options */
+    option {
+      font-size: 0.7rem;
+      padding: 4px;
+      background-color: var(--bolt-elements-background-depth-1);
+      
+      @media (min-width: 768px) {
+        font-size: 0.75rem;
+        padding: 6px;
+      }
+      
+      @media (min-width: 1024px) {
+        font-size: 0.8rem;
+        padding: 8px;
+      }
+    }
   }
   
   &::after {
     content: '';
     position: absolute;
-    right: 0.75rem;
+    right: 0.35rem;
     top: 50%;
-    transform: translateY(-50%);
-    width: 0.5rem;
-    height: 0.5rem;
-    border-right: 2px solid var(--bolt-elements-textSecondary);
-    border-bottom: 2px solid var(--bolt-elements-textSecondary);
+    width: 0.3rem;
+    height: 0.3rem;
+    border-right: 1.5px solid var(--bolt-elements-textSecondary);
+    border-bottom: 1.5px solid var(--bolt-elements-textSecondary);
     transform: translateY(-70%) rotate(45deg);
     pointer-events: none;
     transition: transform 0.15s ease;
+    
+    @media (min-width: 480px) {
+      right: 0.4rem;
+      width: 0.35rem;
+      height: 0.35rem;
+    }
+    
+    @media (min-width: 768px) {
+      right: 0.5rem;
+      width: 0.4rem;
+      height: 0.4rem;
+      border-right-width: 2px;
+      border-bottom-width: 2px;
+    }
+    
+    @media (min-width: 1024px) {
+      right: 0.65rem;
+      width: 0.45rem;
+      height: 0.45rem;
+    }
   }
   
   &:hover::after {
@@ -176,7 +417,7 @@
 /* Tooltip styling */
 .tooltip {
   position: absolute;
-  bottom: -2.5rem;
+  bottom: -2rem; /* Slightly closer for tighter layout */
   left: 50%;
   transform: translateX(-50%);
   background: var(--bolt-elements-background-depth-4);

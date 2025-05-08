@@ -9,7 +9,8 @@ import { IconButton } from '~/components/ui/IconButton';
 import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import PRDTipTapEditor, { EditorToolbar, Editor } from '~/components/ui/PRD/PRDTipTapEditor';
+import PRDTipTapEditor, { Editor, EditorToolbar } from '~/components/ui/PRD/PRDTipTapEditor';
+import toolbarStyles from '~/components/ui/PRD/PRDToolbar.module.scss';
 import {
     type PRDDocument,
     type PRDSection,
@@ -60,10 +61,10 @@ const PRDWorkbench = () => {
   const [editorContent, setEditorContent] = useState<string>('');
   const [zoomLevel, setZoomLevel] = useState(1.2);
   const [editMode, setEditMode] = useState(true); // Default to edit mode
+  const [viewMode, setViewMode] = useState<'standard' | 'paper'>('standard'); // Add view mode state
   const contentRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
-  const [showEditorToolbar, setShowEditorToolbar] = useState(false);
   const initialMountRef = useRef(false);
   const domEventsAttachedRef = useRef(false);
 
@@ -278,9 +279,6 @@ const PRDWorkbench = () => {
   // Effect to handle streaming state changes
   useEffect(() => {
     if (isStreaming) {
-      // When streaming starts, hide the toolbar
-      setShowEditorToolbar(false);
-      
       // Update editor instance read-only state if it exists
       if (editorInstance) {
         editorInstance.setEditable(false);
@@ -288,19 +286,12 @@ const PRDWorkbench = () => {
       
       logger.debug('Streaming started, disabling edit mode');
     } else {
-      // When streaming ends, show the toolbar with a slight delay for smooth transition
-      const timer = setTimeout(() => {
-        setShowEditorToolbar(true);
-      }, 300);
-      
       // Update editor instance read-only state if it exists
       if (editorInstance) {
         editorInstance.setEditable(true);
       }
       
       logger.debug('Streaming ended, enabling edit mode');
-      
-      return () => clearTimeout(timer);
     }
   }, [isStreaming, editorInstance]);
 
@@ -454,13 +445,104 @@ const PRDWorkbench = () => {
     return !!editorContent || !!prdDocument || isStreaming;
   }, [editorContent, prdDocument, isStreaming]);
 
+  // Add component for document statistics and cursor position with modern design
+  const DocumentStatistics = ({ editor }: { editor: Editor | null }) => {
+    const [stats, setStats] = useState({ words: 0, chars: 0, lines: 0 });
+    const [cursorPosition, setCursorPosition] = useState({ line: 1, col: 1 });
+    
+    const calculateStats = () => {
+      if (!editor) return { words: 0, chars: 0, lines: 0 };
+      
+      const text = editor.getText();
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      const chars = text.length;
+      const lines = (text.match(/\n/g) || []).length + 1;
+      
+      return { words, chars, lines };
+    };
+    
+    // Calculate cursor position (line and column)
+    const calculateCursorPosition = () => {
+      if (!editor) return { line: 1, col: 1 };
+      
+      const { from } = editor.state.selection;
+      const text = editor.getText();
+      
+      // Calculate line number
+      const textBefore = text.slice(0, from);
+      const line = (textBefore.match(/\n/g) || []).length + 1;
+      
+      // Calculate column (accounting for tab characters)
+      const lastNewline = textBefore.lastIndexOf('\n');
+      const lineText = lastNewline >= 0 ? textBefore.slice(lastNewline + 1) : textBefore;
+      const col = lineText.length + 1;
+      
+      return { line, col };
+    };
+    
+    useEffect(() => {
+      // Update on content change
+      const updateHandler = () => {
+        setStats(calculateStats());
+      };
+      
+      // Update on selection change
+      const selectionHandler = () => {
+        setCursorPosition(calculateCursorPosition());
+      };
+      
+      if (editor) {
+        editor.on('update', updateHandler);
+        editor.on('selectionUpdate', selectionHandler);
+        
+        // Initial calculation
+        updateHandler();
+        selectionHandler();
+      }
+      
+      return () => {
+        if (editor) {
+          editor.off('update', updateHandler);
+          editor.off('selectionUpdate', selectionHandler);
+        }
+      };
+    }, [editor]);
+    
+    if (!editor) return null;
+    
+    return (
+      <div className="flex items-center h-10 px-5 border-t border-b border-bolt-elements-borderColor text-sm text-bolt-elements-textSecondary font-mono bg-bolt-elements-background-depth-1">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-1.5" title="Word count">
+            <div className="i-ph:text-aa text-base opacity-70" />
+            <span>{stats.words} words</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Character count">
+            <div className="i-ph:textbox text-base opacity-70" />
+            <span>{stats.chars} chars</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Line count">
+            <div className="i-ph:list-numbers text-base opacity-70" />
+            <span>{stats.lines} lines</span>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded bg-bolt-elements-background-depth-2" title="Cursor position">
+            <div className="i-ph:caret text-base opacity-70" />
+            <span>Ln {cursorPosition.line}, Col {cursorPosition.col}</span>
+        </div>
+      </div>
+    );
+  };
+
   // --- Render ---
 
   if (!showWorkbench) return null;
 
   return (
+    // Consistent styling with TicketWorkbench
+    // Do not change this parent div styling
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench"
+      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench rounded-tl-xl shadow-lg"
       variants={workbenchVariants}
       initial="closed"
       animate={showWorkbench ? 'open' : 'closed'}
@@ -469,8 +551,10 @@ const PRDWorkbench = () => {
         right: 0,
         top: 'var(--header-height)',
         bottom: 0,
-        height: 'calc(100vh - var(--header-height))',
+        height: 'calc(100vh - var(--header-height) - 4px)',
         width: 'var(--workbench-width)',
+        marginTop: '4px',
+        boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
       }}
     >
       <div className="h-full flex flex-col">
@@ -484,6 +568,7 @@ const PRDWorkbench = () => {
               <span className="ml-2 text-md text-bolt-elements-textTertiary">(Unsaved changes)</span>
             )}
           </div>
+          {/* line numbers, words, chars, etc should go here from PRDTipTapEditor */}
           {/* Controls */}
           <div className="flex items-center gap-4">
             {/* Save Button - Prominently Displayed */}
@@ -536,32 +621,24 @@ const PRDWorkbench = () => {
           </div>
         </div>
 
-        {/* Streaming indicator - positioned below header, above content */}
-        {isStreaming && (
-          <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor">
-            <PRDStreamingIndicator />
-          </div>
-        )}
-
         {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden h-full">
-           {/* Toolbar: Show if editor instance exists and not streaming */}
-           <AnimatePresence>
-             {editorInstance && showEditorToolbar && !isStreaming && (
-               <motion.div 
-                 initial={{ opacity: 0 }}
-                 animate={{ opacity: 1 }}
-                 exit={{ opacity: 0 }}
-                 transition={{ duration: 0.15 }}
-                 className="w-full bg-white dark:bg-gray-900 border-b border-bolt-elements-borderColor shadow-sm flex-shrink-0"
-               >
-                 <EditorToolbar editor={editorInstance} readOnly={isStreaming} />
-               </motion.div>
-             )}
-           </AnimatePresence>
+          {/* Streaming indicator - positioned at the top of content area */}
+          {isStreaming && (
+            <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor flex-shrink-0">
+              <PRDStreamingIndicator />
+            </div>
+          )}
           
-           {/* Editor Content Area */}
-           <div ref={contentRef} className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6">
+          {/* Fixed Editor Toolbar - only visible when NOT streaming */}
+          {editorInstance && !isStreaming && (
+            <div className={toolbarStyles.fixedToolbar}>
+              <EditorToolbar editor={editorInstance} readOnly={false} />
+            </div>
+          )}
+          
+           {/* Editor Content Area - with proper spacing to account for fixed toolbar */}
+           <div ref={contentRef} className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6 pt-1">
              {/* Use simpler condition: show editor if content/doc exists OR chat is loading */}
              {shouldShowEditor ? (
               <div className="w-full max-w-4xl mx-auto">
@@ -569,16 +646,19 @@ const PRDWorkbench = () => {
                   ref={editorContainerRef}
                   className={classNames(
                     "bg-white dark:bg-gray-900 rounded shadow-lg transition-all w-full mb-6",
-                    isStreaming ? "opacity-90" : ""
+                    isStreaming ? "opacity-90" : "",
+                    viewMode === 'paper' ? "paper-container" : ""
                   )}
                    style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', minHeight: 'calc(100% - 2rem)' }}
                 >
-                  {/* Remove streaming indicator from here since we moved it above */}
                   <PRDTipTapEditor
                     content={editorContent}
                     onChange={handleEditorChange}
                     readOnly={isStreaming}
-                    className="w-full flex flex-col"
+                    className={classNames(
+                      "w-full flex flex-col",
+                      viewMode === 'paper' ? 'paperStyle' : ''
+                    )}
                     placeholder={isStreaming ? "Generating PRD..." : "Start writing your PRD..."}
                     onEditorReady={setEditorInstance}
                   />
@@ -589,6 +669,8 @@ const PRDWorkbench = () => {
             )}
           </div>
         </div>
+        {/* Document statistics with modern design */}
+        {editorInstance && <DocumentStatistics editor={editorInstance} />}
       </div>
     </motion.div>
   );
