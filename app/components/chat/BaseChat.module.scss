@@ -15,11 +15,27 @@
   
   height: calc(100vh - var(--header-height));
   overflow-y: auto;
+  overflow-x: hidden; /* Prevent horizontal scrollbar */
   position: relative;
+  max-width: 100vw; /* Ensure no horizontal overflow */
+  box-sizing: border-box; /* Include padding in width calculation */
 }
 
 .Chat {
   opacity: 1;
+  max-width: 100%; /* Ensure no horizontal overflow */
+  overflow-x: hidden; /* Prevent horizontal scrollbar */
+}
+
+/* Ensure the root container also prevents horizontal overflow */
+:global(#root) {
+  overflow-x: hidden;
+}
+
+/* Ensure the html and body don't allow horizontal overflow */
+:global(html), :global(body) {
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .PromptEffectContainer {
@@ -48,4 +64,32 @@
 .PromptShine {
   fill: url(#shine-gradient);
   mix-blend-mode: overlay;
+}
+
+/* Fix any specific container issues */
+:global(.flex-1.overflow-y-auto) {
+  overflow-x: hidden !important;
+}
+
+/* Ensure messages container doesn't overflow */
+:global(.Messages_container) {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Ensure any scrollable containers only scroll vertically */
+:global(.overflow-y-auto), :global(.overflow-auto) {
+  overflow-x: hidden;
+}
+
+/* Fix container for sticky elements that might be overflowing */
+:global(.StickToBottom__container) {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Fix any chat container wrappers */
+:global(.chatContainer) {
+  overflow-x: hidden;
+  max-width: 100%;
 }

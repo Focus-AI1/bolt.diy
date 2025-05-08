@@ -13,7 +13,6 @@ import { ClientOnly } from 'remix-utils/client-only';
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
 import xtermStyles from '@xterm/xterm/css/xterm.css?url';
-import fontAwesomeStyles from '@fortawesome/fontawesome-free/css/all.min.css?url';
 
 import 'virtual:uno.css';
 
@@ -27,7 +26,6 @@ export const links: LinksFunction = () => [
   { rel: 'stylesheet', href: tailwindReset },
   { rel: 'stylesheet', href: globalStyles },
   { rel: 'stylesheet', href: xtermStyles },
-  { rel: 'stylesheet', href: fontAwesomeStyles },
   {
     rel: 'preconnect',
     href: 'https://fonts.googleapis.com',
@@ -40,6 +38,10 @@ export const links: LinksFunction = () => [
   {
     rel: 'stylesheet',
     href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+  },
+  {
+    rel: 'stylesheet',
+    href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
   },
 ];
 
