@@ -36,6 +36,7 @@
   /* The chat content should scroll, not the entire chat container */
   & > .chatContent {
     overflow-y: auto;
+    overflow-x: hidden; /* Explicitly prevent horizontal scrolling */
     flex: 1;
     
     /* This ensures the scrollbar appears next to the content */
@@ -48,12 +49,25 @@
 /* Ensure the root container also prevents horizontal overflow */
 :global(#root) {
   overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* Ensure the html and body don't allow horizontal overflow */
 :global(html), :global(body) {
   overflow-x: hidden;
   max-width: 100vw;
+}
+
+/* Additional rule to prevent horizontal scrolling in StickToBottom */
+:global(.StickToBottom__container) {
+  overflow-x: hidden !important;
+  max-width: 100%;
+}
+
+/* Ensure all flex containers don't cause horizontal overflow */
+:global(.flex), :global(.flex-col), :global(.flex-row) {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .PromptEffectContainer {
@@ -110,4 +124,47 @@
 :global(.chatContainer) {
   overflow-x: hidden;
   max-width: 100%;
+}
+
+/* Add these rules to the end of your BaseChat.module.scss file */
+
+/* Target header and navigation components */
+:global(.HeaderContainer),
+:global(header),
+:global(nav),
+:global(.header) {
+  overflow: hidden !important;
+}
+
+/* Target any fixed position elements that might be causing scrollbars */
+:global([class*="fixed"]),
+:global([class*="sticky"]),
+:global([class*="absolute"]) {
+  overflow: visible;
+  max-width: 100vw;
+}
+
+/* Ensure all containers have proper overflow handling */
+:global(div) {
+  scrollbar-width: thin;
+}
+
+/* Hide very small scrollbars that might appear in corners */
+:global(*::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+:global(*::-webkit-scrollbar-thumb) {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+:global(*::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+/* Fix for small scrollbars in corners */
+:global(*::-webkit-scrollbar-corner) {
+  background: transparent;
 }
