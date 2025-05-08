@@ -1131,13 +1131,38 @@ export const handleSectionDeletion = (
   return updateSectionReferencesInContent(renumberedSections, originalSections);
 };
 
-// Helper function for PRDChat.client.tsx to parse markdown into PRD document structure, merging with an existing PRD
+/**
+ * CRITICAL FUNCTION: Parses markdown into a PRD document structure while merging with an existing PRD.
+ * 
+ * This function is the core of the PRD content merging system. It ensures that:
+ * 1. Modified sections from the new markdown are properly integrated
+ * 2. Unmodified sections from the existing PRD are preserved
+ * 3. Section IDs are maintained for continuity
+ * 
+ * The merging logic is carefully designed to prevent content loss during streaming updates.
+ * Any changes to this function must maintain these guarantees to avoid content reversion issues.
+ * 
+ * @param markdown - The markdown content to parse (typically from streaming updates)
+ * @param existingPRD - The existing PRD document to merge with (typically from sessionStorage)
+ * @returns A new PRD document with merged content, or null if parsing fails
+ */
 export const parseChatMarkdownToPRDWithMerge = (markdown: string, existingPRD: PRDDocument | null = null): PRDDocument | null => {
   try {
+    logger.debug('Parsing markdown to PRD with merge, markdown length:', markdown.length);
+    
+    // SAFETY CHECK: If no markdown content, return existing PRD unchanged
+    // This prevents accidental content loss when empty updates are received
+    if (!markdown.trim()) {
+      logger.warn('Empty markdown provided to parseChatMarkdownToPRDWithMerge');
+      return existingPRD;
+    }
+    
     const lines = markdown.split('\n');
     let title = existingPRD?.title || 'Untitled PRD';
     let description = existingPRD?.description || '';
     
+    // Create a map of existing sections for efficient lookup
+    // This is used to preserve section IDs and identify which sections are modified
     const existingSectionMap = new Map<string, PRDSection>();
     if (existingPRD?.sections?.length) {
       existingPRD.sections.forEach(section => {
@@ -1145,18 +1170,23 @@ export const parseChatMarkdownToPRDWithMerge = (markdown: string, existingPRD: P
       });
     }
     
+    // These arrays and variables track the parsing state
     const sections: PRDSection[] = [];
     let currentSection: PRDSection | null = null;
     let readingState: 'title' | 'description' | 'section' = 'title';
     let hasFoundTitle = false;
+    
+    // CRITICAL: This set tracks which section titles have been processed in the new markdown
+    // It's used later to determine which existing sections should be preserved
     let processedSectionTitles = new Set<string>();
 
+    // PHASE 1: Extract sections from markdown
+    // This phase identifies which sections are present in the new markdown
     lines.forEach((line, index) => {
       const trimmedLine = line.trim();
 
-      // Using a more general placeholder check before processing the line.
-      // This relies on removePlaceholderText being called later if this is not sufficient,
-      // or enhancing this check if needed.
+      // Skip placeholder lines indicating unchanged content
+      // These are typically added by AI to indicate sections that haven't changed
       if (trimmedLine.startsWith('[') && trimmedLine.endsWith(']') && 
           (trimmedLine.toLowerCase().includes('unchanged') || 
            trimmedLine.toLowerCase().includes('continue') ||
@@ -1164,35 +1194,51 @@ export const parseChatMarkdownToPRDWithMerge = (markdown: string, existingPRD: P
         return;
       }
 
+      // Parse title (level 1 heading)
       if (!hasFoundTitle && trimmedLine.startsWith('# ')) {
         title = trimmedLine.substring(2).trim();
         readingState = 'description';
         hasFoundTitle = true;
-      } else if (trimmedLine.startsWith('## ')) {
+      } 
+      // Parse section headings (level 2 headings)
+      else if (trimmedLine.startsWith('## ')) {
+        // Save the previous section if we were parsing one
         if (currentSection) {
           currentSection.content = currentSection.content.trimEnd();
           sections.push(currentSection);
         }
+        
+        // Extract section title and mark it as processed
         const sectionTitle = trimmedLine.substring(3).trim();
         processedSectionTitles.add(sectionTitle.toLowerCase());
+        
+        // Try to find an existing section with the same title to preserve its ID
         const existingSection = existingSectionMap.get(sectionTitle.toLowerCase());
         
+        // Create a new section object, preserving the ID if it exists
         currentSection = {
           id: existingSection?.id || `section-${Date.now()}-${sections.length}`,
           title: sectionTitle,
           content: '',
         };
         readingState = 'section';
+        
+        // Ensure description is trimmed when we start parsing sections
         if (readingState === 'section' && hasFoundTitle) {
           description = description.trim();
         }
-      } else if (readingState === 'description' && hasFoundTitle) {
+      } 
+      // Parse description content (after title, before first section)
+      else if (readingState === 'description' && hasFoundTitle) {
          description += line + '\n';
-      } else if (readingState === 'section' && currentSection) {
+      } 
+      // Parse section content (after section heading)
+      else if (readingState === 'section' && currentSection) {
         currentSection.content += line + '\n';
       }
     });
 
+    // Save the last section if we were parsing one
     if (currentSection) {
       const typedSection = currentSection as PRDSection;
       typedSection.content = typedSection.content.trimEnd();
@@ -1201,11 +1247,14 @@ export const parseChatMarkdownToPRDWithMerge = (markdown: string, existingPRD: P
 
     description = description.trim();
 
+    // SAFETY CHECK: If no valid content was found, return existing PRD unchanged
+    // This prevents accidental content loss when invalid updates are received
     if (!hasFoundTitle && sections.length === 0 && !description) {
-      logger.warn("No valid PRD content found in markdown"); // Use prdUtils logger
+      logger.warn("No valid PRD content found in markdown");
       return existingPRD || null;
     }
 
+    // Create new PRD document with merged content
     const newPRD: PRDDocument = {
       title,
       description,
@@ -1213,52 +1262,79 @@ export const parseChatMarkdownToPRDWithMerge = (markdown: string, existingPRD: P
       lastUpdated: new Date().toISOString(),
     };
 
+    // PHASE 2: Merge with existing sections
+    // This is the CRITICAL part that ensures unmodified sections are preserved
     if (existingPRD?.sections) {
+      // STEP 1: First add all UNMODIFIED sections from the existing PRD
+      // These are sections that weren't mentioned in the new markdown
       for (const existingSection of existingPRD.sections) {
         const sectionTitleLower = existingSection.title.toLowerCase();
-        if (processedSectionTitles.has(sectionTitleLower)) {
-          const updatedSection = sections.find(
-            section => section.title.toLowerCase() === sectionTitleLower
-          );
-          if (updatedSection) {
-            newPRD.sections.push({
-              id: existingSection.id,
-              title: updatedSection.title,
-              content: updatedSection.content
-            });
-            processedSectionTitles.delete(sectionTitleLower);
-          }
-        } else {
+        if (!processedSectionTitles.has(sectionTitleLower)) {
+          // IMPORTANT: This section wasn't in the update, so keep it EXACTLY as is
+          // This is what preserves unmodified content during streaming updates
           newPRD.sections.push({...existingSection});
+          logger.debug(`Preserving unmodified section: ${existingSection.title}`);
         }
       }
-    }
-    
-    for (const section of sections) {
-      const sectionTitleLower = section.title.toLowerCase();
-      if (processedSectionTitles.has(sectionTitleLower)) {
-        newPRD.sections.push(section);
+      
+      // STEP 2: Now add all MODIFIED sections from the new markdown
+      for (const updatedSection of sections) {
+        const sectionTitleLower = updatedSection.title.toLowerCase();
+        const existingSection = existingPRD.sections.find(
+          section => section.title.toLowerCase() === sectionTitleLower
+        );
+        
+        if (existingSection) {
+          // This is an update to an existing section - preserve its ID
+          newPRD.sections.push({
+            id: existingSection.id, // CRITICAL: Maintain the same ID for continuity
+            title: updatedSection.title,
+            content: updatedSection.content
+          });
+          logger.debug(`Updated existing section: ${updatedSection.title}`);
+        } else {
+          // This is a completely new section
+          newPRD.sections.push(updatedSection);
+          logger.debug(`Added new section: ${updatedSection.title}`);
+        }
       }
-    }
-
-    if (newPRD.sections.length === 0 && sections.length > 0) {
+    } else if (sections.length > 0) {
+      // No existing sections, just use the new ones
       newPRD.sections = [...sections];
     }
 
+    // Sort sections by numerical prefix to maintain consistent order
     newPRD.sections = sortSectionsByNumericalPrefix(newPRD.sections);
-
+    
+    logger.debug(`Merged PRD has ${newPRD.sections.length} sections`);
     return newPRD;
   } catch (error) {
-    logger.error('Error parsing markdown to PRD:', error); // Use prdUtils logger
+    // If anything goes wrong, preserve the existing PRD to prevent data loss
+    logger.error('Error parsing markdown to PRD:', error);
     return existingPRD || null;
   }
 };
 
-// Extracts raw markdown content within the tags, potentially partial
+/**
+ * CRITICAL FUNCTION: Extracts and processes markdown content from streaming messages.
+ * 
+ * This function is responsible for extracting PRD content from chat messages,
+ * determining if it's complete or partial, and ensuring content integrity by
+ * merging with existing content when necessary.
+ * 
+ * The logic here is crucial for preventing content loss during streaming updates.
+ * Any changes must maintain the careful balance of content preservation.
+ * 
+ * @param messages - Array of chat messages to extract PRD content from
+ * @returns Processed markdown content, or null if no valid content found
+ */
 export const extractStreamingMarkdown = (messages: Message[]): string | null => {
+  // Step 1: Find the most recent message containing PRD content
   const assistantMessages = messages.filter(msg => msg.role === 'assistant');
   if (assistantMessages.length === 0) return null;
 
+  // Find the latest message with PRD document tags
+  // We search in reverse order to get the most recent one first
   const latestPrdMessage = assistantMessages
     .slice()
     .reverse()
@@ -1273,30 +1349,69 @@ export const extractStreamingMarkdown = (messages: Message[]): string | null => 
 
   if (startIndex !== -1) {
     const endIndex = content.indexOf('</prd_document>', startIndex);
+    let extractedContent = '';
+    
+    // Step 2: Extract the content between the PRD document tags
     if (endIndex !== -1) {
-      const extractedContent = content.substring(startIndex + '<prd_document>'.length, endIndex).trim();
-      const sectionHeadingMatches = extractedContent.match(/^##\s+.+$/gm);
-      if (sectionHeadingMatches && sectionHeadingMatches.length >= 2) {
-        return removePlaceholderText(extractedContent); // Replaced stripSimplePlaceholders
-      } else {
-        logger.warn("Extracted content appears to be incomplete - attempting to restore from storage"); // Use prdUtils logger
-        try {
-          const storedPRD = sessionStorage.getItem('current_prd');
-          if (storedPRD) {
-            const parsedPRD = JSON.parse(storedPRD) as PRDDocument; // Added type assertion
-            // Generate full markdown and then clean placeholders from it
-            return removePlaceholderText(generateFullMarkdown(parsedPRD)); 
-          }
-        } catch (error) {
-          logger.error('Error accessing stored PRD while extracting markdown', error); // Use prdUtils logger
-        }
-        return removePlaceholderText(extractedContent); // Replaced stripSimplePlaceholders
-      }
+      // CASE: Complete document with closing tag
+      extractedContent = content.substring(startIndex + '<prd_document>'.length, endIndex).trim();
     } else {
-      // Content is partial (no closing tag), clean what we have
-      return removePlaceholderText(content.substring(startIndex + '<prd_document>'.length).trim()); // Replaced stripSimplePlaceholders
+      // CASE: Partial document (no closing tag) - this happens during streaming
+      extractedContent = content.substring(startIndex + '<prd_document>'.length).trim();
+    }
+    
+    // Step 3: Analyze the extracted content to determine if it's complete
+    // A complete document has a title and at least two sections
+    const hasTitle = /^#\s+.+$/m.test(extractedContent);
+    const sectionHeadingMatches = extractedContent.match(/^##\s+.+$/gm);
+    const hasMultipleSections = sectionHeadingMatches && sectionHeadingMatches.length >= 2;
+    
+    // Step 4: Clean the content of any placeholder text
+    // This removes AI-generated placeholders like "[rest of section unchanged]"
+    const cleanedContent = removePlaceholderText(extractedContent);
+    
+    // Step 5: Process based on content completeness
+    if (hasTitle && hasMultipleSections) {
+      // CASE A: We have a complete document with title and multiple sections
+      // This is the happy path - we can use the content directly
+      logger.debug('Extracted complete PRD document with title and multiple sections');
+      return cleanedContent;
+    } else {
+      // CASE B: Document is incomplete or partial
+      // This is the critical path that prevents content loss during streaming
+      logger.warn("Extracted content appears to be incomplete - attempting to merge with stored PRD");
+      
+      try {
+        // Step 6: Attempt to merge with existing content from storage
+        const storedPRD = sessionStorage.getItem('current_prd');
+        if (storedPRD) {
+          const parsedPRD = JSON.parse(storedPRD) as PRDDocument;
+          
+          // CRITICAL OPERATION: Merge the partial content with the stored PRD
+          // This is what ensures unmodified sections are preserved during updates
+          const mergedPRD = parseChatMarkdownToPRDWithMerge(cleanedContent, parsedPRD);
+          
+          if (mergedPRD) {
+            // Generate full markdown from the merged PRD
+            // This ensures we have a complete representation with all sections
+            const fullMarkdown = generateFullMarkdown(mergedPRD);
+            logger.debug('Successfully merged partial content with stored PRD');
+            return fullMarkdown;
+          }
+        }
+      } catch (error) {
+        // If merging fails, log the error but continue with what we have
+        // This prevents complete failure when partial recovery is possible
+        logger.error('Error merging with stored PRD while extracting markdown', error);
+      }
+      
+      // Step 7: Fallback - if we couldn't merge or there's no stored PRD
+      // Return what we have, which is better than nothing
+      return cleanedContent;
     }
   }
+  
+  // No valid content found
   return null;
 };
 

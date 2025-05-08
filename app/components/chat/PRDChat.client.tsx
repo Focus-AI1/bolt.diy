@@ -105,6 +105,9 @@ const PRDChat = ({ backgroundMode = false }) => {
                 logger.error('Error parsing existing PRD from sessionStorage in onFinish:', error);
             }
         }
+        
+        // Set a temporary flag to prevent PRDWorkbench from reloading during our update
+        sessionStorage.setItem('prd_prevent_reload', 'true');
 
         const hasMultipleSections = /^##\s+.+$/gm.test(finalMarkdown);
         const hasTitle = /^#\s+.+$/m.test(finalMarkdown);
@@ -144,20 +147,18 @@ const PRDChat = ({ backgroundMode = false }) => {
                 // This must happen BEFORE saving to sessionStorage to prevent reversion
                 workbenchStore.streamingPRDContent.set(fullMarkdown);
                 
-                // 5. IMPORTANT: Set a flag to prevent the workbench from reloading from storage
-                // This prevents the content from being reverted to the previous version
-                sessionStorage.setItem('prd_prevent_reload', 'true');
-                
-                // 6. Now save the updated PRD to sessionStorage
+                // 5. Save to sessionStorage
                 sessionStorage.setItem('current_prd', JSON.stringify(updatedPRD));
-                logger.debug('Updated PRD stored in sessionStorage');
                 
-                // 7. Open the workbench if it's not already open and not in background mode
+                // Show workbench
+                workbenchStore.showWorkbench.set(true); // Always show workbench when PRD is updated
+                
+                // 6. Open the workbench if it's not already open and not in background mode
                 if (!backgroundMode && !showWorkbench) {
                     workbenchStore.showWorkbench.set(true);
                 }
                 
-                // 8. Update the last generated timestamp
+                // 7. Update the last generated timestamp
                 workbenchStore.updatePRDLastGenerated(finishTimestamp);
                 
                 // 9. Clear the prevent reload flag after a delay

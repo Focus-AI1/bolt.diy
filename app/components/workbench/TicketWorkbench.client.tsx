@@ -353,8 +353,10 @@ const TicketWorkbench = () => {
   if (!showWorkbench) return null;
 
   return (
+    // Consistent styling with PRDWorkbench
+    // Do not change this parent div styling
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench"
+      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench rounded-tl-xl shadow-lg"
       variants={workbenchVariants}
       initial="closed"
       animate={showWorkbench ? 'open' : 'closed'}
@@ -363,8 +365,10 @@ const TicketWorkbench = () => {
         right: 0,
         top: 'var(--header-height)',
         bottom: 0,
-        height: 'calc(100vh - var(--header-height))',
+        height: 'calc(100vh - var(--header-height) - 4px)',
         width: 'var(--workbench-width)',
+        marginTop: '4px',
+        boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
       }}
     >
       <div className="h-full flex flex-col">

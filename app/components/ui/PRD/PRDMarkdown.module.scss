@@ -4,46 +4,196 @@
   line-height: 1.6;
   color: var(--bolt-elements-textPrimary);
   
-  /* Headings */
+  /* Support for custom font families */
+  [style*="font-family"] {
+    font-family: inherit; /* Inherit from parent by default */
+  }
+  
+  /* Support for custom font sizes */
+  [style*="font-size"] {
+    line-height: 1.4; /* Adjust line height for different font sizes */
+  }
+  
+  /* Base document spacing - ensure proper spacing between all elements */
+  :global(.ProseMirror) {
+    padding: 1rem 2rem 1rem 4rem; /* Adjusted padding for line numbers */
+    position: relative;
+    counter-reset: line 0; /* Reset line counter to start from 1 */
+    
+    /* Modern gutter styling for line numbers - VSCode-inspired */
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 3.5rem;
+      background-color: rgba(0, 0, 0, 0.03);
+      border-right: 1px solid rgba(100, 100, 100, 0.08);
+      z-index: 0;
+      
+      :global(.dark) & {
+        background-color: rgba(255, 255, 255, 0.02);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+      }
+    }
+    
+    /* Enhanced content grid with subtle vertical guides for tab spacing */
+    background-image: repeating-linear-gradient(to right, 
+      transparent, 
+      transparent calc(4ch - 1px),
+      rgba(100, 100, 100, 0.015) calc(4ch - 1px),
+      rgba(100, 100, 100, 0.015) 4ch,
+      transparent 4ch,
+      transparent calc(8ch - 1px),
+      rgba(100, 100, 100, 0.02) calc(8ch - 1px),
+      rgba(100, 100, 100, 0.02) 8ch
+    );
+    background-size: 100% 100%;
+    background-position: 0 0;
+    background-attachment: local;
+    
+    :global(.dark) & {
+      background-image: repeating-linear-gradient(to right, 
+        transparent, 
+        transparent calc(4ch - 1px),
+        rgba(255, 255, 255, 0.005) calc(4ch - 1px),
+        rgba(255, 255, 255, 0.005) 4ch,
+        transparent 4ch,
+        transparent calc(8ch - 1px),
+        rgba(255, 255, 255, 0.01) calc(8ch - 1px),
+        rgba(255, 255, 255, 0.01) 8ch
+      );
+    }
+    
+    /* Line number row implementation - VSCode style */
+    .line-number-rows {
+      position: absolute;
+      pointer-events: none;
+      top: 0;
+      left: 0;
+      width: 3.5rem;
+      height: 100%;
+      overflow: hidden;
+      z-index: 1;
+    }
+    
+    /* Add distinct spacing between all direct children */
+    & > * {
+      margin-bottom: 1.2rem;
+      position: relative;
+      min-height: 1.4rem; /* Ensure empty lines have height */
+      counter-increment: line; /* Increment line counter */
+      
+      /* Line numbers - VSCode-inspired modern sleek design */
+      &::before {
+        content: counter(line);
+        position: absolute;
+        width: 2.5rem;
+        left: -3.25rem;
+        color: var(--bolt-elements-textTertiary);
+        font-size: 0.75rem;
+        text-align: right;
+        user-select: none;
+        opacity: 0.5;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        transition: opacity 0.2s ease, color 0.2s ease;
+        pointer-events: none;
+        top: 0.25rem; /* Vertically align with text */
+        padding-right: 0.75rem;
+      }
+      
+      /* Cursor line highlight - improved with subtle gradient */
+      &.ProseMirror-selectednode,
+      &.highlight-line {
+        background: linear-gradient(to right, 
+          rgba(59, 130, 246, 0.04) 0%,
+          rgba(59, 130, 246, 0.02) 70%, 
+          transparent 100%
+        );
+        border-radius: 3px;
+        transition: background-color 0.2s ease;
+        
+        &::before {
+          opacity: 0.9;
+          color: var(--bolt-elements-textSecondary);
+          font-weight: 500;
+        }
+      }
+    }
+    
+    /* Improve active line highlighting - more VSCode-like */
+    .ProseMirror-gapcursor ~ * {
+      &::before {
+        opacity: 0.9 !important;
+        color: var(--bolt-elements-textPrimary) !important;
+      }
+    }
+  }
+  
+  /* Headings with improved spacing */
   :global(h1), :global(h2), :global(h3), :global(h4), :global(h5), :global(h6),
   :global(.enhanced-heading) {
-    margin-top: 1.5em;
-    margin-bottom: 0.75em;
+    margin-top: 2.5rem;
+    margin-bottom: 1.2rem;
     font-weight: 600;
     line-height: 1.25;
+    position: relative;
+    padding-left: 0;
+    clear: both;
   }
   
   :global(h1), :global(.enhanced-heading.level-1) {
-    font-size: 2em;
-    padding-bottom: 0.3em;
+    font-size: 2.2rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--bolt-elements-borderColor);
+    margin-top: 1.8rem;
+    margin-bottom: 1.5rem;
+    color: var(--bolt-elements-textPrimary);
   }
   
   :global(h2), :global(.enhanced-heading.level-2) {
-    font-size: 1.5em;
-    padding-bottom: 0.3em;
+    font-size: 1.7rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--bolt-elements-borderColor);
+    margin-top: 2.2rem;
+    margin-bottom: 1.2rem;
   }
   
   :global(h3), :global(.enhanced-heading.level-3) {
-    font-size: 1.25em;
+    font-size: 1.4rem;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
   }
   
   :global(h4), :global(.enhanced-heading.level-4) {
-    font-size: 1em;
+    font-size: 1.2rem;
+    margin-top: 1.8rem;
+    margin-bottom: 0.8rem;
   }
   
   /* Paragraphs and spacing */
   :global(p), :global(.enhanced-paragraph) {
-    margin-top: 0;
-    margin-bottom: 1em;
+    margin-top: 0.75rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.8;
+    position: relative;
+    padding-left: 0;
   }
-  
+
+  /* Always add space after headings */
+  :global(h1) + :global(p),
+  :global(h2) + :global(p),
+  :global(h3) + :global(p),
+  :global(h4) + :global(p) {
+    margin-top: 1.2rem;
+  }
+
   /* Lists - Enhanced for better hierarchy */
   :global(ul), :global(ol), :global(.enhanced-ul), :global(.enhanced-ol) {
-    padding-left: 3.5em;
-    margin-top: 0;
-    margin-bottom: 1em;
+    padding-left: 3.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
   }
   
   /* Improved bullet styling */
@@ -51,224 +201,164 @@
     list-style-type: disc;
   }
   
-  :global(li), :global(.enhanced-li) {
-    margin-bottom: 0.5em;
-    position: relative;
-  }
-  
-  /* Nested list styling with visual hierarchy */
-  :global(li > ul), :global(li > ol),
-  :global(.enhanced-li > .enhanced-ul), :global(.enhanced-li > .enhanced-ol) {
-    margin-top: 0.25em;
-    margin-bottom: 0.5em;
-    padding-left: 3.5em;
-  }
-  
-  /* Level-specific list styling */
-  :global(ul > li > ul), :global(.enhanced-ul > .enhanced-li > .enhanced-ul) {
-    list-style-type: circle;
-  }
-  
-  :global(ul > li > ul > li > ul), :global(.enhanced-ul > .enhanced-li > .enhanced-ul > .enhanced-li > .enhanced-ul) {
-    list-style-type: square;
-  }
-  
-  /* Indent nested ordered lists for better hierarchy */
+  /* Ensure ordered lists display numbers */
   :global(ol), :global(.enhanced-ol) {
-    counter-reset: item;
     list-style-type: decimal;
-  }
-  
-  :global(ol > li > ol), :global(.enhanced-ol > .enhanced-li > .enhanced-ol) {
-    list-style-type: lower-alpha;
-  }
-  
-  :global(ol > li > ol > li > ol), :global(.enhanced-ol > .enhanced-li > .enhanced-ol > .enhanced-li > .enhanced-ol) {
-    list-style-type: lower-roman;
-  }
-  
-  /* Blockquotes */
-  :global(blockquote), :global(.enhanced-blockquote) {
-    padding: 0 1em;
-    color: var(--bolt-elements-textSecondary);
-    border-left: 0.25em solid var(--bolt-elements-borderColor);
-    margin: 0 0 1em 0;
-  }
-  
-  /* Code blocks - Enhanced for better readability */
-  :global(pre), :global(.enhanced-code-block) {
-    background-color: var(--bolt-elements-background-depth-3);
-    border-radius: 0.375rem;
-    padding: 1em;
-    overflow-x: auto;
-    margin-bottom: 1em;
-    white-space: pre;
-    tab-size: 2;
-    -moz-tab-size: 2;
-  }
-  
-  :global(pre code), :global(.enhanced-code-block code) {
-    padding: 0;
-    background-color: transparent;
-    border-radius: 0;
-    font-size: 0.9em;
-    white-space: pre;
-    display: block;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  }
-  
-  /* Inline code */
-  :global(code), :global(.enhanced-code) {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 0.9em;
-    padding: 0.2em 0.4em;
-    border-radius: 0.25em;
-    background-color: var(--bolt-elements-background-depth-2);
-  }
-  
-  /* Links */
-  :global(a), :global(.enhanced-link) {
-    color: #3b82f6;
-    text-decoration: none;
-  }
-  
-  :global(a:hover), :global(.enhanced-link:hover) {
-    text-decoration: underline;
-  }
-  
-  /* Tables */
-  :global(table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 1em;
-    overflow-x: auto;
-    display: block;
-  }
-  
-  :global(th), :global(td) {
-    padding: 0.5em 1em;
-    border: 1px solid var(--bolt-elements-borderColor);
-    text-align: left;
-  }
-  
-  :global(th) {
-    background-color: var(--bolt-elements-background-depth-2);
-    font-weight: 600;
-  }
-  
-  :global(tr:nth-child(even)) {
-    background-color: var(--bolt-elements-background-depth-1);
-  }
-  
-  /* Horizontal rule */
-  :global(hr), :global(.enhanced-hr) {
-    height: 0.25em;
-    padding: 0;
-    margin: 1.5em 0;
-    background-color: var(--bolt-elements-borderColor);
-    border: 0;
-  }
-  
-  /* Task lists */
-  :global(ul[data-type="taskList"]), :global(.enhanced-task-list) {
-    list-style: none;
-    padding-left: 0;
-  }
-  
-  :global(ul[data-type="taskList"] li), :global(.enhanced-task-item) {
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 0.5em;
-    padding-left: 1.5em;
-    position: relative;
-  }
-  
-  :global(ul[data-type="taskList"] li::before), :global(.enhanced-task-item::before) {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0.25em;
-    display: inline-block;
-    width: 1em;
-    height: 1em;
-    margin-right: 0.5em;
-    border: 1px solid var(--bolt-elements-borderColor);
-    border-radius: 0.25em;
-  }
-  
-  :global(ul[data-type="taskList"] li[data-checked="true"]::before), :global(.enhanced-task-item[data-checked="true"]::before) {
-    background-color: #3b82f6;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
-    background-size: 0.75em;
-    background-position: center;
-    background-repeat: no-repeat;
-  }
-  
-  /* Nested task lists */
-  :global(ul[data-type="taskList"] li ul[data-type="taskList"]), 
-  :global(.enhanced-task-item .enhanced-task-list) {
-    margin-top: 0.5em;
-    margin-left: -1.5em;
-  }
-  
-  /* Images */
-  :global(img), :global(.enhanced-image) {
-    max-width: 100%;
-    height: auto;
-    margin: 1em 0;
-    border-radius: 0.375rem;
-  }
-  
-  /* Highlight */
-  :global(.enhanced-highlight) {
-    background-color: rgba(255, 255, 0, 0.2);
-    padding: 0.1em 0.2em;
-    border-radius: 0.2em;
-  }
-  
-  /* Diagram container */
-  :global(.diagram-container), :global(.enhanced-diagram) {
-    margin: 1.5em 0;
-    padding: 1em;
-    background-color: var(--bolt-elements-background-depth-1);
-    border: 1px solid var(--bolt-elements-borderColor);
-    border-radius: 0.375rem;
-    overflow-x: auto;
-  }
-  
-  /* Mermaid/diagram styling */
-  :global(.mermaid), :global(.enhanced-mermaid) {
-    text-align: center;
+    counter-reset: item;
     
-    /* Ensure diagrams don't overflow */
-    & > svg {
-      max-width: 100%;
-      height: auto;
+    & > li, & > :global(.enhanced-li) {
+      counter-increment: item;
+      display: block;
+      position: relative;
+      
+      &::before {
+        content: counter(item) ".";
+        position: absolute;
+        font-weight: 500;
+        left: -2.5rem;
+        width: 2rem;
+        text-align: right;
+        color: var(--bolt-elements-textSecondary);
+      }
+    }
+    
+    /* Handle nested ordered lists with different counter styles */
+    & :global(ol), & :global(.enhanced-ol) {
+      counter-reset: nested-item;
+      
+      & > li, & > :global(.enhanced-li) {
+        counter-increment: nested-item;
+        
+        &::before {
+          content: counter(nested-item, lower-alpha) ".";
+        }
+      }
     }
   }
   
-  /* Code block language label */
-  :global(.code-block-header) {
-    display: block;
-    background-color: var(--bolt-elements-background-depth-4);
+  /* Task list specific styling has been removed */
+  
+  :global(li), :global(.enhanced-li) {
+    margin-bottom: 0.7rem;
+    position: relative;
+  }
+  
+  /* Blockquote with modern styling */
+  :global(blockquote), :global(.enhanced-blockquote) {
+    position: relative;
+    margin: 1.5rem 0;
+    padding: 0.75rem 1.5rem;
+    padding-left: 2rem;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+    border-left: 4px solid rgba(59, 130, 246, 0.5);
+    font-style: italic;
     color: var(--bolt-elements-textSecondary);
-    font-size: 0.8em;
-    padding: 0.3em 1em;
-    border-top-left-radius: 0.375rem;
-    border-top-right-radius: 0.375rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    overflow: hidden;
+    
+    /* Add quotation mark as background element */
+    &::before {
+      content: '\201C';
+      position: absolute;
+      top: -0.5rem;
+      left: 0.5rem;
+      font-size: 3rem;
+      font-family: Georgia, serif;
+      color: rgba(59, 130, 246, 0.2);
+      z-index: 0;
+    }
+    
+    /* Ensure content is above the quotation mark */
+    & > * {
+      position: relative;
+      z-index: 1;
+    }
+    
+    /* Nested blockquotes */
+    & blockquote {
+      border-left-color: rgba(59, 130, 246, 0.3);
+      background-color: rgba(0, 0, 0, 0.01);
+    }
+    
+    /* Dark mode adjustments */
+    :global(.dark) & {
+      background-color: rgba(255, 255, 255, 0.03);
+      border-left-color: rgba(59, 130, 246, 0.4);
+      
+      &::before {
+        color: rgba(59, 130, 246, 0.15);
+      }
+      
+      & blockquote {
+        border-left-color: rgba(59, 130, 246, 0.25);
+        background-color: rgba(255, 255, 255, 0.02);
+      }
+    }
   }
   
-  :global(.code-block-with-header) {
-    margin-top: 0;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-  }
-  
-  /* Indented code blocks (for JSX, etc.) */
-  :global(.indented-code) {
-    padding-left: 2em;
+  /* Code blocks with enhanced styling */
+  :global(pre), :global(.enhanced-code-block) {
+    position: relative;
+    background-color: rgba(0, 0, 0, 0.03);
+    border-radius: 6px;
+    padding: 1rem 1rem 1rem 3rem;
+    margin: 1.5rem 0;
+    overflow: auto;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    counter-reset: code-line;
+    
+    /* Line numbers for code blocks */
+    & code {
+      display: block;
+      position: relative;
+      
+      & > div {
+        position: relative;
+        
+        &::before {
+          content: counter(code-line);
+          counter-increment: code-line;
+          position: absolute;
+          left: -2rem;
+          width: 1.5rem;
+          color: var(--bolt-elements-textTertiary);
+          font-size: 0.8rem;
+          text-align: right;
+          user-select: none;
+          opacity: 0.7;
+        }
+      }
+    }
+    
+    /* Copy button for code blocks */
+    &::after {
+      content: 'Copy';
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background-color: rgba(0, 0, 0, 0.1);
+      color: var(--bolt-elements-textSecondary);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      cursor: pointer;
+    }
+    
+    &:hover::after {
+      opacity: 1;
+    }
+    
+    :global(.dark) & {
+      background-color: rgba(255, 255, 255, 0.05);
+      
+      &::after {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+    }
   }
   
   /* Editor-specific styles */
@@ -282,42 +372,275 @@
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
     }
     
-    /* Improve placeholder visibility */
-    &.is-editor-empty:first-child::before {
-      content: attr(data-placeholder);
-      float: left;
+    /* Improved tab handling - preserve whitespace properly */
+    white-space: pre-wrap;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    
+    /* Enhance keyboard interaction styles */
+    & p, & h1, & h2, & h3, & pre, & ul, & ol {
+      transition: background-color 0.1s ease;
+      
+      &.has-focus {
+        background-color: rgba(59, 130, 246, 0.04);
+      }
+    }
+    
+    /* Preserve indentation in code blocks */
+    & pre, & code {
+      tab-size: 2;
+      -moz-tab-size: 2;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    
+    /* Highlight active line more clearly */
+    & .ProseMirror-focused {
+      & p.highlight-line, & li.highlight-line, & h1.highlight-line, & h2.highlight-line {
+        background: linear-gradient(to right, 
+          rgba(59, 130, 246, 0.06) 0%,
+          rgba(59, 130, 246, 0.02) 70%, 
+          transparent 100%
+        );
+        border-radius: 2px;
+      }
+    }
+    
+    /* Selection styles */
+    & ::selection {
+      background-color: rgba(59, 130, 246, 0.2);
+    }
+    
+    :global(.dark) & {
+      & ::selection {
+        background-color: rgba(59, 130, 246, 0.4);
+      }
+    }
+    
+    /* Improved code editor-like gutter */
+    position: relative;
+    
+    /* VSCode-like gutter */
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3.5rem; /* Width of the gutter */
+      background-color: rgba(0, 0, 0, 0.03);
+      border-right: 1px solid rgba(0, 0, 0, 0.06);
+      z-index: 0;
+    }
+    
+    :global(.dark) & {
+      &::before {
+        background-color: rgba(255, 255, 255, 0.02);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+      }
+    }
+    
+    /* Modern scrollbar styling */
+    &::-webkit-scrollbar {
+      width: 14px;
+      height: 14px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background-color: rgba(0, 0, 0, 0.2);
+      border: 4px solid transparent;
+      background-clip: content-box;
+      border-radius: 10px;
+    }
+    
+    &::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(0, 0, 0, 0.3);
+    }
+    
+    :global(.dark) & {
+      &::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.15);
+        border: 4px solid transparent;
+        background-clip: content-box;
+        border-radius: 10px;
+      }
+      
+      &::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.25);
+      }
+    }
+    
+    /* Status indicators and document statistics */
+    .statusBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      background-color: rgba(0, 0, 0, 0.02);
+      border-top: 1px solid var(--bolt-elements-borderColor);
+      font-size: 0.8rem;
       color: var(--bolt-elements-textTertiary);
-      pointer-events: none;
-      height: 0;
+      
+      .docStats {
+        display: flex;
+        gap: 1rem;
+        
+        span {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+        }
+      }
+    }
+    
+    /* Micro-interactions and animations */
+    .ProseMirror {
+      transition: background-color 0.3s ease, opacity 0.3s ease;
+      
+      &.ProseMirror-focused {
+        background-color: rgba(255, 255, 255, 0.5);
+      }
+    }
+    
+    /* Mode transition animations */
+    &.mode-transition {
+      transition: transform 0.3s ease, opacity 0.3s ease;
     }
   }
   
-  /* Dark mode adjustments */
-  :global(.dark) & {
-    :global(code), :global(.enhanced-code) {
-      background-color: rgba(255, 255, 255, 0.1);
+  /* Status bar with editor insights */
+  .editorStatusBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    background-color: rgba(0, 0, 0, 0.03);
+    border-top: 1px solid var(--bolt-elements-borderColor);
+    font-size: 0.75rem;
+    color: var(--bolt-elements-textTertiary);
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    
+    .editorStats {
+      display: flex;
+      gap: 1rem;
+      
+      span {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
     }
     
-    :global(a), :global(.enhanced-link) {
-      color: #60a5fa;
+    .editorPosition {
+      padding: 0.1rem 0.5rem;
+      border-radius: 3px;
+      background-color: rgba(0, 0, 0, 0.04);
     }
     
-    :global(blockquote), :global(.enhanced-blockquote) {
-      border-left-color: rgba(255, 255, 255, 0.2);
-    }
-    
-    :global(.enhanced-highlight) {
-      background-color: rgba(255, 255, 0, 0.15);
-    }
-    
-    :global(.diagram-container), :global(.enhanced-diagram) {
-      background-color: var(--bolt-elements-background-depth-2);
-      border-color: var(--bolt-elements-borderColorAccent);
-    }
-    
-    :global(.code-block-header) {
-      background-color: rgba(0, 0, 0, 0.3);
-      border-bottom-color: rgba(255, 255, 255, 0.1);
+    :global(.dark) & {
+      background-color: rgba(255, 255, 255, 0.03);
+      
+      .editorPosition {
+        background-color: rgba(255, 255, 255, 0.08);
+      }
     }
   }
+  
+  /* Paper style editor option with enhanced styling */
+  &.paperStyle {
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 10px 15px -5px rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+    
+    :global(.markdown-editor) {
+      background-color: #fff;
+      
+      /* Paper background texture with subtle grid lines */
+      & .ProseMirror {
+        background-image: 
+          linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+        background-size: 25px 25px;
+        background-position: 0px 0px;
+        min-height: 500px;
+        padding: 25px;
+        line-height: 1.8;
+      }
+      
+      /* Enhanced heading styles in paper mode */
+      & h1 {
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: #333;
+      }
+    }
+    
+    /* Dark mode */
+    :global(.dark) & {
+      background-color: var(--bolt-elements-background-depth-1);
+      
+      :global(.markdown-editor) {
+        background-color: var(--bolt-elements-background-depth-1);
+        
+        & .ProseMirror {
+          background-image: 
+            linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+        
+        & h1 {
+          color: #eee;
+        }
+      }
+    }
+  }
+}
+
+/* Enhanced animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Highlight animation for cursor line */
+@keyframes highlightLine {
+  0% { background-color: rgba(59, 130, 246, 0.1); }
+  100% { background-color: rgba(59, 130, 246, 0.04); }
+}
+
+.highlight-animation {
+  animation: highlightLine 0.5s ease-out forwards;
+}
+
+/* Tab indentation animation */
+@keyframes indentPulse {
+  0% { background-color: rgba(59, 130, 246, 0.1); }
+  100% { background-color: transparent; }
+}
+
+.indent-pulse {
+  animation: indentPulse 0.5s ease-out forwards;
+}
+
+/* New animation for line numbers on active line */
+@keyframes activeLineNumberPulse {
+  0% { color: var(--bolt-elements-textPrimary); opacity: 1; }
+  100% { color: var(--bolt-elements-textSecondary); opacity: 0.9; }
+}
+
+.active-line-number {
+  animation: activeLineNumberPulse 0.3s ease-out forwards;
+}
+
+/* VSCode-like selection highlight */
+::selection {
+  background-color: rgba(59, 130, 246, 0.3);
 }
