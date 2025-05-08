@@ -210,6 +210,7 @@ const TicketChat = ({ backgroundMode = false }) => {
   const [showTicketTips, setShowTicketTips] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialMessage = useStore(initialTicketMessageStore);
@@ -228,9 +229,19 @@ const TicketChat = ({ backgroundMode = false }) => {
   // Set chat type to 'ticket' when component mounts
   // Removed: useEffect(() => { setChatType('ticket'); }, [setChatType]);
   useEffect(() => {
-    chatType.set('ticket'); // Set using nanostore
+    chatType.set('ticket');
     logger.debug('Chat type set to Ticket');
+    
+    // Scroll to bottom when component mounts
+    scrollToBottom();
   }, []);
+  
+  // Function to scroll to the bottom of the messages container
+  const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  };
 
   const storeTicketMessages = useCallback((messages: Message[]) => {
     chatType.set('ticket'); // Ensure type is set
@@ -815,10 +826,12 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
       {/* Main chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Messages container - Aligned with PRDChat */}
-        <div
-          className="flex-1 overflow-y-auto px-4 py-2 scroll-smooth"
-          ref={scrollRef} // Keep scrollRef if used for scrolling logic
-        >
+        <div 
+          ref={messagesContainerRef}
+          className={classNames(
+            'flex-1 overflow-y-auto px-4 py-4 messages-container',
+            isStreaming ? 'opacity-80' : 'opacity-100' // Dim during streaming
+          )}> 
           <div className="max-w-chat mx-auto"> {/* Changed from max-w-3xl */}
             {!chatStarted && messagesForDisplay.length === 0 ? (
               // Initial state - Use PRDChat's structure/styling

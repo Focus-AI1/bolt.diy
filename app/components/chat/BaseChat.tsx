@@ -447,27 +447,28 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           // Keep the regular chat UI visible
         }
         
-        // If Research mode is on, store the message for Research processing but don't switch UI
-        if (isResearchModeToggleOn) {
-          // First reset the store to clear any previous data
-          initialResearchMessageStore.set({
-            text: '',
-            files: [],
-            imageDataList: [],
-            autoSubmit: false
-          });
+        // Commenting out as BETA feature DO NOT DELETE!!!!
+        // // If Research mode is on, store the message for Research processing but don't switch UI
+        // if (isResearchModeToggleOn) {
+        //   // First reset the store to clear any previous data
+        //   initialResearchMessageStore.set({
+        //     text: '',
+        //     files: [],
+        //     imageDataList: [],
+        //     autoSubmit: false
+        //   });
           
-          // Then store the message content and files in the store for ResearchChat to use in background
-          initialResearchMessageStore.set({
-            text: messageContent,
-            files: uploadedFiles || [],
-            imageDataList: imageDataList || [],
-            autoSubmit: true
-          });
+        //   // Then store the message content and files in the store for ResearchChat to use in background
+        //   initialResearchMessageStore.set({
+        //     text: messageContent,
+        //     files: uploadedFiles || [],
+        //     imageDataList: imageDataList || [],
+        //     autoSubmit: true
+        //   });
           
-          // Don't switch to Research mode UI, but still process in background
-          // Keep the regular chat UI visible
-        }
+        //   // Don't switch to Research mode UI, but still process in background
+        //   // Keep the regular chat UI visible
+        // }
       }
 
       // Always proceed with sending the message to the regular chat endpoint
@@ -591,18 +592,45 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 <div className="flex items-center justify-center px-6 py-3">
                   <div className="flex items-center gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm">
                     {['chat', 'research', 'prd', 'ticket'].map((mode) => (
-                      <button
-                        key={mode}
-                        onClick={() => setChatMode(mode as ChatMode)}
-                        className={classNames(
-                          'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
-                          chatMode === mode
-                            ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
-                            : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
-                        )}
-                      >
-                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                      </button>
+                      mode === 'research' ? (
+                        // Will be enabled in the future. Leave it for now.
+                        <Tooltip.Root key={mode}>
+                          <Tooltip.Trigger asChild>
+                            <button
+                              className={classNames(
+                                'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 relative flex items-center justify-center',
+                                'text-bolt-elements-textSecondary opacity-70 cursor-not-allowed'
+                              )}
+                              disabled={true}
+                            >
+                              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                              <span className="ml-1 px-1 py-0.5 bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-[10px] font-semibold rounded">BETA</span>
+                            </button>
+                          </Tooltip.Trigger>
+                          <Tooltip.Portal>
+                            <Tooltip.Content
+                              className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                              sideOffset={5}
+                            >
+                              Your administrator must enable a search tool to use research
+                              <Tooltip.Arrow className="fill-gray-800" />
+                            </Tooltip.Content>
+                          </Tooltip.Portal>
+                        </Tooltip.Root>
+                      ) : (
+                        <button
+                          key={mode}
+                          onClick={() => setChatMode(mode as ChatMode)}
+                          className={classNames(
+                            'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
+                            chatMode === mode
+                              ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
+                              : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
+                          )}
+                        >
+                          {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                        </button>
+                      )
                     ))}
                   </div>
                 </div>

@@ -448,13 +448,13 @@ export const convertHtmlToDocxElements = (htmlContent: string): any[] => {
 };
 
 /**
- * Creates a Word document from PRD content with enhanced formatting and structure
+ * Creates a Word document from PRD content with basic formatting
  * 
  * @param editorContent HTML content from the editor
  * @param prdDocument PRD document metadata
  * @returns Promise that resolves to a Blob containing the Word document
  */
-export const createWordDocument = async (
+export const createSimpleWordDocument = async (
   editorContent: string,
   prdDocument?: PRDDocument | null
 ): Promise<Blob> => {
@@ -462,149 +462,15 @@ export const createWordDocument = async (
     logger.debug('Creating Word document');
     
     const title = prdDocument?.title || 'Product Requirements Document';
-    const lastUpdated = prdDocument?.lastUpdated 
-      ? new Date(prdDocument.lastUpdated).toLocaleString() 
-      : new Date().toLocaleString();
-
-    // Create document with appropriate sections
+    
+    // Create a document with simple formatting
     const doc = new Document({
       creator: "Focus AI PRD Generator",
       title: title,
-      description: "Product Requirements Document created with Focus AI",
       sections: [
         {
-          properties: {
-            page: {
-              margin: {
-                top: 1440, // 1 inch in twips (twentieths of a point)
-                right: 1080, // 3/4 inch
-                bottom: 1440,
-                left: 1080,
-              }
-            }
-          },
-          headers: {
-            default: new Header({
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: title,
-                      size: WORD_STYLES.fontSize.body * 2,
-                      font: WORD_STYLES.fonts.body,
-                      color: WORD_STYLES.colors.muted
-                    })
-                  ],
-                  alignment: AlignmentType.RIGHT
-                })
-              ]
-            })
-          },
-          footers: {
-            default: new Footer({
-              children: [
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: "Page ",
-                      size: WORD_STYLES.fontSize.footer * 2,
-                      font: WORD_STYLES.fonts.body,
-                      color: WORD_STYLES.colors.muted
-                    }),
-                    new TextRun({
-                      children: [{ text: "{PAGE}" }],
-                      size: WORD_STYLES.fontSize.footer * 2,
-                      font: WORD_STYLES.fonts.body,
-                      color: WORD_STYLES.colors.muted
-                    }),
-                    new TextRun({
-                      text: " of ",
-                      size: WORD_STYLES.fontSize.footer * 2,
-                      font: WORD_STYLES.fonts.body,
-                      color: WORD_STYLES.colors.muted
-                    }),
-                    new TextRun({
-                      children: [{ text: "{NUMPAGES}" }],
-                      size: WORD_STYLES.fontSize.footer * 2,
-                      font: WORD_STYLES.fonts.body,
-                      color: WORD_STYLES.colors.muted
-                    })
-                  ],
-                  alignment: AlignmentType.CENTER
-                })
-              ]
-            })
-          },
           children: [
-            // Title page
-            new Paragraph({
-              heading: HeadingLevel.TITLE,
-              alignment: AlignmentType.CENTER,
-              spacing: { 
-                before: WORD_STYLES.spacing.titleBefore, 
-                after: WORD_STYLES.spacing.titleAfter 
-              },
-              children: [
-                new TextRun({
-                  text: title,
-                  bold: true,
-                  size: WORD_STYLES.fontSize.title * 2,
-                  font: WORD_STYLES.fonts.headings,
-                  color: WORD_STYLES.colors.title
-                })
-              ]
-            }),
-            
-            // Document creation information
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: `Last updated: ${lastUpdated}`,
-                  size: WORD_STYLES.fontSize.body * 2,
-                  font: WORD_STYLES.fonts.body,
-                  color: WORD_STYLES.colors.muted
-                })
-              ],
-              alignment: AlignmentType.CENTER,
-              spacing: { after: 600 }
-            }),
-            
-            // Page break after title page
-            new PageBreak(),
-            
-            // Table of contents title
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Table of Contents",
-                  bold: true,
-                  size: WORD_STYLES.fontSize.heading1 * 2,
-                  font: WORD_STYLES.fonts.headings,
-                  color: WORD_STYLES.colors.heading
-                })
-              ],
-              spacing: { after: 300 }
-            }),
-            
-            // Here Word would automatically generate a TOC
-            // Instead we add a placeholder note
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Note: After opening in Microsoft Word, right-click here and select 'Update Field' to generate the table of contents.",
-                  italics: true,
-                  size: WORD_STYLES.fontSize.body * 2,
-                  font: WORD_STYLES.fonts.body,
-                  color: WORD_STYLES.colors.muted
-                })
-              ],
-              spacing: { after: 400 }
-            }),
-            
-            // Page break after TOC
-            new PageBreak(),
-            
-            // Convert main content
+            // Convert main content using the HTML-to-DOCX converter
             ...convertHtmlToDocxElements(editorContent),
           ]
         }
@@ -620,60 +486,8 @@ export const createWordDocument = async (
 };
 
 /**
- * Creates a simplified Word document with basic formatting when full features aren't available
- * 
- * @param editorContent HTML content from the editor
- * @param prdDocument PRD document metadata
- * @returns Promise that resolves to a Blob containing the Word document
- */
-export const createSimpleWordDocument = async (
-  editorContent: string,
-  prdDocument?: PRDDocument | null
-): Promise<Blob> => {
-  try {
-    logger.debug('Creating simple Word document');
-    
-    const title = prdDocument?.title || 'Product Requirements Document';
-    
-    // Create a simplified document without page numbers or advanced features
-    const doc = new Document({
-      creator: "Focus AI PRD Generator",
-      title: title,
-      sections: [
-        {
-          children: [
-            // Title
-            new Paragraph({
-              heading: HeadingLevel.TITLE,
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  text: title,
-                  bold: true,
-                  size: 28 * 2,
-                  color: '2F5496'
-                })
-              ],
-              spacing: { after: 400 }
-            }),
-            
-            // Convert main content using the same converter function
-            ...convertHtmlToDocxElements(editorContent),
-          ]
-        }
-      ]
-    });
-
-    // Generate and return the Word document as a blob
-    return await Packer.toBlob(doc);
-  } catch (error) {
-    logger.error('Error creating simple Word document:', error);
-    throw new Error('Failed to create Word document');
-  }
-};
-
-/**
  * Exports the PRD content as a Microsoft Word document
+ * This function uses a streamlined document generation approach for improved reliability
  * 
  * @param editorContent HTML content from the editor
  * @param prdDocument PRD document metadata
@@ -683,15 +497,13 @@ export const exportToWord = async (
   prdDocument?: PRDDocument | null
 ): Promise<void> => {
   try {
-    // Try to create the enhanced Word document first
-    let docBlob: Blob;
-    try {
-      docBlob = await createWordDocument(editorContent, prdDocument);
-    } catch (error) {
-      // If enhanced document fails, fall back to simple document
-      logger.warn('Enhanced Word document creation failed, falling back to simple format', error);
-      docBlob = await createSimpleWordDocument(editorContent, prdDocument);
+    // Check if the content is excessively large (over 1MB when stringified)
+    if (editorContent.length > 1000000) {
+      logger.warn('Document content is very large, this may cause issues with Word export');
     }
+    
+    // Generate the Word document
+    const docBlob = await createSimpleWordDocument(editorContent, prdDocument);
     
     // Generate a filename based on the document title
     const title = prdDocument?.title || 'prd';
