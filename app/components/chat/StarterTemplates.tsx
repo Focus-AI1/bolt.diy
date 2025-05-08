@@ -1,15 +1,11 @@
 import React from 'react';
 import { STARTER_TEMPLATES } from '~/utils/constants';
-import { Link } from '@remix-run/react';
 
 const StarterTemplates = () => {
   return (
     <div className="w-full max-w-[1200px] mx-auto px-4 mb-16">
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4">
         <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Build from a Template</h2>
-        <Link to="/templates" className="text-sm text-bolt-elements-item-contentAccent hover:underline">
-          View All
-        </Link>
       </div>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -26,7 +22,8 @@ const StarterTemplates = () => {
               </div>
             </div>
             
-            <div className="p-4">
+            {/* Content area with flex-grow to push button to bottom */}
+            <div className="p-4 flex-grow flex flex-col">
               <div className="flex items-center gap-2 mb-2">
                 <div className={`text-xl ${template.icon}`}></div>
                 <h3 className="font-medium text-bolt-elements-textPrimary">{template.label}</h3>
@@ -45,14 +42,10 @@ const StarterTemplates = () => {
                     {tag}
                   </span>
                 ))}
-                {template.tags.length > 3 && (
-                  <span className="px-2 py-1 text-xs rounded-full bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary">
-                    +{template.tags.length - 3}
-                  </span>
-                )}
               </div>
             </div>
             
+            {/* Button always at the bottom */}
             <a 
               href={`/git?url=https://github.com/${template.githubRepo}.git`}
               className="block w-full py-2 text-center text-sm font-medium bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundAccent hover:text-bolt-elements-item-contentAccent transition-colors duration-200"

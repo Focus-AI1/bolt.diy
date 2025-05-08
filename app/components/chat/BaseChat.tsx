@@ -138,7 +138,7 @@ export const initialResearchMessageStore = atom<{
 type ChatMode = 'chat' | 'prd' | 'ticket' | 'research';
 
 const RotatingText = () => {
-  const words = ["Tickets", "PRDs", "Prototypes", "Research"];
+  const words = ["Prototypes", "PRDs", "Tickets", "Research"];
   const [currentIndex, setCurrentIndex] = useState(0);
   
   useEffect(() => {
@@ -150,12 +150,12 @@ const RotatingText = () => {
   }, []);
   
   return (
-    <div className="relative h-[1.5em] overflow-hidden">
+    <div className="relative inline-block overflow-hidden">
       {words.map((word, index) => (
         <div
           key={word}
           className={classNames(
-            "absolute w-full transition-all duration-500 ease-in-out",
+            "absolute transition-all duration-500 ease-in-out whitespace-nowrap",
             index === currentIndex 
               ? "opacity-100 transform-none" 
               : "opacity-0 translate-y-8"
@@ -359,37 +359,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
-    const RotatingText = () => {
-      const words = ["Tickets", "PRDs", "Prototypes", "Research"];
-      const [currentIndex, setCurrentIndex] = useState(0);
-      
-      useEffect(() => {
-        const interval = setInterval(() => {
-          setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
-        }, 2000); // Change word every 2 seconds
-        
-        return () => clearInterval(interval);
-      }, []);
-      
-      return (
-        <div className="relative h-[1.5em] overflow-hidden">
-          {words.map((word, index) => (
-            <div
-              key={word}
-              className={classNames(
-                "absolute w-full transition-all duration-500 ease-in-out",
-                index === currentIndex 
-                  ? "opacity-100 transform-none" 
-                  : "opacity-0 translate-y-8"
-              )}
-            >
-              {word}
-            </div>
-          ))}
-        </div>
-      );
-    };
-
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
       event.preventDefault();
 
@@ -576,12 +545,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             {!chatStarted && chatMode === 'chat' && (
               <div className="flex flex-col h-full overflow-y-auto">
                 <div id="intro" className="mt-[2vh] mb-8 max-w-chat mx-auto text-center px-4 lg:px-0">
-                  <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-2 animate-fade-in">
-                    Where prompts become:
-                    <RotatingText />
-                  </h1>
-                  <p className="text-md lg:text-xl mb-8 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
-                    Bring ideas to life in seconds or get help on existing projects.
+                  <h1 className="text-2xl lg:text-4xl font-bold text-bolt-elements-textPrimary mb-2 animate-fade-in flex items-center justify-center gap-2">
+                    <span>Create something in seconds</span>
+                    <span className="text-bolt-elements-item-contentAccent">
+                  <RotatingText />
+                    </span>
+                </h1>
+                  <p className="text-sm lg:text-base mb-6 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
+                    Focus creates prototypes, PRDs, tickets, and research reports from a single prompt
                   </p>
                 </div>
                 
