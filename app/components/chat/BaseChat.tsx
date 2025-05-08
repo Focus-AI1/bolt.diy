@@ -574,12 +574,27 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             )}
             
             {!chatStarted && chatMode === 'chat' && (
-              <div id="intro" className="mt-[2vh] mb-8 max-w-chat mx-auto text-center px-4 lg:px-0 flex-shrink-0">
-                <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-2 animate-fade-in">
-                  Where prompts become:
-                  <RotatingText />
-                </h1>
-                <p className="text-md lg:text-xl mb-2 text-bolt-elements-textSecondary animate-fade-in animation-delay-200"> Bring ideas to life in seconds or get help on existing projects.</p>
+              <div className="flex flex-col overflow-y-auto">
+                <div id="intro" className="mt-[2vh] mb-8 max-w-chat mx-auto text-center px-4 lg:px-0 flex-shrink-0">
+                  <h1 className="text-3xl lg:text-6xl font-bold text-bolt-elements-textPrimary mb-2 animate-fade-in">
+                    Where prompts become:
+                    <RotatingText />
+                  </h1>
+                  <p className="text-md lg:text-xl mb-2 text-bolt-elements-textSecondary animate-fade-in animation-delay-200"> Bring ideas to life in seconds or get help on existing projects.</p>
+                </div>
+                
+                <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 flex-shrink-0 px-2 sm:px-6">
+                  <div className="flex justify-center gap-2">
+                    {ImportButtons(importChat)}
+                    <GitCloneButton importChat={importChat} />
+                  </div>
+                  {ExamplePrompts((event, messageInput) => {
+                    if (handleSendMessage) {
+                      handleSendMessage?.(event, messageInput);
+                    }
+                  })}
+                  <StarterTemplates />
+                </div>
               </div>
             )}
             {chatStarted && (
@@ -1098,21 +1113,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 <ClientOnly>{() => <ResearchChat />}</ClientOnly>
               </div>
             ) : null}
-            
-            {chatMode === 'chat' && !chatStarted && (
-              <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 flex-shrink-0 px-2 sm:px-6">
-                <div className="flex justify-center gap-2">
-                  {ImportButtons(importChat)}
-                  <GitCloneButton importChat={importChat} />
-                </div>
-                {ExamplePrompts((event, messageInput) => {
-                  if (handleSendMessage) {
-                    handleSendMessage?.(event, messageInput);
-                  }
-                })}
-                <StarterTemplates />
-              </div>
-            )}
           </div>
           <ClientOnly>
             {() =>

@@ -1,43 +1,66 @@
 import React from 'react';
-import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from '~/utils/constants';
+import { Link } from '@remix-run/react';
 
-interface FrameworkLinkProps {
-  template: Template;
-}
-
-const FrameworkLink: React.FC<FrameworkLinkProps> = ({ template }) => (
-  <a
-    href={`/git?url=https://github.com/${template.githubRepo}.git`}
-    data-state="closed"
-    data-discover="true"
-    className="items-center justify-center"
-  >
-    <div
-      className={`inline-block ${template.icon} w-8 h-8 text-4xl transition-theme opacity-25 hover:opacity-100 hover:text-purple-500 dark:text-white dark:opacity-50 dark:hover:opacity-100 dark:hover:text-purple-400 transition-all`}
-      title={template.label}
-    />
-  </a>
-);
-
-const StarterTemplates: React.FC = () => {
-  // Debug: Log available templates and their icons
-  React.useEffect(() => {
-    console.log(
-      'Available templates:',
-      STARTER_TEMPLATES.map((t) => ({ name: t.name, icon: t.icon })),
-    );
-  }, []);
-
+const StarterTemplates = () => {
   return (
-    <div className="flex flex-col items-center gap-4">
-      <span className="text-sm text-gray-500">or start a blank app with your favorite stack</span>
-      <div className="flex justify-center">
-        <div className="flex w-70 flex-wrap items-center justify-center gap-4">
-          {STARTER_TEMPLATES.map((template) => (
-            <FrameworkLink key={template.name} template={template} />
-          ))}
-        </div>
+    <div className="w-full max-w-[1200px] mx-auto px-4 mb-16">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Build from a Template</h2>
+        <Link to="/templates" className="text-sm text-bolt-elements-item-contentAccent hover:underline">
+          View All
+        </Link>
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {STARTER_TEMPLATES.map((template) => (
+          <div 
+            key={template.name}
+            className="group flex flex-col rounded-lg overflow-hidden border border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 hover:shadow-md transition-all duration-200"
+          >
+            {/* Placeholder image */}
+            <div className="h-40 bg-bolt-elements-background-depth-2 relative overflow-hidden">
+              {/* This will be replaced with actual images later */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className={`text-4xl ${template.icon}`}></div>
+              </div>
+            </div>
+            
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`text-xl ${template.icon}`}></div>
+                <h3 className="font-medium text-bolt-elements-textPrimary">{template.label}</h3>
+              </div>
+              
+              <p className="text-sm text-bolt-elements-textSecondary mb-3 line-clamp-2">
+                {template.description}
+              </p>
+              
+              <div className="flex flex-wrap gap-2 mt-auto">
+                {template.tags.slice(0, 3).map((tag) => (
+                  <span 
+                    key={tag} 
+                    className="px-2 py-1 text-xs rounded-full bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary"
+                  >
+                    {tag}
+                  </span>
+                ))}
+                {template.tags.length > 3 && (
+                  <span className="px-2 py-1 text-xs rounded-full bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary">
+                    +{template.tags.length - 3}
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            <a 
+              href={`/git?url=https://github.com/${template.githubRepo}.git`}
+              className="block w-full py-2 text-center text-sm font-medium bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:bg-bolt-elements-item-backgroundAccent hover:text-bolt-elements-item-contentAccent transition-colors duration-200"
+            >
+              Use Template
+            </a>
+          </div>
+        ))}
       </div>
     </div>
   );
