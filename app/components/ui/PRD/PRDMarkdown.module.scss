@@ -161,9 +161,9 @@
   }
   
   :global(h3), :global(.enhanced-heading.level-3) {
-    font-size: 1.4rem;
-    margin-top: 2rem;
-    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    margin-top: 1rem;
+    margin-bottom: 0.1rem !important;
   }
   
   :global(h4), :global(.enhanced-heading.level-4) {
@@ -174,9 +174,8 @@
   
   /* Paragraphs and spacing */
   :global(p), :global(.enhanced-paragraph) {
-    margin-top: 0.75rem;
-    margin-bottom: 1.5rem;
     line-height: 1.8;
+    margin-bottom: 0.3rem;
     position: relative;
     padding-left: 0;
   }
@@ -193,7 +192,7 @@
   :global(ul), :global(ol), :global(.enhanced-ul), :global(.enhanced-ol) {
     padding-left: 3.5rem;
     margin-top: 1rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.2rem;
   }
   
   /* Improved bullet styling */
@@ -239,7 +238,7 @@
   /* Task list specific styling has been removed */
   
   :global(li), :global(.enhanced-li) {
-    margin-bottom: 0.7rem;
+    margin-bottom: 0.3rem;
     position: relative;
   }
   
@@ -643,4 +642,12 @@
 /* VSCode-like selection highlight */
 ::selection {
   background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Nested lists - reduced margins for better hierarchy */
+:global(ol) > :global(li) > :global(ul),
+:global(.enhanced-ol) > :global(.enhanced-li) > :global(ul),
+:global(.enhanced-ol) > :global(.enhanced-li) > :global(.enhanced-ul) {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }

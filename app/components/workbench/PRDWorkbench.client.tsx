@@ -21,6 +21,9 @@ import {
     cleanHtml,
     cleanMarkdownFromTemplateLeakage
 } from '~/components/ui/PRD/prdUtils';
+import { exportToWord } from '~/components/ui/PRD/PRDWordExport';
+import { exportToMarkdown } from '~/components/ui/PRD/PRDMarkdownExport';
+import { exportToHtml } from '~/components/ui/PRD/PRDHtmlExport';
 import PRDStreamingIndicator from '../ui/PRD/PRDStreamingIndicator';
 
 // Extend the PRDDocument type to include _source
@@ -251,51 +254,47 @@ const PRDWorkbench = () => {
 
   // Export logic (use current editorContent)
   const exportMarkdown = useCallback(() => {
+    if (!editorInstance) { toast.error("Editor not ready for export."); return; }
     if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
-    const titleForFilename = prdDocument?.title || 'prd';
-    const blob = new Blob([editorContent], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${titleForFilename.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [prdDocument, editorContent]); // Depends on latest content
+
+    try {
+      exportToMarkdown(editorContent, prdDocument);
+      toast.success("Markdown export successful");
+    } catch (error) {
+      logger.error('Error exporting to Markdown:', error);
+      toast.error("Failed to export Markdown document");
+    }
+  }, [prdDocument, editorContent, editorInstance]); // Depends on latest content
 
   const exportHtml = useCallback(() => {
     if (!editorInstance) { toast.error("Editor not ready for export."); return; }
     if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
 
-    const editorHtml = editorInstance.getHTML();
-    const cleanedContent = cleanHtml(editorHtml);
-    const title = prdDocument?.title || 'PRD';
-    const lastUpdated = prdDocument?.lastUpdated ? new Date(prdDocument.lastUpdated).toLocaleString() : 'N/A';
+    try {
+      const editorHtml = editorInstance.getHTML();
+      exportToHtml(editorHtml, prdDocument);
+      toast.success("HTML export successful");
+    } catch (error) {
+      logger.error('Error exporting to HTML:', error);
+      toast.error("Failed to export HTML document");
+    }
+  }, [prdDocument, editorInstance, editorContent]); // Depends on latest content
 
-    const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
- <meta charset="UTF-8">
- <meta name="viewport" content="width=device-width, initial-scale=1.0">
- <title>${title}</title>
- <style> body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 20px auto; padding: 15px; } h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; } /* Add more basic styles if needed */ </style>
-</head>
-<body>
- ${cleanedContent}
- <hr>
- <p style="font-size: 0.8em; color: #777;">Last updated: ${lastUpdated}</p>
-</body>
-</html>`;
-    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Export to Microsoft Word document
+  const exportWord = useCallback(async () => {
+    if (!editorInstance) { toast.error("Editor not ready for export."); return; }
+    if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
+
+    try {
+      // Use the editor HTML content for Word export
+      const editorHtml = editorInstance.getHTML();
+      // Use the exportToWord function from our new module
+      await exportToWord(editorHtml, prdDocument);
+      toast.success("Word document export successful");
+    } catch (error) {
+      logger.error('Error exporting to Word:', error);
+      toast.error("Failed to export Word document");
+    }
   }, [prdDocument, editorInstance, editorContent]); // Depends on latest content
 
   // Effect to handle streaming state changes
@@ -628,16 +627,14 @@ const PRDWorkbench = () => {
               <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
               
               {/* Export options */}
-              <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+              <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
                 <div className="i-ph:file-html" />
               </IconButton>
-              <IconButton title="Export as Markdown" onClick={exportMarkdown} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50 ml-1">
+              <IconButton title="Export as Markdown" onClick={exportMarkdown} disabled={(!editorContent && !prdDocument) || !editorInstance || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50 ml-1">
                 <div className="i-ph:file-md" />
               </IconButton>
-              
-              {/* Close */}
-              <IconButton title="Close PRD Workbench" onClick={() => workbenchStore.showWorkbench.set(false)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2">
-                <div className="i-ph:x" />
+              <IconButton title="Export as Word" onClick={exportWord} disabled={(!editorContent && !prdDocument) || !editorInstance || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50 ml-1">
+                <div className="i-ph:file-doc text-blue-600" />
               </IconButton>
             </div>
           </div>
