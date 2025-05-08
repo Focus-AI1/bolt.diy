@@ -108,7 +108,7 @@ function UserButton() {
     
     // Set up message listener for receiving user data
     const handleMessage = (event: MessageEvent) => {
-      console.log('Received message in bolt.diy:', event.data?.type);
+      console.log('Received message in focus:', event.data?.type);
       
       // Handle direct user data updates
       if (event.data && event.data.type === 'USER_DATA_UPDATE') {
