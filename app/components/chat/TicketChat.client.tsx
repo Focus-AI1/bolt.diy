@@ -7,7 +7,7 @@ import { Messages } from './Messages.client';
 import { SendButton } from './SendButton.client';
 import { IconButton } from '~/components/ui/IconButton';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import { streamingState } from '~/lib/stores/streaming';
+import { ticketStreamingState } from '~/lib/stores/streaming';
 import { createScopedLogger } from '~/utils/logger';
 import { createSampler } from '~/utils/sampler';
 import FilePreview from './FilePreview';
@@ -200,11 +200,13 @@ const extractTicketsFromMessages = (messages: Message[]): Ticket[] | null => {
 };
 
 // Ticket Chat component
-const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = false }) => {
+const TicketChat = ({ backgroundMode = false }) => {
   // State for chat functionality
   const [chatInput, setChatInput] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [imageDataList, setImageDataList] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatStarted, setChatStarted] = useState(false);
   const [showTicketTips, setShowTicketTips] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -213,8 +215,8 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
   const initialMessage = useStore(initialTicketMessageStore);
   const initialMessageProcessedRef = useRef(false);
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
-  const [chatStarted, setChatStarted] = useState(false);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
+  const isStreaming = useStore(ticketStreamingState);
   const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory();
 
   // Get the needsUpdate status from the store
@@ -260,7 +262,6 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
     append,
     reload,
     stop,
-    isLoading,
     input,
     setInput,
     setMessages,
@@ -271,6 +272,8 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
     id: 'ticket-chat',
     initialMessages: initialMessages,
     onFinish: (message) => {
+      setIsLoading(false);
+      ticketStreamingState.set(false);
       logger.debug('Chat finished', message);
       const finishTimestamp = new Date().toISOString(); // Get timestamp when generation finishes
 
@@ -294,17 +297,17 @@ const TicketChat: React.FC<{ backgroundMode?: boolean }> = ({ backgroundMode = f
       
       // Update the last generated timestamp *after* processing and storing
       workbenchStore.updateTicketsLastGenerated(finishTimestamp);
-      streamingState.set(false); // Update streaming state store
     },
     onError: (error) => {
+      setIsLoading(false);
+      ticketStreamingState.set(false);
       logger.error('Chat error', error);
       toast.error('An error occurred during the chat.');
-      streamingState.set(false); // Reset streaming state on error
-      // Also potentially reset the last generated timestamp or handle differently? For now, just reset streaming.
     },
     onResponse: (response) => {
       if (response.ok) {
-        streamingState.set(true);
+        setIsLoading(true);
+        ticketStreamingState.set(true);
         // Set generation status in sessionStorage
         sessionStorage.setItem('ticket_generation_status', 'generating');
         
@@ -553,11 +556,84 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
        if (event.key === 'tickets' && event.newValue !== null) {
          workbenchStore.updateTickets();
        }
+       
+       // Handle sync trigger from TicketWorkbench
+       if (event.key === 'trigger_ticket_sync' && event.newValue !== null) {
+         try {
+           const syncData = JSON.parse(event.newValue);
+           if (syncData && syncData.message) {
+             // Only trigger if we're not already streaming
+             if (!isLoading && !isStreaming) {
+               logger.debug('Sync request received from TicketWorkbench');
+               
+               // Submit the sync message
+               append({
+                 role: 'user',
+                 content: syncData.message
+               });
+               
+               // Ensure chat started flag is set
+               if (!chatStarted) {
+                 setChatStarted(true);
+               }
+               
+               // Show workbench if needed
+               if (!backgroundMode && !workbenchStore.showWorkbench.get()) {
+                 workbenchStore.showWorkbench.set(true);
+               }
+               
+               // Clear the trigger after processing
+               sessionStorage.removeItem('trigger_ticket_sync');
+             } else {
+               logger.debug('Sync request ignored - chat is currently streaming');
+               // Optionally show toast message
+               if (!backgroundMode) {
+                 toast.info('Please wait for current generation to complete before syncing');
+               }
+             }
+           }
+         } catch (error) {
+           logger.error('Error processing sync trigger:', error);
+         }
+       }
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []); // No dependencies needed as workbenchStore methods are stable
+  }, [append, chatStarted, isLoading, isStreaming, backgroundMode]); // Added dependencies
+  
+  // Also check for sync trigger on initial mount
+  useEffect(() => {
+    // Check if there's a pending sync request
+    const pendingSyncData = sessionStorage.getItem('trigger_ticket_sync');
+    if (pendingSyncData && !isLoading && !isStreaming) {
+      try {
+        const syncData = JSON.parse(pendingSyncData);
+        if (syncData && syncData.message) {
+          logger.debug('Processing pending sync request on mount');
+          
+          // Submit the sync message with slight delay to ensure component is fully mounted
+          setTimeout(() => {
+            append({
+              role: 'user',
+              content: syncData.message
+            });
+            
+            // Ensure chat started flag is set
+            if (!chatStarted) {
+              setChatStarted(true);
+            }
+            
+            // Clear the trigger after processing
+            sessionStorage.removeItem('trigger_ticket_sync');
+          }, 300);
+        }
+      } catch (error) {
+        logger.error('Error processing pending sync trigger:', error);
+        sessionStorage.removeItem('trigger_ticket_sync');
+      }
+    }
+  }, [append, chatStarted, isLoading, isStreaming]); // Dependencies
 
   // Handle file upload button click
   const handleFileUpload = () => {
@@ -805,13 +881,13 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
               // Messages - Use filtered messages
               <Messages
                 messages={messagesForDisplay}
-                isStreaming={isLoading} // Pass isLoading from useChat
+                isStreaming={isStreaming} // Pass isStreaming from ticketStreamingState
                 ref={messagesEndRef} // Keep ref if used
               />
             )}
 
             {/* Regeneration prompt embedded in the message list area */}
-            {needsUpdate && !isLoading && (
+            {needsUpdate && !isStreaming && (
                <div className="py-3"> {/* Added padding */}
                  <div className="bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex items-center justify-between gap-3">
                    <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
@@ -821,7 +897,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                    <button
                      onClick={handleRegenerateTickets}
                      className="flex items-center gap-1.5 px-3 py-1.5 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm font-medium transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bolt-elements-background-depth-1 focus:ring-bolt-elements-background-accent"
-                     disabled={isLoading} // Keep disabled check just in case state changes rapidly
+                     disabled={isStreaming} // Keep disabled check just in case state changes rapidly
                    >
                      <span className="i-ph:arrows-clockwise text-base"></span>
                      Regenerate
@@ -888,12 +964,12 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                     maxHeight: TEXTAREA_MAX_HEIGHT,
                     // Height controlled by useEffect
                   }}
-                  disabled={isLoading}
+                  disabled={isStreaming}
                 />
 
                 {/* Send/Stop button - Aligned with PRDChat */}
                 <div className="absolute right-3 bottom-3 z-10">
-                   {isLoading ? (
+                   {isStreaming ? (
                      <IconButton
                         title="Stop generation"
                         onClick={() => stop()}
@@ -904,7 +980,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                   ) : (
                      <SendButton
                         show={true}
-                        isStreaming={isLoading}
+                        isStreaming={isStreaming}
                         onClick={(e) => handleSendMessage(e)}
                         disabled={!input.trim() && uploadedFiles.length === 0} // Check input from useChat
                      />
@@ -919,7 +995,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                     title="Upload document or image"
                     className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary transition-all"
                     onClick={handleFileUpload}
-                    disabled={isLoading}
+                    disabled={isStreaming}
                   >
                     <div className="i-ph:paperclip text-lg"></div>
                   </IconButton>
@@ -934,7 +1010,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                         setShowTicketTips(true);
                       }
                     }}
-                    disabled={isLoading}
+                    disabled={isStreaming}
                   >
                     <div className="i-ph:ticket text-lg"></div>
                   </IconButton>
@@ -944,7 +1020,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                       title="Export Chat"
                       className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary transition-all"
                       onClick={handleExportChat}
-                      disabled={isLoading}
+                      disabled={isStreaming}
                     >
                       <div className="i-ph:export text-lg"></div>
                     </IconButton>
@@ -952,7 +1028,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
                 </div>
 
                 {/* Shift+Enter hint - Aligned with PRDChat */}
-                {input.length > 0 && !isLoading ? (
+                {input.length > 0 && !isStreaming ? (
                   <div className="text-xs text-bolt-elements-textTertiary">
                     <kbd className="px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
                     + <kbd className="px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Enter</kbd>{' '}
@@ -970,7 +1046,7 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
               className="hidden"
               onChange={handleFileSelection}
               accept="image/*,.pdf,.doc,.docx,.txt,.md"
-              disabled={isLoading}
+              disabled={isStreaming}
             />
           </div>
         </div>

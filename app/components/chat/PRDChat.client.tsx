@@ -7,7 +7,7 @@ import { Messages } from './Messages.client';
 import { SendButton } from './SendButton.client';
 import { IconButton } from '~/components/ui/IconButton';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import { streamingState } from '~/lib/stores/streaming';
+import { prdStreamingState, startStreaming, endStreaming } from '~/lib/stores/prdEditor'; // Import prdStreamingState
 import { workbenchStore } from '~/lib/stores/workbench';
 import { createScopedLogger } from '~/utils/logger';
 import FilePreview from './FilePreview';
@@ -52,6 +52,7 @@ const PRDChat = ({ backgroundMode = false }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
+  const isStreaming = useStore(prdStreamingState);
   const initialMessageData = useStore(initialPrdMessageStore);
   const initialMessageProcessedRef = useRef(false);
   const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory();
@@ -90,96 +91,107 @@ const PRDChat = ({ backgroundMode = false }) => {
       const finalMarkdown = extractStreamingMarkdown(finalMessages);
 
       if (finalMarkdown) {
-          // Get existing PRD first for merging logic
-          let existingPRD: PRDDocument | null = null;
-          let isNewSession = initialMessages.length === 0 && finalMessages.length > 0 && finalMessages[0].role === 'user';
-          
-          if (!isNewSession) {
-              try {
-                  const storedPRD = sessionStorage.getItem('current_prd');
-                  if (storedPRD) {
-                      existingPRD = JSON.parse(storedPRD);
-                  }
-              } catch (error) {
-                  logger.error('Error parsing existing PRD from sessionStorage in onFinish:', error);
-              }
-          }
-
-          const hasMultipleSections = /^##\s+.+$/gm.test(finalMarkdown);
-          const hasTitle = /^#\s+.+$/m.test(finalMarkdown);
-          const isCompletePRD = hasTitle && hasMultipleSections;
-
-          let finalPRD: PRDDocument | null = null;
-          
-          if (isCompletePRD) {
-            logger.debug('Parsing complete PRD from final markdown');
-            finalPRD = parseChatMarkdownToPRDWithMerge(finalMarkdown, null);
-          } else if (existingPRD) {
-            logger.debug('Merging partial PRD update with existing document');
-            finalPRD = parseChatMarkdownToPRDWithMerge(finalMarkdown, existingPRD);
-            
-            if (!finalPRD) {
-              logger.warn('Failed to parse partial PRD update, using existing document');
-              finalPRD = existingPRD;
+        // Get existing PRD first for merging logic
+        let existingPRD: PRDDocument | null = null;
+        let isNewSession = initialMessages.length === 0 && finalMessages.length > 0 && finalMessages[0].role === 'user';
+        
+        if (!isNewSession) {
+            try {
+                const storedPRD = sessionStorage.getItem('current_prd');
+                if (storedPRD) {
+                    existingPRD = JSON.parse(storedPRD);
+                }
+            } catch (error) {
+                logger.error('Error parsing existing PRD from sessionStorage in onFinish:', error);
             }
-          } else {
-            logger.debug('Attempting to parse partial PRD as standalone document');
-            finalPRD = parseChatMarkdownToPRDWithMerge(finalMarkdown, null);
-          }
-
-          if (finalPRD) {
-            finalPRD._source = "chat_update";
-            
-            finalPRD.sections = sortSectionsByNumericalPrefix(finalPRD.sections);
-            
-            finalPRD.sections = finalPRD.sections.map(section => {
-              if (section.content) {
-                const cleanedContent = removePlaceholderText(section.content);
-                return { ...section, content: cleanedContent };
-              }
-              return section;
-            });
-
-            sessionStorage.setItem('current_prd', JSON.stringify(finalPRD));
-            logger.debug('PRD extracted and saved to sessionStorage onFinish (final)');
-            
-            const finalFullMarkdown = generateFullMarkdown(finalPRD);
-            workbenchStore.updateStreamingPRDContent(finalFullMarkdown);
-          } else {
-              logger.error("Failed to parse final PRD markdown in onFinish");
-          }
-      } else {
-          logger.warn("Could not extract final PRD markdown in onFinish");
-          workbenchStore.updateStreamingPRDContent(null);
-      }
-
-      workbenchStore.updatePRDLastGenerated(finishTimestamp);
-      
-      setTimeout(() => {
-        streamingState.set(false);
-        logger.debug('Streaming finished with delay.');
-      }, 300);
-
-      setTimeout(() => {
-        if (!streamingState.get()) {
-            workbenchStore.updateStreamingPRDContent(null);
-            logger.debug('Cleared streaming PRD content after delay.');
         }
-      }, 500);
+        
+        // Set a temporary flag to prevent PRDWorkbench from reloading during our update
+        sessionStorage.setItem('prd_prevent_reload', 'true');
 
-      if (finalMarkdown && !backgroundMode && !workbenchStore.showWorkbench.get()) {
-        workbenchStore.showWorkbench.set(true);
-      }
-    },
+        const hasMultipleSections = /^##\s+.+$/gm.test(finalMarkdown);
+        const hasTitle = /^#\s+.+$/m.test(finalMarkdown);
+        const isCompletePRD = hasTitle && hasMultipleSections;
+
+        // 2. Parse the markdown into a PRD document structure
+        let updatedPRD: PRDDocument | null;
+        
+        if (isCompletePRD) {
+            // If it's a complete PRD, use it directly
+            updatedPRD = parseChatMarkdownToPRDWithMerge(finalMarkdown, null);
+            logger.debug('Parsed complete PRD from chat response');
+        } else {
+            // Otherwise merge with existing PRD
+            updatedPRD = parseChatMarkdownToPRDWithMerge(finalMarkdown, existingPRD);
+            logger.debug('Merged partial PRD update with existing PRD');
+        }
+
+        if (updatedPRD) {
+            // Ensure sections are properly sorted
+            updatedPRD.sections = sortSectionsByNumericalPrefix(updatedPRD.sections);
+            
+            // Clean any placeholder text from section content
+            updatedPRD.sections = updatedPRD.sections.map(section => ({
+                ...section,
+                content: section.content ? removePlaceholderText(section.content) : section.content
+            }));
+            
+            // Mark this update as coming from chat
+            updatedPRD._source = "chat_update";
+            
+            try {
+                // 3. Generate full markdown from the complete PRD document FIRST
+                const fullMarkdown = generateFullMarkdown(updatedPRD);
+                
+                // 4. Update the workbench content with the FULL PRD markdown
+                // This must happen BEFORE saving to sessionStorage to prevent reversion
+                workbenchStore.streamingPRDContent.set(fullMarkdown);
+                
+                // 5. Save to sessionStorage
+                sessionStorage.setItem('current_prd', JSON.stringify(updatedPRD));
+                
+                // Show workbench
+                workbenchStore.showWorkbench.set(true); // Always show workbench when PRD is updated
+                
+                // 6. Open the workbench if it's not already open and not in background mode
+                if (!backgroundMode && !showWorkbench) {
+                    workbenchStore.showWorkbench.set(true);
+                }
+                
+                // 7. Update the last generated timestamp
+                workbenchStore.updatePRDLastGenerated(finishTimestamp);
+                
+                // 9. Clear the prevent reload flag after a delay
+                // This allows future storage events to be processed normally
+                setTimeout(() => {
+                    sessionStorage.removeItem('prd_prevent_reload');
+                    logger.debug('Cleared prevent reload flag');
+                }, 500);
+            } catch (error) {
+                logger.error('Error storing updated PRD in sessionStorage:', error);
+            }
+        } else {
+            logger.error("Failed to parse final PRD markdown in onFinish");
+        }
+    } else {
+        logger.warn("Could not extract final PRD markdown in onFinish");
+    }
+
+    // End streaming state with a small delay to ensure smooth transition
+    setTimeout(() => {
+        endStreaming();
+        logger.debug('Streaming finished with delay.');
+    }, 300);
+  },
     onError: (error) => {
-      streamingState.set(false);
+      endStreaming();
       workbenchStore.updateStreamingPRDContent(null); // Clear on error too
       toast.error(`Error: ${error.message}`);
       logger.error('PRD Chat API error:', error);
     },
     onResponse: (response) => {
         if (response.ok) {
-            streamingState.set(true);
+            startStreaming();
             logger.debug('Streaming response started.');
         }
     },
@@ -268,14 +280,14 @@ Description: ${ticket.description.substring(0, 100)}...`
     }
 
     const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-    const updatePrompt = `Tickets have been updated. Please update the PRD considering these changes, ensuring the entire document is returned.
+    const updatePrompt = `We've detected updates to the requirement tickets. Please fix/refine the PRD to incorporate these changes while preserving the document's integrity.
 
-IMPORTANT: The existing PRD may have been manually edited by the user. When generating the updated PRD:
-1. Identify sections directly affected by the ticket changes.
-2. For affected sections, completely REPLACE the old content with the new, updated content reflecting the ticket changes. DO NOT append.
-3. Preserve the exact titles and content of all sections NOT affected by the ticket changes.
-4. Ensure ALL standard PRD sections (Executive Summary, Problem Statement, User Requirements, etc.) are present in the output. If a standard section was not affected by tickets and has existing content, preserve it. If it was affected, update it. If it's a standard section not previously present or without relevant updates, include its title and a brief note like 'No updates based on current context.' DO NOT OMIT ANY STANDARD SECTION.
-5. Return the COMPLETE PRD document, including ALL standard sections (updated, preserved, or with notes), wrapped in <prd_document> tags.
+IMPORTANT: Since the existing PRD may contain manual user edits, please follow these precise guidelines:
+1. Analyze which sections are directly impacted by the ticket modifications and focus your updates there.
+2. For affected sections, perform a complete REPLACEMENT of the content with refined text that reflects the ticket changes. Avoid simply appending to existing content.
+3. Meticulously preserve both titles and content of all unaffected sections exactly as they currently exist.
+4. Ensure the document maintains ALL standard PRD sections. For unaffected sections with existing content, preserve them intact. For affected sections, update accordingly. For any standard section not present or lacking relevant updates, include the section with a brief contextual note.
+5. Return the COMPLETE PRD document wrapped in <prd_document> tags, including all standard sections whether updated, preserved, or annotated.
 
 ${prdContext}
 
@@ -501,13 +513,14 @@ ${ticketsContext}
 
       // Create message content array with text and images
       // Vercel AI SDK expects content as a string, or structured data for multimodal
-      let messageContent: string | MessageContent[] = currentInput; // Start with text content
+      const prdReminder = "Please provide updated full PRD content including all sections in your response (Most Important!).";
+      let messageContent: string | MessageContent[] = currentInput ? `${currentInput}\n\n${prdReminder}` : prdReminder; // Add reminder to text content
 
       if (imageDataList.length > 0) {
          // Format for multimodal input if API supports it
          // Assuming API handles { type: 'text', text: ... } and { type: 'image', image: ... } structure
          // passed via the `data` field in handleSubmit options.
-         const contentParts: MessageContent[] = [{ type: 'text', text: currentInput }];
+         const contentParts: MessageContent[] = [{ type: 'text', text: currentInput ? `${currentInput}\n\n${prdReminder}` : prdReminder }];
          imageDataList.forEach(imageData => {
            contentParts.push({ type: 'image', image: imageData });
          });
