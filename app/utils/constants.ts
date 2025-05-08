@@ -122,6 +122,6 @@ export const STARTER_TEMPLATES: Template[] = [
     githubRepo: 'thecodacus/bolt-angular-template',
     tags: ['angular', 'typescript', 'frontend', 'spa'],
     icon: 'i-bolt:angular',
-    image: '/templates/angular.webp'
+    image: '/templates/angulartemplate.jpg'
   },
 ];
