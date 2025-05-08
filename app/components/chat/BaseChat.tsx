@@ -3,7 +3,7 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useState } from 'react';
+import React, { type RefCallback, useEffect, useState, useRef } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { IconButton } from '~/components/ui/IconButton';
@@ -183,6 +183,65 @@ function ScrollToBottom() {
     )
   );
 }
+
+// Add this new component for the typing animation
+const TypingPlaceholder = () => {
+  const [displayText, setDisplayText] = useState("");
+  const [currentPhrase, setCurrentPhrase] = useState(0);
+  const [isTyping, setIsTyping] = useState(true);
+  const [charIndex, setCharIndex] = useState(0);
+  
+  const phrases = [
+    "create an awesome prototype",
+    "draft a product requirements doc",
+    "write and push tickets to Linear or Jira",
+    "put together a market research report"
+  ];
+  
+  useEffect(() => {
+    const typingSpeed = 70; // ms per character
+    const backspaceSpeed = 30; // ms per character
+    const pauseBeforeBackspace = 1500; // ms to wait before backspacing
+    
+    let timer;
+    
+    if (isTyping) {
+      // Typing forward
+      if (charIndex < phrases[currentPhrase].length) {
+        timer = setTimeout(() => {
+          setDisplayText(phrases[currentPhrase].substring(0, charIndex + 1));
+          setCharIndex(charIndex + 1);
+        }, typingSpeed);
+      } else {
+        // Finished typing current phrase
+        timer = setTimeout(() => {
+          setIsTyping(false);
+        }, pauseBeforeBackspace);
+      }
+    } else {
+      // Backspacing
+      if (charIndex > 0) {
+        timer = setTimeout(() => {
+          setDisplayText(phrases[currentPhrase].substring(0, charIndex - 1));
+          setCharIndex(charIndex - 1);
+        }, backspaceSpeed);
+      } else {
+        // Finished backspacing, move to next phrase
+        setCurrentPhrase((currentPhrase + 1) % phrases.length);
+        setIsTyping(true);
+      }
+    }
+    
+    return () => clearTimeout(timer);
+  }, [charIndex, currentPhrase, isTyping, phrases]);
+  
+  return (
+    <>
+      Focus can help you {displayText}
+      <span className="animate-blink">|</span>
+    </>
+  );
+};
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   (
@@ -694,9 +753,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           minHeight: TEXTAREA_MIN_HEIGHT,
                           maxHeight: TEXTAREA_MAX_HEIGHT,
                         }}
-                        placeholder="How can Focus help you today?"
+                        placeholder={chatStarted ? "How can Focus help you today?" : ""}
                         translate="no"
                       />
+                      {!chatStarted && input.length === 0 && (
+                        <div className="absolute top-0 left-0 w-full flex items-start px-4 pt-4 text-bolt-elements-textTertiary pointer-events-none">
+                          <TypingPlaceholder />
+                        </div>
+                      )}
                       <ClientOnly>
                         {() => (
                           <SendButton
@@ -1214,6 +1278,11 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         placeholder="How can Focus help you today?"
                         translate="no"
                       />
+                      {!chatStarted && (
+                        <div className="absolute top-0 left-0 w-full flex items-start px-4 pt-4 text-bolt-elements-textTertiary pointer-events-none">
+                          <TypingPlaceholder />
+                        </div>
+                      )}
                       <ClientOnly>
                         {() => (
                           <SendButton
