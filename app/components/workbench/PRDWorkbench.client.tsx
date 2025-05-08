@@ -68,13 +68,32 @@ const PRDWorkbench = () => {
   const initialMountRef = useRef(false);
   const domEventsAttachedRef = useRef(false);
 
-  // Define loadPrdFromStorage - This handles loading from sessionStorage
+  /**
+   * CRITICAL FUNCTION: Loads PRD content from sessionStorage with safeguards to prevent content reversion.
+   * 
+   * This function is responsible for handling storage events and determining when to reload
+   * content from storage vs. when to preserve the current editor state. It includes several
+   * critical safeguards to prevent content loss during streaming updates.
+   * 
+   * @param ignoreIfManuallyEdited - If true, won't reload if there are unsaved manual edits
+   */
   const loadPrdFromStorage = useCallback((ignoreIfManuallyEdited = true) => {
       try {
+        // CRITICAL SAFEGUARD #1: Check for the prevent_reload flag
+        // This flag is set by PRDChat.client.tsx during streaming updates to prevent content reversion
+        // When this flag is present, we MUST NOT reload from storage as it would overwrite recent changes
+        const preventReload = sessionStorage.getItem('prd_prevent_reload');
+        if (preventReload === 'true') {
+          logger.debug('Skipping PRD reload from storage due to prevent_reload flag');
+          return;
+        }
+
         const storedPRD = sessionStorage.getItem('current_prd');
 
+        // Handle case where storage is empty
         if (!storedPRD) {
-          // If storage is empty, clear state only if not manually edited or forced
+          // SAFEGUARD #2: Only clear state if not manually edited or if forced
+          // This prevents accidental clearing of unsaved changes
           if (prdDocument !== null && (!editorState.isManuallyEdited || !ignoreIfManuallyEdited)) {
             logger.debug('sessionStorage empty or explicitly cleared, clearing PRD state.');
             setPrdDocument(null);
@@ -87,13 +106,15 @@ const PRDWorkbench = () => {
         const parsedPRD: ExtendedPRDDocument = JSON.parse(storedPRD);
         const isChatUpdate = parsedPRD._source === "chat_update";
 
-        // If manually edited with unsaved changes, only update if it's from chat or forced
+        // CRITICAL SAFEGUARD #3: Protect unsaved manual edits
+        // If the user has made manual edits with unsaved changes, we should not overwrite them
+        // UNLESS the update is coming from chat (which means it should include those edits)
         if (ignoreIfManuallyEdited && editorState.isManuallyEdited && editorState.hasUnsavedChanges && !isChatUpdate) {
           logger.debug('Skipping PRD reload from storage due to unsaved manual edits');
           return;
         }
         
-        // If we just saved (no unsaved changes but manually edited), don't reload
+        // SAFEGUARD #4: Don't reload if we just saved
         // This prevents the brief flicker when saving
         if (ignoreIfManuallyEdited && editorState.isManuallyEdited && !editorState.hasUnsavedChanges) {
           logger.debug('Skipping PRD reload from storage after save');

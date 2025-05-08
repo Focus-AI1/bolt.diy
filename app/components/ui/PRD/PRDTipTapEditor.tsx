@@ -17,6 +17,9 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import FontFamily from '@tiptap/extension-font-family';
 import TextStyle from '@tiptap/extension-text-style';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('PRDTipTapEditor');
 
 interface PRDTipTapEditorProps {
   content: string;
@@ -1236,44 +1239,56 @@ const PRDTipTapEditor = ({
     editable: !readOnly,
   });
   
+  // Track the last content we received from props to detect actual changes
+  const lastPropContentRef = useRef<string>(content);
+  
   // Update editor content when content prop changes
   useEffect(() => {
-    if (editor && internalContent !== undefined) {
-      // Only update if we're not already updating and content has changed
-      if (isUpdatingRef.current) return;
+    if (!editor || internalContent === undefined) return;
+    
+    // Skip update if we're already in the middle of an update
+    if (isUpdatingRef.current) return;
+    
+    // Skip if content hasn't actually changed (prevents unnecessary re-renders)
+    if (content === lastPropContentRef.current) return;
+    
+    // Update our reference of the last prop content
+    lastPropContentRef.current = content;
+    
+    // Log for debugging
+    logger.debug('Content prop changed, updating editor content');
+    
+    try {
+      isUpdatingRef.current = true;
       
-      try {
-        isUpdatingRef.current = true;
-        
-        // Get current selection and scroll position
-        const selection = editor.view.state.selection;
-        const scrollPosition = editor.view.dom.scrollTop;
-        
-        // Set content with transaction to maintain history
-        const newHTML = parseMarkdownToProseMirror(internalContent);
-        editor.commands.setContent(newHTML, false);
-        
-        // Restore selection and scroll position if user is actively editing
-        if (document.activeElement === editor.view.dom) {
-          try {
-            // Only restore cursor position if it's valid in the new content
-            if (selection.$head.pos <= editor.state.doc.content.size) {
-              editor.commands.setTextSelection(selection.$head.pos);
-            }
-            editor.view.dom.scrollTop = scrollPosition;
-          } catch (e) {
-            // Ignore cursor position errors - they're not critical
-            console.log('Error restoring cursor position:', e);
+      // Get current selection and scroll position
+      const selection = editor.view.state.selection;
+      const scrollPosition = editor.view.dom.scrollTop;
+      
+      // Set content with transaction to maintain history
+      const newHTML = parseMarkdownToProseMirror(internalContent);
+      editor.commands.setContent(newHTML, false);
+      
+      // Restore selection and scroll position if user is actively editing
+      if (document.activeElement === editor.view.dom) {
+        try {
+          // Only restore cursor position if it's valid in the new content
+          if (selection.$head.pos <= editor.state.doc.content.size) {
+            editor.commands.setTextSelection(selection.$head.pos);
           }
+          editor.view.dom.scrollTop = scrollPosition;
+        } catch (e) {
+          // Ignore cursor position errors - they're not critical
+          logger.debug('Error restoring cursor position:', e);
         }
-      } finally {
-        // Always ensure we reset the updating flag
-        setTimeout(() => {
-          isUpdatingRef.current = false;
-        }, 10);
       }
+    } finally {
+      // Always ensure we reset the updating flag
+      setTimeout(() => {
+        isUpdatingRef.current = false;
+      }, 10);
     }
-  }, [editor, internalContent]);
+  }, [editor, internalContent, content]);
 
   useEffect(() => {
     if (editor) {
