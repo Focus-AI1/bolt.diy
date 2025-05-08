@@ -432,7 +432,7 @@ const TicketWorkbench = () => {
 
             <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
 
-            <IconButton title="Export as CSV" onClick={exportTicketsAsCSV} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+            <IconButton title="Export as CSV" onClick={exportTicketsAsCSV} disabled={tickets.length === 0 || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-csv" />
             </IconButton>
           </div>
