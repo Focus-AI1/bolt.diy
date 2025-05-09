@@ -16,7 +16,6 @@ import { motion } from 'framer-motion';
 import { initialPrdMessageStore } from './BaseChat';
 import {
   type PRDDocument,
-  type PRDSection,
   generateFullMarkdown,
   parseChatMarkdownToPRDWithMerge,
   extractStreamingMarkdown,

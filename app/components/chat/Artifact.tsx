@@ -67,10 +67,11 @@ export const Artifact = memo(({ messageId }: ArtifactProps) => {
       <div className="flex">
         <button
           className="flex items-stretch bg-bolt-elements-artifacts-background hover:bg-bolt-elements-artifacts-backgroundHover w-full overflow-hidden"
-          onClick={() => {
-            const showWorkbench = workbenchStore.showWorkbench.get();
-            workbenchStore.showWorkbench.set(!showWorkbench);
-          }}
+          //Commented for now.
+          // onClick={() => {
+          //   const showWorkbench = workbenchStore.showWorkbench.get();
+          //   workbenchStore.showWorkbench.set(!showWorkbench);
+          // }}
         >
           {artifact.type == 'bundled' && (
             <>
