@@ -9,7 +9,8 @@ import { IconButton } from '~/components/ui/IconButton';
 import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
-import PRDTipTapEditor, { EditorToolbar, Editor } from '~/components/ui/PRD/PRDTipTapEditor';
+import PRDTipTapEditor, { Editor, EditorToolbar } from '~/components/ui/PRD/PRDTipTapEditor';
+import toolbarStyles from '~/components/ui/PRD/PRDToolbar.module.scss';
 import {
     type PRDDocument,
     type PRDSection,
@@ -20,6 +21,9 @@ import {
     cleanHtml,
     cleanMarkdownFromTemplateLeakage
 } from '~/components/ui/PRD/prdUtils';
+import { exportToWord } from '~/components/ui/PRD/PRDWordExport';
+import { exportToMarkdown } from '~/components/ui/PRD/PRDMarkdownExport';
+import { exportToHtml } from '~/components/ui/PRD/PRDHtmlExport';
 import PRDStreamingIndicator from '../ui/PRD/PRDStreamingIndicator';
 
 // Extend the PRDDocument type to include _source
@@ -58,22 +62,42 @@ const PRDWorkbench = () => {
 
   const [prdDocument, setPrdDocument] = useState<ExtendedPRDDocument | null>(null);
   const [editorContent, setEditorContent] = useState<string>('');
-  const [zoomLevel, setZoomLevel] = useState(1.2);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
   const [editMode, setEditMode] = useState(true); // Default to edit mode
+  const [viewMode, setViewMode] = useState<'standard' | 'paper'>('standard'); // Add view mode state
   const contentRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
-  const [showEditorToolbar, setShowEditorToolbar] = useState(false);
   const initialMountRef = useRef(false);
   const domEventsAttachedRef = useRef(false);
 
-  // Define loadPrdFromStorage - This handles loading from sessionStorage
+  /**
+   * CRITICAL FUNCTION: Loads PRD content from sessionStorage with safeguards to prevent content reversion.
+   * 
+   * This function is responsible for handling storage events and determining when to reload
+   * content from storage vs. when to preserve the current editor state. It includes several
+   * critical safeguards to prevent content loss during streaming updates.
+   * 
+   * @param ignoreIfManuallyEdited - If true, won't reload if there are unsaved manual edits
+   */
   const loadPrdFromStorage = useCallback((ignoreIfManuallyEdited = true) => {
       try {
+        // CRITICAL SAFEGUARD #1: Check for the prevent_reload flag
+        // This flag is set by PRDChat.client.tsx during streaming updates to prevent content reversion
+        // When this flag is present, we MUST NOT reload from storage as it would overwrite recent changes
+        const preventReload = sessionStorage.getItem('prd_prevent_reload');
+        if (preventReload === 'true') {
+          logger.debug('Skipping PRD reload from storage due to prevent_reload flag');
+          return;
+        }
+
         const storedPRD = sessionStorage.getItem('current_prd');
 
+        // Handle case where storage is empty
         if (!storedPRD) {
-          // If storage is empty, clear state only if not manually edited or forced
+          // SAFEGUARD #2: Only clear state if not manually edited or if forced
+          // This prevents accidental clearing of unsaved changes
           if (prdDocument !== null && (!editorState.isManuallyEdited || !ignoreIfManuallyEdited)) {
             logger.debug('sessionStorage empty or explicitly cleared, clearing PRD state.');
             setPrdDocument(null);
@@ -86,13 +110,15 @@ const PRDWorkbench = () => {
         const parsedPRD: ExtendedPRDDocument = JSON.parse(storedPRD);
         const isChatUpdate = parsedPRD._source === "chat_update";
 
-        // If manually edited with unsaved changes, only update if it's from chat or forced
+        // CRITICAL SAFEGUARD #3: Protect unsaved manual edits
+        // If the user has made manual edits with unsaved changes, we should not overwrite them
+        // UNLESS the update is coming from chat (which means it should include those edits)
         if (ignoreIfManuallyEdited && editorState.isManuallyEdited && editorState.hasUnsavedChanges && !isChatUpdate) {
           logger.debug('Skipping PRD reload from storage due to unsaved manual edits');
           return;
         }
         
-        // If we just saved (no unsaved changes but manually edited), don't reload
+        // SAFEGUARD #4: Don't reload if we just saved
         // This prevents the brief flicker when saving
         if (ignoreIfManuallyEdited && editorState.isManuallyEdited && !editorState.hasUnsavedChanges) {
           logger.debug('Skipping PRD reload from storage after save');
@@ -228,59 +254,52 @@ const PRDWorkbench = () => {
 
   // Export logic (use current editorContent)
   const exportMarkdown = useCallback(() => {
+    if (!editorInstance) { toast.error("Editor not ready for export."); return; }
     if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
-    const titleForFilename = prdDocument?.title || 'prd';
-    const blob = new Blob([editorContent], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${titleForFilename.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [prdDocument, editorContent]); // Depends on latest content
+
+    try {
+      exportToMarkdown(editorContent, prdDocument);
+      toast.success("Markdown export successful");
+    } catch (error) {
+      logger.error('Error exporting to Markdown:', error);
+      toast.error("Failed to export Markdown document");
+    }
+  }, [prdDocument, editorContent, editorInstance]); // Depends on latest content
 
   const exportHtml = useCallback(() => {
     if (!editorInstance) { toast.error("Editor not ready for export."); return; }
     if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
 
-    const editorHtml = editorInstance.getHTML();
-    const cleanedContent = cleanHtml(editorHtml);
-    const title = prdDocument?.title || 'PRD';
-    const lastUpdated = prdDocument?.lastUpdated ? new Date(prdDocument.lastUpdated).toLocaleString() : 'N/A';
+    try {
+      const editorHtml = editorInstance.getHTML();
+      exportToHtml(editorHtml, prdDocument);
+      toast.success("HTML export successful");
+    } catch (error) {
+      logger.error('Error exporting to HTML:', error);
+      toast.error("Failed to export HTML document");
+    }
+  }, [prdDocument, editorInstance, editorContent]); // Depends on latest content
 
-    const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
- <meta charset="UTF-8">
- <meta name="viewport" content="width=device-width, initial-scale=1.0">
- <title>${title}</title>
- <style> body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 20px auto; padding: 15px; } h1, h2 { border-bottom: 1px solid #eee; padding-bottom: 5px; } /* Add more basic styles if needed */ </style>
-</head>
-<body>
- ${cleanedContent}
- <hr>
- <p style="font-size: 0.8em; color: #777;">Last updated: ${lastUpdated}</p>
-</body>
-</html>`;
-    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Export to Microsoft Word document
+  const exportWord = useCallback(async () => {
+    if (!editorInstance) { toast.error("Editor not ready for export."); return; }
+    if (!prdDocument && !editorContent) { toast.error("No PRD loaded or content available."); return; }
+
+    try {
+      // Use the editor HTML content for Word export
+      const editorHtml = editorInstance.getHTML();
+      // Use the exportToWord function from our new module
+      await exportToWord(editorHtml, prdDocument);
+      toast.success("Word document export successful");
+    } catch (error) {
+      logger.error('Error exporting to Word:', error);
+      toast.error("Failed to export Word document");
+    }
   }, [prdDocument, editorInstance, editorContent]); // Depends on latest content
 
   // Effect to handle streaming state changes
   useEffect(() => {
     if (isStreaming) {
-      // When streaming starts, hide the toolbar
-      setShowEditorToolbar(false);
-      
       // Update editor instance read-only state if it exists
       if (editorInstance) {
         editorInstance.setEditable(false);
@@ -288,19 +307,12 @@ const PRDWorkbench = () => {
       
       logger.debug('Streaming started, disabling edit mode');
     } else {
-      // When streaming ends, show the toolbar with a slight delay for smooth transition
-      const timer = setTimeout(() => {
-        setShowEditorToolbar(true);
-      }, 300);
-      
       // Update editor instance read-only state if it exists
       if (editorInstance) {
         editorInstance.setEditable(true);
       }
       
       logger.debug('Streaming ended, enabling edit mode');
-      
-      return () => clearTimeout(timer);
     }
   }, [isStreaming, editorInstance]);
 
@@ -454,13 +466,104 @@ const PRDWorkbench = () => {
     return !!editorContent || !!prdDocument || isStreaming;
   }, [editorContent, prdDocument, isStreaming]);
 
+  // Add component for document statistics and cursor position with modern design
+  const DocumentStatistics = ({ editor }: { editor: Editor | null }) => {
+    const [stats, setStats] = useState({ words: 0, chars: 0, lines: 0 });
+    const [cursorPosition, setCursorPosition] = useState({ line: 1, col: 1 });
+    
+    const calculateStats = () => {
+      if (!editor) return { words: 0, chars: 0, lines: 0 };
+      
+      const text = editor.getText();
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      const chars = text.length;
+      const lines = (text.match(/\n/g) || []).length + 1;
+      
+      return { words, chars, lines };
+    };
+    
+    // Calculate cursor position (line and column)
+    const calculateCursorPosition = () => {
+      if (!editor) return { line: 1, col: 1 };
+      
+      const { from } = editor.state.selection;
+      const text = editor.getText();
+      
+      // Calculate line number
+      const textBefore = text.slice(0, from);
+      const line = (textBefore.match(/\n/g) || []).length + 1;
+      
+      // Calculate column (accounting for tab characters)
+      const lastNewline = textBefore.lastIndexOf('\n');
+      const lineText = lastNewline >= 0 ? textBefore.slice(lastNewline + 1) : textBefore;
+      const col = lineText.length + 1;
+      
+      return { line, col };
+    };
+    
+    useEffect(() => {
+      // Update on content change
+      const updateHandler = () => {
+        setStats(calculateStats());
+      };
+      
+      // Update on selection change
+      const selectionHandler = () => {
+        setCursorPosition(calculateCursorPosition());
+      };
+      
+      if (editor) {
+        editor.on('update', updateHandler);
+        editor.on('selectionUpdate', selectionHandler);
+        
+        // Initial calculation
+        updateHandler();
+        selectionHandler();
+      }
+      
+      return () => {
+        if (editor) {
+          editor.off('update', updateHandler);
+          editor.off('selectionUpdate', selectionHandler);
+        }
+      };
+    }, [editor]);
+    
+    if (!editor) return null;
+    
+    return (
+      <div className="flex items-center h-10 px-5 border-t border-b border-bolt-elements-borderColor text-sm text-bolt-elements-textSecondary font-mono bg-bolt-elements-background-depth-1">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-1.5" title="Word count">
+            <div className="i-ph:text-aa text-base opacity-70" />
+            <span>{stats.words} words</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Character count">
+            <div className="i-ph:textbox text-base opacity-70" />
+            <span>{stats.chars} chars</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Line count">
+            <div className="i-ph:list-numbers text-base opacity-70" />
+            <span>{stats.lines} lines</span>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded bg-bolt-elements-background-depth-2" title="Cursor position">
+            <div className="i-ph:caret text-base opacity-70" />
+            <span>Ln {cursorPosition.line}, Col {cursorPosition.col}</span>
+        </div>
+      </div>
+    );
+  };
+
   // --- Render ---
 
   if (!showWorkbench) return null;
 
   return (
+    // Consistent styling with TicketWorkbench
+    // Do not change this parent div styling
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench"
+      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench rounded-tl-xl shadow-lg"
       variants={workbenchVariants}
       initial="closed"
       animate={showWorkbench ? 'open' : 'closed'}
@@ -469,8 +572,10 @@ const PRDWorkbench = () => {
         right: 0,
         top: 'var(--header-height)',
         bottom: 0,
-        height: 'calc(100vh - var(--header-height))',
+        height: 'calc(100vh - var(--header-height) - 4px)',
         width: 'var(--workbench-width)',
+        marginTop: '4px',
+        boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
       }}
     >
       <div className="h-full flex flex-col">
@@ -484,6 +589,7 @@ const PRDWorkbench = () => {
               <span className="ml-2 text-md text-bolt-elements-textTertiary">(Unsaved changes)</span>
             )}
           </div>
+          {/* line numbers, words, chars, etc should go here from PRDTipTapEditor */}
           {/* Controls */}
           <div className="flex items-center gap-4">
             {/* Save Button - Prominently Displayed */}
@@ -503,28 +609,32 @@ const PRDWorkbench = () => {
             </button>
             
             {/* Other controls grouped */}
-            <div className="flex items-center gap-2 border-l border-bolt-elements-borderColor pl-4">
+            <div className="flex items-center gap-1 border-l border-bolt-elements-borderColor pl-4">
               {/* Zoom */}
-              <div className="flex items-center">
-                <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
-                  <div className="i-ph:minus-circle w-5 h-5" />
-                </IconButton>
-                <span className="mx-2 text-sm text-bolt-elements-textSecondary">{Math.round(zoomLevel * 100)}%</span>
-                <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary">
-                  <div className="i-ph:plus-circle w-5 h-5" />
-                </IconButton>
-              </div>
+              <IconButton title="Zoom out" onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                <div className="i-ph:minus" />
+              </IconButton>
+              <span className="mx-2 text-sm text-bolt-elements-textSecondary">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              <IconButton title="Zoom in" onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.1))} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                <div className="i-ph:plus" />
+              </IconButton>
+              <IconButton title="Reset Zoom" onClick={() => setZoomLevel(1.2)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
+                <div className="i-ph:frame-corners" />
+              </IconButton>
+
+              <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
               
               {/* Export options */}
-              <div className="flex items-center gap-1 ml-2">
-                <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-                  <div className="i-ph:file-html w-5 h-5" />
-                </IconButton>
-              </div>
-              
-              {/* Close */}
-              <IconButton title="Close PRD Workbench" onClick={() => workbenchStore.showWorkbench.set(false)} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-2">
-                <div className="i-ph:x w-5 h-5" />
+              <IconButton title="Export as HTML" onClick={exportHtml} disabled={(!editorContent && !prdDocument) || !editorInstance || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                <div className="i-ph:file-html" />
+              </IconButton>
+              <IconButton title="Export as Markdown" onClick={exportMarkdown} disabled={(!editorContent && !prdDocument) || !editorInstance || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50 ml-1">
+                <div className="i-ph:file-md" />
+              </IconButton>
+              <IconButton title="Export as Word" onClick={exportWord} disabled={(!editorContent && !prdDocument) || !editorInstance || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50 ml-1">
+                <div className="i-ph:file-doc text-blue-600" />
               </IconButton>
             </div>
           </div>
@@ -532,23 +642,22 @@ const PRDWorkbench = () => {
 
         {/* Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden h-full">
-           {/* Toolbar: Show if editor instance exists and not streaming */}
-           <AnimatePresence>
-             {editorInstance && showEditorToolbar && !isStreaming && (
-               <motion.div 
-                 initial={{ opacity: 0 }}
-                 animate={{ opacity: 1 }}
-                 exit={{ opacity: 0 }}
-                 transition={{ duration: 0.15 }}
-                 className="w-full bg-white dark:bg-gray-900 border-b border-bolt-elements-borderColor shadow-sm flex-shrink-0"
-               >
-                 <EditorToolbar editor={editorInstance} readOnly={isStreaming} />
-               </motion.div>
-             )}
-           </AnimatePresence>
+          {/* Streaming indicator - positioned at the top of content area */}
+          {isStreaming && (
+            <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor flex-shrink-0">
+              <PRDStreamingIndicator />
+            </div>
+          )}
           
-           {/* Editor Content Area */}
-           <div ref={contentRef} className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6">
+          {/* Fixed Editor Toolbar - only visible when NOT streaming */}
+          {editorInstance && !isStreaming && (
+            <div className={toolbarStyles.fixedToolbar}>
+              <EditorToolbar editor={editorInstance} readOnly={false} />
+            </div>
+          )}
+          
+           {/* Editor Content Area - with proper spacing to account for fixed toolbar */}
+           <div ref={contentRef} className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-4 md:p-6 pt-1">
              {/* Use simpler condition: show editor if content/doc exists OR chat is loading */}
              {shouldShowEditor ? (
               <div className="w-full max-w-4xl mx-auto">
@@ -556,17 +665,19 @@ const PRDWorkbench = () => {
                   ref={editorContainerRef}
                   className={classNames(
                     "bg-white dark:bg-gray-900 rounded shadow-lg transition-all w-full mb-6",
-                    isStreaming ? "opacity-90" : ""
+                    isStreaming ? "opacity-90" : "",
+                    viewMode === 'paper' ? "paper-container" : ""
                   )}
                    style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', minHeight: 'calc(100% - 2rem)' }}
                 >
-                  {/* Streaming indicator */}
-                  {isStreaming && <PRDStreamingIndicator />}
                   <PRDTipTapEditor
                     content={editorContent}
                     onChange={handleEditorChange}
                     readOnly={isStreaming}
-                    className="w-full flex flex-col"
+                    className={classNames(
+                      "w-full flex flex-col",
+                      viewMode === 'paper' ? 'paperStyle' : ''
+                    )}
                     placeholder={isStreaming ? "Generating PRD..." : "Start writing your PRD..."}
                     onEditorReady={setEditorInstance}
                   />
@@ -577,6 +688,8 @@ const PRDWorkbench = () => {
             )}
           </div>
         </div>
+        {/* Document statistics with modern design */}
+        {editorInstance && <DocumentStatistics editor={editorInstance} />}
       </div>
     </motion.div>
   );

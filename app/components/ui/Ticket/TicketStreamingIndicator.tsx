@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 
-interface PRDStreamingIndicatorProps {
+interface TicketStreamingIndicatorProps {
   /**
    * Custom text to display during the initial loading phase
-   * @default "Generating PRD content"
+   * @default "Processing ticket information"
    */
   text?: string;
   /**
@@ -13,25 +13,25 @@ interface PRDStreamingIndicatorProps {
   onComplete?: () => void;
   /**
    * Optional custom theme
-   * @default "blue"
+   * @default "amber"
    */
   theme?: 'blue' | 'purple' | 'teal' | 'amber';
   /**
    * Optional estimated completion time in seconds (for progress estimation)
-   * @default 32
+   * @default 25
    */
   estimatedTime?: number;
 }
 
 /**
- * A sophisticated streaming indicator component that shows the progress of PRD generation
+ * A sophisticated streaming indicator component that shows the progress of ticket generation
  * with smooth animations, visual feedback, and modern design patterns.
  */
-const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
-  text = 'Generating PRD content',
+const TicketStreamingIndicator: React.FC<TicketStreamingIndicatorProps> = ({
+  text = 'Processing ticket information',
   onComplete,
-  theme = 'blue',
-  estimatedTime = 32
+  theme = 'amber',
+  estimatedTime = 25
 }) => {
   // State management
   const [loadingPhase, setLoadingPhase] = useState<number>(0);
@@ -83,17 +83,17 @@ const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
   
   const activeTheme = themes[theme];
 
-  // Enhanced loading phases with more detailed steps
+  // Enhanced loading phases with more detailed steps specific to ticket processing
   const loadingPhases = [
     text,
     'Analyzing requirements',
-    'Defining key features',
-    'Structuring document sections',
-    'Researching market context',
-    'Establishing user stories',
-    'Creating specifications',
-    'Building implementation details',
-    'Finalizing content'
+    'Generating ticket details',
+    'Processing task information',
+    'Assigning priority and status',
+    'Creating issue descriptions',
+    'Determining assignments',
+    'Adding metadata and tags',
+    'Finalizing tickets'
   ];
 
   // Calculate estimated progress
@@ -182,22 +182,7 @@ const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
     transition: { duration: 0.3, ease: 'easeOut' }
   };
 
-  const glowVariants = {
-    animate: {
-      boxShadow: [
-        '0 0 0 0 rgba(59, 130, 246, 0)',
-        '0 0 12px 4px rgba(59, 130, 246, 0.3)',
-        '0 0 0 0 rgba(59, 130, 246, 0)'
-      ],
-      transition: {
-        duration: 3,
-        repeat: Infinity,
-        ease: 'easeInOut'
-      }
-    }
-  };
-
-  // SVG paths for the advanced spinner
+  // SVG paths for the spinner
   const spinnerPaths = {
     outer: "M18.364 5.636a9 9 0 0 1 0 12.728m-12.728 0a9 9 0 0 1 0-12.728",
     middle: "M16.243 7.757a6 6 0 0 1 0 8.486m-8.486 0a6 6 0 0 1 0-8.486",
@@ -211,7 +196,7 @@ const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
         {/* Header section with spinner and text */}
         <div className="flex items-center justify-between px-5 py-3">
           <div className="flex items-center space-x-4">
-            {/* Advanced animated spinner */}
+            {/* Animated spinner */}
             <div className="relative w-6 h-6">
               <motion.svg 
                 viewBox="0 0 24 24" 
@@ -293,13 +278,18 @@ const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
             animate={pulseAnimation}
             className={`bg-gradient-to-r ${activeTheme.secondary} text-xs font-semibold text-white px-3 py-1.5 rounded-full flex items-center shadow-sm`}
           >
-            {/* AI chip icon */}
+            {/* Ticket icon */}
             <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path fillRule="evenodd" clipRule="evenodd" d="M14 7C13.4477 7 13 7.44772 13 8V16C13 16.5523 13.4477 17 14 17H18C18.5523 17 19 16.5523 19 16V8C19 7.44772 18.5523 7 18 7H14ZM11 8C11 6.34315 12.3431 5 14 5H18C19.6569 5 21 6.34315 21 8V16C21 17.6569 19.6569 19 18 19H14C12.3431 19 11 17.6569 11 16V8Z" fill="currentColor" />
-              <path fillRule="evenodd" clipRule="evenodd" d="M8 7C7.44772 7 7 7.44772 7 8V16C7 16.5523 7.44772 17 8 17H10C10.5523 17 11 16.5523 11 16V8C11 7.44772 10.5523 7 10 7H8ZM5 8C5 6.34315 6.34315 5 8 5H10C11.6569 5 13 6.34315 13 8V16C13 17.6569 11.6569 19 10 19H8C6.34315 19 5 17.6569 5 16V8Z" fill="currentColor" />
-              <path fillRule="evenodd" clipRule="evenodd" d="M1 8C1 6.34315 2.34315 5 4 5H6C7.65685 5 9 6.34315 9 8V16C9 17.6569 7.65685 19 6 19H4C2.34315 19 1 17.6569 1 16V8ZM4 7C3.44772 7 3 7.44772 3 8V16C3 16.5523 3.44772 17 4 17H6C6.55228 17 7 16.5523 7 16V8C7 7.44772 6.55228 7 6 7H4Z" fill="currentColor" />
+              <path d="M3 7C3 5.89543 3.89543 5 5 5H19C20.1046 5 21 5.89543 21 7V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V7Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M8 5V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M16 5V3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3 9H21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 13H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M15 13H17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M7 17H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M15 17H17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <span className="whitespace-nowrap">PRD Processing</span>
+            <span className="whitespace-nowrap">Ticket Processing</span>
           </motion.div>
         </div>
         
@@ -336,4 +326,4 @@ const PRDStreamingIndicator: React.FC<PRDStreamingIndicatorProps> = ({
   );
 };
 
-export default PRDStreamingIndicator;
+export default TicketStreamingIndicator;

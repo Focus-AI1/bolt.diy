@@ -8,6 +8,8 @@ import { IconButton } from '~/components/ui/IconButton';
 import { createScopedLogger } from '~/utils/logger';
 import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
+import { ticketStreamingState } from '~/lib/stores/streaming';
+import TicketStreamingIndicator from '../ui/Ticket/TicketStreamingIndicator';
 
 const logger = createScopedLogger('TicketWorkbench');
 
@@ -152,12 +154,8 @@ const TicketWorkbench = () => {
   const [editContent, setEditContent] = useState('');
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [showFilterSidebar, setShowFilterSidebar] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const isStreaming = useStore(ticketStreamingState);
   
   // State for tickets
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -351,38 +349,14 @@ const TicketWorkbench = () => {
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.1, 0.7));
   const handleZoomReset = () => setZoomLevel(1);
 
-  // Filter tickets based on search term and filters
-  const filteredTickets = tickets.filter(ticket => {
-    const matchesSearch = searchTerm === '' || 
-      ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ticket.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === null || ticket.status === statusFilter;
-    const matchesPriority = priorityFilter === null || ticket.priority === priorityFilter;
-    const matchesType = typeFilter === null || ticket.type === typeFilter;
-    
-    return matchesSearch && matchesStatus && matchesPriority && matchesType;
-  });
-
-  // Get unique values for filters
-  const statuses = [...new Set(tickets.map(ticket => ticket.status))];
-  const priorities = [...new Set(tickets.map(ticket => ticket.priority))];
-  const types = [...new Set(tickets.map(ticket => ticket.type))];
-
-  // Calculate statistics for the sidebar
-  const ticketStats = {
-    total: filteredTickets.length,
-    open: filteredTickets.filter(t => t.status === 'Open').length,
-    inProgress: filteredTickets.filter(t => t.status === 'In Progress').length,
-    closed: filteredTickets.filter(t => t.status === 'Closed').length,
-  };
-
   // Handle initial state and loading
   if (!showWorkbench) return null;
 
   return (
+    // Consistent styling with PRDWorkbench
+    // Do not change this parent div styling
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench"
+      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench rounded-tl-xl shadow-lg"
       variants={workbenchVariants}
       initial="closed"
       animate={showWorkbench ? 'open' : 'closed'}
@@ -391,36 +365,62 @@ const TicketWorkbench = () => {
         right: 0,
         top: 'var(--header-height)',
         bottom: 0,
-        height: 'calc(100vh - var(--header-height))',
+        height: 'calc(100vh - var(--header-height) - 4px)',
         width: 'var(--workbench-width)',
+        marginTop: '4px',
+        boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
       }}
     >
       <div className="h-full flex flex-col">
         {/* Toolbar */}
         <div className="flex justify-between items-center p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0">
           <div className="flex items-center gap-2 overflow-hidden">
-            <IconButton
-              title="Toggle Filters"
-              onClick={() => setShowFilterSidebar(!showFilterSidebar)}
-              className={classNames("text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary flex-shrink-0", {
-                "bg-bolt-elements-background-depth-3": showFilterSidebar
-              })}
-            >
-              <div className="i-ph:funnel" />
-            </IconButton>
-            <span className="text-sm font-medium text-bolt-elements-textPrimary truncate flex-shrink min-w-0">
+            <h1 className="text-xl font-semibold text-bolt-elements-textPrimary ml-2">
               Ticket Workbench
-            </span>
+            </h1>
             <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary flex-shrink-0">
-              {filteredTickets.length}
+              {tickets.length}
             </span>
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Sync Button - Position similar to Save button in PRDWorkbench */}
+            <button
+              onClick={() => {
+                // Set a flag in sessionStorage to trigger TicketChat
+                sessionStorage.setItem('trigger_ticket_sync', JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  message: "Please verify all tickets are properly aligned with the Product Requirements Document, ensuring complete coverage of functional requirements, implementation details, and proper prioritization."
+                }));
+                
+                // Dispatch storage event for listeners
+                window.dispatchEvent(new StorageEvent('storage', {
+                  key: 'trigger_ticket_sync',
+                  newValue: sessionStorage.getItem('trigger_ticket_sync'),
+                  storageArea: sessionStorage
+                }));
+                
+                toast.info('Validating tickets...');
+              }}
+              disabled={tickets.length === 0 || isStreaming}
+              className={classNames(
+                "flex items-center justify-center gap-2 rounded-md transition-all duration-200 font-medium py-2 px-4 min-w-[90px]",
+                tickets.length > 0 && !isStreaming
+                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md transform hover:scale-105"
+                  : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+              )}
+              title={isStreaming ? "Please wait for current operation to complete" : "Validate Tickets"}
+            >
+              <div className="i-ph:arrows-clockwise w-4 h-4" />
+              <span>Sync</span>
+            </button>
+
+            <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
+
             <IconButton title="Zoom Out" onClick={handleZoomOut} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:minus" />
             </IconButton>
-            <span className="text-xs text-bolt-elements-textSecondary px-1 w-10 text-center">
+            <span className="mx-2 text-sm text-bolt-elements-textSecondary">
               {tickets.length > 0 ? `${Math.round(zoomLevel * 100)}%` : '-'}
             </span>
             <IconButton title="Zoom In" onClick={handleZoomIn} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
@@ -432,120 +432,21 @@ const TicketWorkbench = () => {
 
             <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
 
-            <IconButton title="Export as JSON" onClick={exportTicketsAsJSON} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:file-json" />
-            </IconButton>
-            <IconButton title="Export as CSV" onClick={exportTicketsAsCSV} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+            <IconButton title="Export as CSV" onClick={exportTicketsAsCSV} disabled={tickets.length === 0 || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-csv" />
             </IconButton>
           </div>
         </div>
 
+        {/* Streaming indicator - positioned below toolbar, above content */}
+        {isStreaming && (
+          <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor">
+            <TicketStreamingIndicator />
+          </div>
+        )}
+
         {/* Main content area */}
         <div className="flex-1 flex overflow-hidden">
-          {showFilterSidebar && (
-            <div className="w-60 border-r border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 overflow-y-auto flex-shrink-0">
-              <div className="p-3">
-                <h3 className="text-sm font-medium text-bolt-elements-textPrimary mb-2">Filters & Search</h3>
-                <div className="mb-3">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                      <div className="i-ph:magnifying-glass text-bolt-elements-textTertiary w-3.5 h-3.5" />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Search title/desc..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="block w-full pl-7 pr-2 py-1.5 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2 mb-3">
-                  <div>
-                    <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-0.5">Status</label>
-                    <div className="relative">
-                      <select
-                        value={statusFilter || ''}
-                        onChange={(e) => setStatusFilter(e.target.value || null)}
-                        className="block w-full pl-2 pr-7 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
-                      >
-                        <option value="">All</option>
-                        {statuses.map(status => (
-                          <option key={status} value={status}>{status}</option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <div className="i-ph:caret-down text-bolt-elements-textTertiary w-3 h-3" />
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                     <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-0.5">Priority</label>
-                     <div className="relative">
-                        <select
-                          value={priorityFilter || ''}
-                          onChange={(e) => setPriorityFilter(e.target.value || null)}
-                          className="block w-full pl-2 pr-7 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
-                        >
-                          <option value="">All</option>
-                          {priorities.map(priority => (
-                            <option key={priority} value={priority}>{priority}</option>
-                          ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                           <div className="i-ph:caret-down text-bolt-elements-textTertiary w-3 h-3" />
-                        </div>
-                     </div>
-                  </div>
-                  <div>
-                     <label className="block text-xs font-medium text-bolt-elements-textSecondary mb-0.5">Type</label>
-                      <div className="relative">
-                        <select
-                          value={typeFilter || ''}
-                          onChange={(e) => setTypeFilter(e.target.value || null)}
-                          className="block w-full pl-2 pr-7 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus appearance-none"
-                        >
-                          <option value="">All</option>
-                          {types.map(type => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                          <div className="i-ph:caret-down text-bolt-elements-textTertiary w-3 h-3" />
-                        </div>
-                      </div>
-                  </div>
-                </div>
-
-                {(searchTerm || statusFilter || priorityFilter || typeFilter) && (
-                  <button
-                    onClick={() => {
-                      setSearchTerm('');
-                      setStatusFilter(null);
-                      setPriorityFilter(null);
-                      setTypeFilter(null);
-                    }}
-                    className="w-full px-2 py-1 text-xs border border-bolt-elements-borderColor rounded-md bg-bolt-elements-background-depth-2 text-bolt-elements-textPrimary hover:bg-bolt-elements-background-depth-3 focus:outline-none"
-                  >
-                    Clear Filters
-                  </button>
-                )}
-
-                <div className="mt-4 p-2 bg-bolt-elements-background-depth-2 rounded-lg">
-                  <h4 className="text-xs font-medium text-bolt-elements-textPrimary mb-1">Filtered Tickets</h4>
-                  <div className="text-xs text-bolt-elements-textSecondary space-y-0.5">
-                    <div>Total: {ticketStats.total}</div>
-                    <div>Open: {ticketStats.open}</div>
-                    <div>In Progress: {ticketStats.inProgress}</div>
-                    <div>Closed: {ticketStats.closed}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div
             ref={contentRef}
             className="flex-1 overflow-auto bg-bolt-elements-background-depth-2 p-3"
@@ -559,8 +460,11 @@ const TicketWorkbench = () => {
                 }}
               >
                 {/* Modern grid layout for tickets */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {filteredTickets.map((ticket, index) => (
+                <div className={classNames(
+                  "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3",
+                  isStreaming ? "opacity-90" : ""
+                )}>
+                  {tickets.map((ticket, index) => (
                     <motion.div
                       key={ticket.id}
                       custom={index}

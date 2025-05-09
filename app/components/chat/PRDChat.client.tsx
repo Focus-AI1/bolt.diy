@@ -49,8 +49,10 @@ const PRDChat = ({ backgroundMode = false }) => {
   const [showPRDTips, setShowPRDTips] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [imageDataList, setImageDataList] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(true); // Control visibility of message suggestions
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
   const isStreaming = useStore(prdStreamingState);
   const initialMessageData = useStore(initialPrdMessageStore);
@@ -60,7 +62,17 @@ const PRDChat = ({ backgroundMode = false }) => {
   useEffect(() => {
     chatType.set('prd');
     logger.debug('Chat type set to PRD');
+    
+    // Scroll to bottom when component mounts
+    scrollToBottom();
   }, []);
+  
+  // Function to scroll to the bottom of the messages container
+  const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  };
 
   const storePRDMessages = useCallback((messages: Message[]) => {
     chatType.set('prd');
@@ -83,6 +95,8 @@ const PRDChat = ({ backgroundMode = false }) => {
     id: 'prd-chat',
     initialMessages: initialMessages,
     onFinish: (message) => {
+      // Show suggestions after streaming is complete
+      setShowSuggestions(true);
       const finishTimestamp = new Date().toISOString();
       const finalMessages = [...messages, message];
       storePRDMessages(finalMessages); // Store history first
@@ -105,6 +119,9 @@ const PRDChat = ({ backgroundMode = false }) => {
                 logger.error('Error parsing existing PRD from sessionStorage in onFinish:', error);
             }
         }
+        
+        // Set a temporary flag to prevent PRDWorkbench from reloading during our update
+        sessionStorage.setItem('prd_prevent_reload', 'true');
 
         const hasMultipleSections = /^##\s+.+$/gm.test(finalMarkdown);
         const hasTitle = /^#\s+.+$/m.test(finalMarkdown);
@@ -144,20 +161,18 @@ const PRDChat = ({ backgroundMode = false }) => {
                 // This must happen BEFORE saving to sessionStorage to prevent reversion
                 workbenchStore.streamingPRDContent.set(fullMarkdown);
                 
-                // 5. IMPORTANT: Set a flag to prevent the workbench from reloading from storage
-                // This prevents the content from being reverted to the previous version
-                sessionStorage.setItem('prd_prevent_reload', 'true');
-                
-                // 6. Now save the updated PRD to sessionStorage
+                // 5. Save to sessionStorage
                 sessionStorage.setItem('current_prd', JSON.stringify(updatedPRD));
-                logger.debug('Updated PRD stored in sessionStorage');
                 
-                // 7. Open the workbench if it's not already open and not in background mode
+                // Show workbench
+                workbenchStore.showWorkbench.set(true); // Always show workbench when PRD is updated
+                
+                // 6. Open the workbench if it's not already open and not in background mode
                 if (!backgroundMode && !showWorkbench) {
                     workbenchStore.showWorkbench.set(true);
                 }
                 
-                // 8. Update the last generated timestamp
+                // 7. Update the last generated timestamp
                 workbenchStore.updatePRDLastGenerated(finishTimestamp);
                 
                 // 9. Clear the prevent reload flag after a delay
@@ -195,7 +210,7 @@ const PRDChat = ({ backgroundMode = false }) => {
         }
     },
   });
-
+  
   // Effect to push streaming markdown to the store
   useEffect(() => {
     if (isLoading && messages.length > 0) {
@@ -482,8 +497,66 @@ ${ticketsContext}
 
       // Focus the textarea
       textareaRef.current?.focus();
+      // Adjust height to fit content
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, TEXTAREA_MAX_HEIGHT)}px`;
+      }
     };
 
+
+    // Function to handle suggestion click
+    const handleSuggestionClick = (suggestionType: 'update' | 'research' | 'regenerate' = 'update') => {
+      // Hide suggestions after clicking
+      setShowSuggestions(false);
+      
+      // Then submit the message directly using the useChat's append method
+      // This bypasses the form submission and directly sends the message
+      setTimeout(() => {
+        // Create message content based on suggestion type
+        let messageContent = '';
+        
+        switch (suggestionType) {
+          case 'update':
+            messageContent = "Great! Now, please provide the updated full PRD content!";
+            break;
+          case 'research':
+            messageContent = "Please enhance bullet points with deeper research and industry insights.";
+            break;
+          case 'regenerate':
+            messageContent = "Please regenerate the PRD with improved structure and clarity.";
+            break;
+          default:
+            messageContent = "Great! Now, please provide the updated full PRD content!";
+        }
+        
+        // Submit the message directly
+        append({
+          role: 'user',
+          content: messageContent,
+        });
+        
+        // The append function will add the message to the messages state
+        // and the onFinish callback will handle storing the messages in history
+        // so we don't need to manually store them here
+        
+        // Clear input after sending
+        setChatInput('');
+        
+        // Show workbench when sending first message if not already shown
+        if (!chatStarted && !workbenchStore.showWorkbench.get() && !backgroundMode) {
+          workbenchStore.showWorkbench.set(true);
+        }
+        
+        // Reset textarea height
+        if (textareaRef.current) {
+          textareaRef.current.style.height = `${TEXTAREA_MIN_HEIGHT}px`;
+        }
+        
+        // Mark chat as started
+        setChatStarted(true);
+      }, 100);
+    };
 
     // Handle send message
     const handleSendMessage = (event: React.FormEvent<HTMLFormElement> | React.MouseEvent | React.KeyboardEvent) => {
@@ -552,6 +625,9 @@ ${ticketsContext}
       setUploadedFiles([]);
       setImageDataList([]);
       setChatInput(''); // Clear input using the hook's setter
+  
+      // Show suggestions after sending a message
+      setShowSuggestions(true);
 
       // Reset textarea height
       if (textareaRef.current) {
@@ -591,20 +667,30 @@ ${ticketsContext}
 
     // Filter messages for display, removing the PRD block
     const messagesForDisplay = messages.map(msg => {
-      if (msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.includes('<prd_document>')) {
-        // Replace the PRD block with a placeholder or just remove it
-        const cleanedContent = msg.content.replace(/<prd_document>[\s\S]*?<\/prd_document>/, '\n\n*[PRD content updated in Workbench]*\n').trim();
-        // Only show the placeholder if the cleaned content is otherwise empty
-        if (cleanedContent === '*[PRD content updated in Workbench]*') {
-           return { ...msg, content: cleanedContent };
-        } else if (cleanedContent) {
-            // If there's other text, show it and maybe add the note?
+      if (msg.role === 'assistant' && typeof msg.content === 'string') {
+        let cleanedContent = msg.content;
+        
+        // Always remove XML document tags - regardless of streaming state
+        // This ensures tags are removed both during and after streaming
+        cleanedContent = cleanedContent.replace(/<prd_document>|<\/prd_document>/g, '');
+        
+        // Handle PRD document block (whether streaming or not)
+        if (cleanedContent.includes('<prd_document>')) {
+          // Replace the PRD block with a placeholder or just remove it
+          cleanedContent = cleanedContent.replace(/<prd_document>[\s\S]*?<\/prd_document>/, '\n\n*[PRD content updated in Workbench]*\n').trim();
+          // Only show the placeholder if the cleaned content is otherwise empty
+          if (cleanedContent === '*[PRD content updated in Workbench]*') {
+            return { ...msg, content: cleanedContent };
+          } else if (cleanedContent) {
+            // If there's other text, show it and maybe add the note
             return { ...msg, content: cleanedContent.replace('*[PRD content updated in Workbench]*','').trim() + '\n\n*[PRD content updated in Workbench]*' };
-        } else {
-             // If after removing the block there's nothing left, show only the note.
-              return { ...msg, content: '*[PRD content updated in Workbench]*' };
+          } else {
+            // If after removing the block there's nothing left, show only the note
+            return { ...msg, content: '*[PRD content updated in Workbench]*' };
+          }
         }
-
+        
+        return { ...msg, content: cleanedContent };
       }
       return msg;
     }).filter(msg => msg.content); // Filter out potentially empty messages after cleaning
@@ -664,11 +750,13 @@ ${ticketsContext}
           </div>
         )}
 
-        {/* Messages container */}
-        <div
-          className="flex-1 overflow-y-auto px-4 py-2 scroll-smooth"
-          // Add a ref maybe for scrolling? let messagesRef = useRef<HTMLDivElement>(null);
-        >
+        {/* Message display area */}
+        <div 
+          ref={messagesContainerRef}
+          className={classNames(
+            'flex-1 overflow-y-auto px-4 py-4 messages-container',
+            isStreaming ? 'opacity-80' : 'opacity-100' // Dim during streaming
+          )}>
           <div className="max-w-chat mx-auto">
             {!chatStarted && messagesForDisplay.length === 0 ? ( // Check messages length too
               <div className="h-full flex flex-col items-center justify-center text-center p-6">
@@ -724,7 +812,9 @@ ${ticketsContext}
              </div>
            </div>
         )}
-
+        
+        {/* Message suggestions moved inside the input area */}
+        
         {/* Input area */}
         <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-0 p-4 flex-shrink-0">
           <div className="max-w-chat mx-auto">
@@ -774,6 +864,35 @@ ${ticketsContext}
                 </div>
               )}
 
+              {/* Message Suggestions - right above textarea */}
+              {showSuggestions && chatStarted && !isLoading && (
+                <div className="mb-1">
+                  <div className="flex gap-2 justify-center flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleSuggestionClick('update')}
+                      className="px-3 py-2 rounded-full text-[13px] bg-[#F2F2F2] dark:bg-[#2A2A2A] text-bolt-elements-textPrimary hover:bg-[#EAEAEA] dark:hover:bg-[#333333] transition-all duration-150 ease-in-out text-center whitespace-nowrap"
+                    >
+                      Update PRD content
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSuggestionClick('research')}
+                      className="px-3 py-2 rounded-full text-[13px] bg-[#F2F2F2] dark:bg-[#2A2A2A] text-bolt-elements-textPrimary hover:bg-[#EAEAEA] dark:hover:bg-[#333333] transition-all duration-150 ease-in-out text-center whitespace-nowrap"
+                    >
+                      Deeper research
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSuggestionClick('regenerate')}
+                      className="px-3 py-2 rounded-full text-[13px] bg-[#F2F2F2] dark:bg-[#2A2A2A] text-bolt-elements-textPrimary hover:bg-[#EAEAEA] dark:hover:bg-[#333333] transition-all duration-150 ease-in-out text-center whitespace-nowrap"
+                    >
+                      😭 Regenerate
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="relative">
                 <textarea
                   ref={textareaRef}

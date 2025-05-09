@@ -1,5 +1,6 @@
 import { getSystemPrompt } from './prompts/prompts';
 import optimized from './prompts/optimized';
+import { getFineTunedPrompt } from './prompts/new-prompt';
 import prdPrompt from './prompts/prd-prompt';
 import ticketPrompt from './prompts/ticket-prompt';
 import researchPrompt from './prompts/research-prompt';
@@ -31,6 +32,11 @@ export class PromptLibrary {
       label: 'Default Prompt',
       description: 'This is the battle tested default system Prompt',
       get: (options) => getSystemPrompt(options.cwd, options.supabase),
+    },
+    enhanced: {
+      label: 'Fine Tuned Prompt',
+      description: 'An fine tuned prompt for better results',
+      get: (options) => getFineTunedPrompt(options.cwd, options.supabase),
     },
     optimized: {
       label: 'Optimized Prompt (experimental)',

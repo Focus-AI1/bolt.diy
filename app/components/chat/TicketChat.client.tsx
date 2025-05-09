@@ -210,12 +210,14 @@ const TicketChat = ({ backgroundMode = false }) => {
   const [showTicketTips, setShowTicketTips] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialMessage = useStore(initialTicketMessageStore);
   const initialMessageProcessedRef = useRef(false);
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const showWorkbench = useStore(workbenchStore.showWorkbench);
+  const isStreaming = useStore(ticketStreamingState);
   const { ready, initialMessages, storeMessageHistory, exportChat } = useChatHistory();
 
   // Get the needsUpdate status from the store
@@ -227,9 +229,19 @@ const TicketChat = ({ backgroundMode = false }) => {
   // Set chat type to 'ticket' when component mounts
   // Removed: useEffect(() => { setChatType('ticket'); }, [setChatType]);
   useEffect(() => {
-    chatType.set('ticket'); // Set using nanostore
+    chatType.set('ticket');
     logger.debug('Chat type set to Ticket');
+    
+    // Scroll to bottom when component mounts
+    scrollToBottom();
   }, []);
+  
+  // Function to scroll to the bottom of the messages container
+  const scrollToBottom = () => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+  };
 
   const storeTicketMessages = useCallback((messages: Message[]) => {
     chatType.set('ticket'); // Ensure type is set
@@ -555,11 +567,84 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
        if (event.key === 'tickets' && event.newValue !== null) {
          workbenchStore.updateTickets();
        }
+       
+       // Handle sync trigger from TicketWorkbench
+       if (event.key === 'trigger_ticket_sync' && event.newValue !== null) {
+         try {
+           const syncData = JSON.parse(event.newValue);
+           if (syncData && syncData.message) {
+             // Only trigger if we're not already streaming
+             if (!isLoading && !isStreaming) {
+               logger.debug('Sync request received from TicketWorkbench');
+               
+               // Submit the sync message
+               append({
+                 role: 'user',
+                 content: syncData.message
+               });
+               
+               // Ensure chat started flag is set
+               if (!chatStarted) {
+                 setChatStarted(true);
+               }
+               
+               // Show workbench if needed
+               if (!backgroundMode && !workbenchStore.showWorkbench.get()) {
+                 workbenchStore.showWorkbench.set(true);
+               }
+               
+               // Clear the trigger after processing
+               sessionStorage.removeItem('trigger_ticket_sync');
+             } else {
+               logger.debug('Sync request ignored - chat is currently streaming');
+               // Optionally show toast message
+               if (!backgroundMode) {
+                 toast.info('Please wait for current generation to complete before syncing');
+               }
+             }
+           }
+         } catch (error) {
+           logger.error('Error processing sync trigger:', error);
+         }
+       }
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []); // No dependencies needed as workbenchStore methods are stable
+  }, [append, chatStarted, isLoading, isStreaming, backgroundMode]); // Added dependencies
+  
+  // Also check for sync trigger on initial mount
+  useEffect(() => {
+    // Check if there's a pending sync request
+    const pendingSyncData = sessionStorage.getItem('trigger_ticket_sync');
+    if (pendingSyncData && !isLoading && !isStreaming) {
+      try {
+        const syncData = JSON.parse(pendingSyncData);
+        if (syncData && syncData.message) {
+          logger.debug('Processing pending sync request on mount');
+          
+          // Submit the sync message with slight delay to ensure component is fully mounted
+          setTimeout(() => {
+            append({
+              role: 'user',
+              content: syncData.message
+            });
+            
+            // Ensure chat started flag is set
+            if (!chatStarted) {
+              setChatStarted(true);
+            }
+            
+            // Clear the trigger after processing
+            sessionStorage.removeItem('trigger_ticket_sync');
+          }, 300);
+        }
+      } catch (error) {
+        logger.error('Error processing pending sync trigger:', error);
+        sessionStorage.removeItem('trigger_ticket_sync');
+      }
+    }
+  }, [append, chatStarted, isLoading, isStreaming]); // Dependencies
 
   // Handle file upload button click
   const handleFileUpload = () => {
@@ -714,22 +799,31 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
 
   // Filter messages for display, removing the ticket block (similar to PRD)
   const messagesForDisplay = messages.map(msg => {
-      if (msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.includes('<tickets>')) {
-          // Replace the tickets block with a placeholder
-          const cleanedContent = msg.content.replace(/<tickets>[\s\S]*?<\/tickets>/, '\n\n*[Ticket content updated in Workbench]*\n').trim();
-          // Only show the placeholder if the cleaned content is otherwise empty
-          if (cleanedContent === '*[Ticket content updated in Workbench]*') {
-             return { ...msg, content: cleanedContent };
-          } else if (cleanedContent) {
-              return { ...msg, content: cleanedContent.replace('*[Ticket content updated in Workbench]*','').trim() + '\n\n*[Ticket content updated in Workbench]*' };
-          } else {
-              return { ...msg, content: '*[Ticket content updated in Workbench]*' };
+      if (msg.role === 'assistant' && typeof msg.content === 'string') {
+          let cleanedContent = msg.content;
+          
+          // Always remove XML document tags - regardless of streaming state
+          // This ensures tags are removed both during and after streaming
+          cleanedContent = cleanedContent.replace(/<ticket_document>|<\/ticket_document>/g, '');
+          
+          // Handle tickets block (whether streaming or not)
+          if (cleanedContent.includes('<tickets>')) {
+              // Replace the tickets block with a placeholder
+              cleanedContent = cleanedContent.replace(/<tickets>[\s\S]*?<\/tickets>/, '\n\n*[Ticket content updated in Workbench]*\n').trim();
+              // Only show the placeholder if the cleaned content is otherwise empty
+              if (cleanedContent === '*[Ticket content updated in Workbench]*') {
+                  return { ...msg, content: cleanedContent };
+              } else if (cleanedContent) {
+                  return { ...msg, content: cleanedContent.replace('*[Ticket content updated in Workbench]*','').trim() + '\n\n*[Ticket content updated in Workbench]*' };
+              } else {
+                  return { ...msg, content: '*[Ticket content updated in Workbench]*' };
+              }
           }
+          
+          return { ...msg, content: cleanedContent };
       }
       return msg;
   }).filter(msg => msg.content); // Filter out potentially empty messages
-
-  const isStreaming = useStore(ticketStreamingState);
 
   return (
     // Main container styling aligned with PRDChat
@@ -743,10 +837,12 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
       {/* Main chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Messages container - Aligned with PRDChat */}
-        <div
-          className="flex-1 overflow-y-auto px-4 py-2 scroll-smooth"
-          ref={scrollRef} // Keep scrollRef if used for scrolling logic
-        >
+        <div 
+          ref={messagesContainerRef}
+          className={classNames(
+            'flex-1 overflow-y-auto px-4 py-4 messages-container',
+            isStreaming ? 'opacity-80' : 'opacity-100' // Dim during streaming
+          )}> 
           <div className="max-w-chat mx-auto"> {/* Changed from max-w-3xl */}
             {!chatStarted && messagesForDisplay.length === 0 ? (
               // Initial state - Use PRDChat's structure/styling
