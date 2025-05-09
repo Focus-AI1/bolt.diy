@@ -41,6 +41,19 @@ async function prdChatAction({ context, request }: ActionFunctionArgs) {
   const providerSettings: Record<string, IProviderSetting> = JSON.parse(
     parseCookies(cookieHeader || '').providers || '{}',
   );
+  
+  // // Force Perplexity as the provider for PRD chat regardless of cookie settings
+  // providerSettings.defaultProvider = 'perplexity';
+  
+  // // If you need to also set a specific model for Perplexity, you can do that here:
+  // if (providerSettings.perplexity) {
+  //   providerSettings.perplexity.defaultModel = 'perplexity/sonar-huge-online'; // or whichever model you prefer
+  // } else {
+  //   providerSettings.perplexity = {
+  //     defaultModel: 'perplexity/sonar-huge-online',
+  //     enabled: true
+  //   };
+  // }
 
   const stream = new SwitchableStream();
   const encoder: TextEncoder = new TextEncoder();
