@@ -44,10 +44,6 @@ const sliderOptions: SliderOptions<WorkbenchViewType> = {
     value: 'code',
     text: 'Code',
   },
-  middle: {
-    value: 'diff',
-    text: 'Diff',
-  },
   right: {
     value: 'preview',
     text: 'Preview',
@@ -522,12 +518,14 @@ export const Workbench = memo(
                       onFileReset={onFileReset}
                     />
                   </View>
+                  {/* Comment out the diff view
                   <View
                     initial={{ x: '100%' }}
                     animate={{ x: selectedView === 'diff' ? '0%' : selectedView === 'code' ? '100%' : '-100%' }}
                   >
                     <DiffView fileHistory={fileHistory} setFileHistory={setFileHistory} actionRunner={actionRunner} />
                   </View>
+                  */}
                   <View initial={{ x: '100%' }} animate={{ x: selectedView === 'preview' ? '0%' : '100%' }}>
                     <Preview />
                   </View>

@@ -625,6 +625,8 @@ interface DiffViewProps {
 }
 
 export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) => {
+  // Comment out the original implementation
+  /*
   const files = useStore(workbenchStore.files) as FileMap;
   const selectedFile = useStore(workbenchStore.selectedFile);
   const currentDocument = useStore(workbenchStore.currentDocument) as EditorDocument;
@@ -711,45 +713,15 @@ export const DiffView = memo(({ fileHistory, setFileHistory }: DiffViewProps) =>
       }
     }
   }, [selectedFile, currentDocument?.value, files, setFileHistory, unsavedFiles]);
+  */
 
-  if (!selectedFile || !currentDocument) {
-    return (
-      <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
-        Select a file to view differences
+  // Return a simple placeholder instead
+  return (
+    <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
+      <div className="text-center p-4">
+        <div className="i-ph:code text-4xl mb-2 mx-auto text-bolt-elements-textTertiary"></div>
+        <p>Diff view is currently disabled to optimize performance</p>
       </div>
-    );
-  }
-
-  const file = files[selectedFile];
-  const originalContent = file && 'content' in file ? file.content : '';
-  const currentContent = currentDocument.value;
-
-  const history = fileHistory[selectedFile];
-  const effectiveOriginalContent = history?.originalContent || originalContent;
-  const language = getLanguageFromExtension(selectedFile.split('.').pop() || '');
-
-  try {
-    return (
-      <div className="h-full overflow-hidden">
-        <InlineDiffComparison
-          beforeCode={effectiveOriginalContent}
-          afterCode={currentContent}
-          language={language}
-          filename={selectedFile}
-          lightTheme="github-light"
-          darkTheme="github-dark"
-        />
-      </div>
-    );
-  } catch (error) {
-    console.error('DiffView render error:', error);
-    return (
-      <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-red-400">
-        <div className="text-center">
-          <div className="i-ph:warning-circle text-4xl mb-2" />
-          <p>Failed to render diff view</p>
-        </div>
-      </div>
-    );
-  }
+    </div>
+  );
 });
