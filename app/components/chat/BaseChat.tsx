@@ -603,13 +603,13 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             
             {!chatStarted && chatMode === 'chat' && (
               <div className="flex flex-col h-full overflow-y-auto">
-                <div id="intro" className="mt-[2vh] mb-8 max-w-chat mx-auto text-center px-4 lg:px-0">
-                  <h1 className="text-2xl lg:text-4xl font-bold text-bolt-elements-textPrimary mb-2 animate-fade-in flex items-center justify-center gap-2">
+                <div id="intro" className="mt-[6vh] mb-8 max-w-[90%] mx-auto text-center px-4 lg:px-0">
+                  <h1 className="text-3xl lg:text-5xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in flex items-center justify-center gap-2 flex-wrap lg:flex-nowrap">
                     <span>Create something in seconds</span>
                     <span className="text-bolt-elements-item-contentAccent">
-                  <RotatingText />
+                      <RotatingText />
                     </span>
-                </h1>
+                  </h1>
                   <p className="text-sm lg:text-base mb-6 text-bolt-elements-textSecondary animate-fade-in animation-delay-200">
                     Focus creates prototypes, PRDs, tickets, and research reports from a single prompt
                   </p>
