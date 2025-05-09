@@ -73,7 +73,7 @@ export function HeaderActionButtons({}: HeaderActionButtonsProps) {
         <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden mr-2 text-sm">
           <Button
             active
-            disabled={isDeploying || !activePreview || isStreaming}
+            disabled={!isDeploying || !activePreview || isStreaming} // Should revert back to isDeploying
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="px-4 hover:bg-bolt-elements-item-backgroundActive flex items-center gap-2"
           >
@@ -146,7 +146,7 @@ export function HeaderActionButtons({}: HeaderActionButtonsProps) {
           </div>
         )}
       </div>
-      <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden">
+      {/* <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden">
         <Button
           active={showChat}
           disabled={!canHideChat || isSmallViewport} // expand button is disabled on mobile as it's not needed
@@ -171,7 +171,7 @@ export function HeaderActionButtons({}: HeaderActionButtonsProps) {
         >
           <div className="i-ph:code-bold" />
         </Button>
-      </div>
+      </div> */}
     </div>
   );
 }
@@ -182,13 +182,14 @@ interface ButtonProps {
   children?: any;
   onClick?: VoidFunction;
   className?: string;
+  tooltip?: string;
 }
 
-function Button({ active = false, disabled = false, children, onClick, className }: ButtonProps) {
+function Button({ active = false, disabled = false, children, onClick, className, tooltip }: ButtonProps) {
   return (
     <button
       className={classNames(
-        'flex items-center p-1.5',
+        'flex items-center p-1.5 relative group',
         {
           'bg-bolt-elements-item-backgroundDefault hover:bg-bolt-elements-item-backgroundActive text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary':
             !active,
@@ -199,8 +200,14 @@ function Button({ active = false, disabled = false, children, onClick, className
         className,
       )}
       onClick={onClick}
+      disabled={disabled}
     >
       {children}
+      {tooltip && (
+        <span className="absolute -top-9 left-1/2 transform -translate-x-1/2 px-2 py-1 bg-black/90 text-white text-xs rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity duration-200 whitespace-nowrap before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-black/90 pointer-events-none z-50">
+          {tooltip}
+        </span>
+      )}
     </button>
   );
 }

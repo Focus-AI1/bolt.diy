@@ -303,7 +303,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [chatMode, setChatMode] = useState<ChatMode>('chat');
     const [isPrdModeToggleOn, setIsPrdModeToggleOn] = useState(true);
     const [isTicketModeToggleOn, setIsTicketModeToggleOn] = useState(true);
-    const [isResearchModeToggleOn, setIsResearchModeToggleOn] = useState(true);
+    const [isResearchModeToggleOn, setIsResearchModeToggleOn] = useState(false);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
 
     useEffect(() => {
@@ -1116,7 +1116,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       />
                     )}
                   </div>
-                  {showPRDUpdateNotification && (
+                  {showPRDUpdateNotification && !actionAlert && (
                     <div className="px-4 pb-3 flex-shrink-0">
                       <UpdateNotification
                         type="ticket" // Ticket is CORRECT here!
@@ -1126,7 +1126,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         />
                     </div>
                   )}
-                  {showTicketUpdateNotification && (
+                  {showTicketUpdateNotification && !actionAlert && (
                     <div className="px-4 pb-3 flex-shrink-0">
                       <UpdateNotification
                         type="prd" // PRD is CORRECT here!
