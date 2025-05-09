@@ -799,17 +799,28 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
 
   // Filter messages for display, removing the ticket block (similar to PRD)
   const messagesForDisplay = messages.map(msg => {
-      if (msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.includes('<tickets>')) {
-          // Replace the tickets block with a placeholder
-          const cleanedContent = msg.content.replace(/<tickets>[\s\S]*?<\/tickets>/, '\n\n*[Ticket content updated in Workbench]*\n').trim();
-          // Only show the placeholder if the cleaned content is otherwise empty
-          if (cleanedContent === '*[Ticket content updated in Workbench]*') {
-             return { ...msg, content: cleanedContent };
-          } else if (cleanedContent) {
-              return { ...msg, content: cleanedContent.replace('*[Ticket content updated in Workbench]*','').trim() + '\n\n*[Ticket content updated in Workbench]*' };
-          } else {
-              return { ...msg, content: '*[Ticket content updated in Workbench]*' };
+      if (msg.role === 'assistant' && typeof msg.content === 'string') {
+          let cleanedContent = msg.content;
+          
+          // Always remove XML document tags - regardless of streaming state
+          // This ensures tags are removed both during and after streaming
+          cleanedContent = cleanedContent.replace(/<ticket_document>|<\/ticket_document>/g, '');
+          
+          // Handle tickets block (whether streaming or not)
+          if (cleanedContent.includes('<tickets>')) {
+              // Replace the tickets block with a placeholder
+              cleanedContent = cleanedContent.replace(/<tickets>[\s\S]*?<\/tickets>/, '\n\n*[Ticket content updated in Workbench]*\n').trim();
+              // Only show the placeholder if the cleaned content is otherwise empty
+              if (cleanedContent === '*[Ticket content updated in Workbench]*') {
+                  return { ...msg, content: cleanedContent };
+              } else if (cleanedContent) {
+                  return { ...msg, content: cleanedContent.replace('*[Ticket content updated in Workbench]*','').trim() + '\n\n*[Ticket content updated in Workbench]*' };
+              } else {
+                  return { ...msg, content: '*[Ticket content updated in Workbench]*' };
+              }
           }
+          
+          return { ...msg, content: cleanedContent };
       }
       return msg;
   }).filter(msg => msg.content); // Filter out potentially empty messages

@@ -390,7 +390,7 @@ const TicketWorkbench = () => {
                 // Set a flag in sessionStorage to trigger TicketChat
                 sessionStorage.setItem('trigger_ticket_sync', JSON.stringify({
                   timestamp: new Date().toISOString(),
-                  message: "Please confirm the ticket information once more to ensure everything has been updated correctly and all ticket details are properly displayed."
+                  message: "Please verify all tickets are properly aligned with the Product Requirements Document, ensuring complete coverage of functional requirements, implementation details, and proper prioritization."
                 }));
                 
                 // Dispatch storage event for listeners

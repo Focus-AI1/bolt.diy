@@ -667,20 +667,30 @@ ${ticketsContext}
 
     // Filter messages for display, removing the PRD block
     const messagesForDisplay = messages.map(msg => {
-      if (msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.includes('<prd_document>')) {
-        // Replace the PRD block with a placeholder or just remove it
-        const cleanedContent = msg.content.replace(/<prd_document>[\s\S]*?<\/prd_document>/, '\n\n*[PRD content updated in Workbench]*\n').trim();
-        // Only show the placeholder if the cleaned content is otherwise empty
-        if (cleanedContent === '*[PRD content updated in Workbench]*') {
-           return { ...msg, content: cleanedContent };
-        } else if (cleanedContent) {
-            // If there's other text, show it and maybe add the note?
+      if (msg.role === 'assistant' && typeof msg.content === 'string') {
+        let cleanedContent = msg.content;
+        
+        // Always remove XML document tags - regardless of streaming state
+        // This ensures tags are removed both during and after streaming
+        cleanedContent = cleanedContent.replace(/<prd_document>|<\/prd_document>/g, '');
+        
+        // Handle PRD document block (whether streaming or not)
+        if (cleanedContent.includes('<prd_document>')) {
+          // Replace the PRD block with a placeholder or just remove it
+          cleanedContent = cleanedContent.replace(/<prd_document>[\s\S]*?<\/prd_document>/, '\n\n*[PRD content updated in Workbench]*\n').trim();
+          // Only show the placeholder if the cleaned content is otherwise empty
+          if (cleanedContent === '*[PRD content updated in Workbench]*') {
+            return { ...msg, content: cleanedContent };
+          } else if (cleanedContent) {
+            // If there's other text, show it and maybe add the note
             return { ...msg, content: cleanedContent.replace('*[PRD content updated in Workbench]*','').trim() + '\n\n*[PRD content updated in Workbench]*' };
-        } else {
-             // If after removing the block there's nothing left, show only the note.
-              return { ...msg, content: '*[PRD content updated in Workbench]*' };
+          } else {
+            // If after removing the block there's nothing left, show only the note
+            return { ...msg, content: '*[PRD content updated in Workbench]*' };
+          }
         }
-
+        
+        return { ...msg, content: cleanedContent };
       }
       return msg;
     }).filter(msg => msg.content); // Filter out potentially empty messages after cleaning
