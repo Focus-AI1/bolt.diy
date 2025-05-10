@@ -203,7 +203,7 @@ const TypingPlaceholder = () => {
     const backspaceSpeed = 30; // ms per character
     const pauseBeforeBackspace = 1500; // ms to wait before backspacing
     
-    let timer;
+    let timer: ReturnType<typeof setTimeout>;
     
     if (isTyping) {
       // Typing forward
@@ -429,6 +429,129 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
       // Logic for handling the first message
       if (!chatStarted && triggerChatStart) {
+        // For the first message, if we are in browser environment, send a message to the parent
+        // to check for authentication before proceeding
+        if (typeof window !== 'undefined') {
+          // Always send a message to parent frame to check authentication and process message,
+          // regardless of whether user is already authenticated
+          window.parent.postMessage({
+            type: 'SEND_MESSAGE',
+            prompt: messageContent,
+            files: uploadedFiles || [],
+            imageDataList: imageDataList || []
+          }, '*');
+
+          // Listen for a PROCESS_PENDING_PROMPT message from the parent frame
+          // This will be sent after authentication is complete
+          const processPendingPromptHandler = (event: MessageEvent) => {
+            if (event.data && event.data.type === 'PROCESS_PENDING_PROMPT') {
+              console.log('Received pending prompt to process:', event.data.prompt);
+              
+              // Remove the event listener to avoid duplicate handling
+              window.removeEventListener('message', processPendingPromptHandler);
+              
+              try {
+                // Now trigger the chat start and send the message
+                triggerChatStart().then(() => {
+                  // If PRD mode is on, store the message for PRD processing but don't switch UI
+                  if (isPrdModeToggleOn) {
+                    // First reset the store to clear any previous data
+                    initialPrdMessageStore.set({
+                      text: '',
+                      files: [],
+                      imageDataList: [],
+                      autoSubmit: false
+                    });
+                    
+                    // Then store the message content and files in the store for PRDChat to use in background
+                    initialPrdMessageStore.set({
+                      text: event.data.prompt,
+                      files: event.data.files || [],
+                      imageDataList: event.data.imageDataList || [],
+                      autoSubmit: true
+                    });
+                  }
+                  
+                  // If Ticket mode is on, store the message for Ticket processing but don't switch UI
+                  if (isTicketModeToggleOn) {
+                    // First reset the store to clear any previous data
+                    initialTicketMessageStore.set({
+                      text: '',
+                      files: [],
+                      imageDataList: [],
+                      autoSubmit: false
+                    });
+                    
+                    // Then store the message content and files in the store for TicketChat to use in background
+                    initialTicketMessageStore.set({
+                      text: event.data.prompt,
+                      files: event.data.files || [],
+                      imageDataList: event.data.imageDataList || [],
+                      autoSubmit: true
+                    });
+                  }
+                  
+                  // If Research mode is on, store the message for Research processing but don't switch UI
+                  if (isResearchModeToggleOn) {
+                    // First reset the store to clear any previous data
+                    initialResearchMessageStore.set({
+                      text: '',
+                      files: [],
+                      imageDataList: [],
+                      autoSubmit: false
+                    });
+                    
+                    // Then store the message content and files in the store for ResearchChat to use in background
+                    initialResearchMessageStore.set({
+                      text: event.data.prompt,
+                      files: event.data.files || [],
+                      imageDataList: event.data.imageDataList || [],
+                      autoSubmit: true
+                    });
+                  }
+                  
+                  // Send the message to the chat
+                  if (sendMessage) {
+                    console.log('Sending message after authentication:', event.data.prompt);
+                    sendMessage({} as any, event.data.prompt);
+                    
+                    // Let parent know the message was sent successfully
+                    window.parent.postMessage({
+                      type: 'MESSAGE_SENT_SUCCESS',
+                      promptProcessed: true
+                    }, '*');
+                  }
+                }).catch(error => {
+                  console.error('Error processing prompt after authentication:', error);
+                  
+                  // Let parent know there was an error
+                  window.parent.postMessage({
+                    type: 'MESSAGE_SENT_ERROR',
+                    error: error.message
+                  }, '*');
+                });
+              } catch (error) {
+                console.error('Exception during prompt processing:', error);
+              }
+            }
+          };
+          
+          // Add the event listener for the PROCESS_PENDING_PROMPT message
+          window.addEventListener('message', processPendingPromptHandler);
+          
+          // Also send a message to confirm we're listening
+          window.parent.postMessage({
+            type: 'READY_FOR_PROMPT',
+            timestamp: Date.now()
+          }, '*');
+          
+          console.log('Ready to receive PROCESS_PENDING_PROMPT message');
+          
+          // Return early to prevent the regular flow
+          return;
+        }
+
+        // If we're not in the browser or we didn't return above, continue with the regular flow
         triggerChatStart(); // Mark chat as started regardless of mode
         
         // If PRD mode is on, store the message for PRD processing but don't switch UI
@@ -500,6 +623,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
 
       // Always proceed with sending the message to the regular chat endpoint
+      // unless we returned early above
       if (sendMessage) {
         sendMessage(event, messageInput);
 
@@ -518,6 +642,30 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         }
       }
     };
+
+    // Add PING_CHECK handler right after other useEffects
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        // Listen for parent window messages
+        const handleParentMessage = (event: MessageEvent) => {
+          if (event.data && event.data.type === 'PING_CHECK') {
+            // Respond to ping to confirm we're alive
+            window.parent.postMessage({
+              type: 'PONG_RESPONSE',
+              timestamp: Date.now(),
+              originalTimestamp: event.data.timestamp
+            }, '*');
+            console.log('Received ping, sent pong response');
+          }
+        };
+        
+        window.addEventListener('message', handleParentMessage);
+        
+        return () => {
+          window.removeEventListener('message', handleParentMessage);
+        };
+      }
+    }, []);
 
     const handleFileUpload = () => {
       const input = document.createElement('input');
