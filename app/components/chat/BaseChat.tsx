@@ -17,6 +17,7 @@ import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useStore } from '@nanostores/react';
 import { motion } from 'framer-motion';
+import posthog from 'posthog-js';
 
 import styles from './BaseChat.module.scss';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
@@ -418,6 +419,58 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
+    // Add PostHog initialization
+    useEffect(() => {
+      if (typeof window !== 'undefined' && !window.posthog) {
+        // Initialize PostHog only if it hasn't been initialized yet
+        posthog.init('phc_ND0k0qQbVXCtKy9wPa7oVPMer8RN3yNYh5pvGNEJ0QE', {
+          api_host: 'https://us.i.posthog.com',
+          // Disable autocapture to avoid capturing too much data
+          autocapture: false,
+          // Only capture what we explicitly want
+          capture_pageview: true,
+          // Respect Do Not Track setting
+          respect_dnt: true,
+        });
+      }
+    }, []);
+    
+    // Add tracking for input changes with debounce
+    const debouncedInputRef = useRef<string>('');
+    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    
+    // Modified handleInputChange to track what users type
+    const trackInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      // Call the original handler first
+      if (handleInputChange) {
+        handleInputChange(event);
+      }
+      
+      // Track input changes with debounce to avoid too many events
+      const newInput = event.target.value;
+      debouncedInputRef.current = newInput;
+      
+      // Clear existing timer
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      
+      // Set new timer to track after 1 second of inactivity
+      debounceTimerRef.current = setTimeout(() => {
+        if (typeof window !== 'undefined' && window.posthog && debouncedInputRef.current) {
+          posthog.capture('chat_input_typed', {
+            input_length: debouncedInputRef.current.length,
+            input_preview: debouncedInputRef.current.substring(0, 100), // First 100 chars
+            has_files: uploadedFiles.length > 0,
+            chat_started: chatStarted,
+            model: model,
+            provider: provider?.name,
+          });
+        }
+      }, 1000);
+    };
+    
+    // Modify handleSendMessage to track submission attempts
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
       event.preventDefault();
 
@@ -426,12 +479,31 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       if (!messageContent && uploadedFiles.length === 0) {
         return;
       }
+      
+      // Track message submission attempt
+      if (typeof window !== 'undefined' && window.posthog) {
+        posthog.capture('chat_message_submit_attempt', {
+          message_length: messageContent.length,
+          has_files: uploadedFiles.length > 0,
+          chat_started: chatStarted,
+          model: model,
+          provider: provider?.name,
+        });
+      }
 
       // Logic for handling the first message
       if (!chatStarted && triggerChatStart) {
         // For the first message, if we are in browser environment, send a message to the parent
         // to check for authentication before proceeding
         if (typeof window !== 'undefined') {
+          // Track authentication request
+          if (window.posthog) {
+            posthog.capture('chat_auth_requested', {
+              message_length: messageContent.length,
+              has_files: uploadedFiles.length > 0,
+            });
+          }
+          
           // Always send a message to parent frame to check authentication and process message,
           // regardless of whether user is already authenticated
           window.parent.postMessage({
@@ -446,6 +518,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
           const processPendingPromptHandler = (event: MessageEvent) => {
             if (event.data && event.data.type === 'PROCESS_PENDING_PROMPT') {
               console.log('Received pending prompt to process:', event.data.prompt);
+              
+              // Track successful authentication
+              if (typeof window !== 'undefined' && window.posthog) {
+                posthog.capture('chat_auth_completed', {
+                  message_length: event.data.prompt.length,
+                  has_files: (event.data.files || []).length > 0,
+                });
+              }
               
               // Remove the event listener to avoid duplicate handling
               window.removeEventListener('message', processPendingPromptHandler);
@@ -666,6 +746,29 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         };
       }
     }, []);
+
+    // Add listener for auth cancellation
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        const handleAuthCancellation = (event: MessageEvent) => {
+          if (event.data && event.data.type === 'AUTH_CANCELLED') {
+            // Track when user cancels authentication
+            if (window.posthog) {
+              posthog.capture('chat_auth_cancelled', {
+                prompt_length: input.length,
+                has_files: uploadedFiles.length > 0,
+              });
+            }
+          }
+        };
+        
+        window.addEventListener('message', handleAuthCancellation);
+        
+        return () => {
+          window.removeEventListener('message', handleAuthCancellation);
+        };
+      }
+    }, [input, uploadedFiles.length]);
 
     const handleFileUpload = () => {
       const input = document.createElement('input');
@@ -895,7 +998,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           }
                         }}
                         value={input}
-                        onChange={(event) => handleInputChange?.(event)}
+                        onChange={(event) => trackInputChange(event)}
                         onPaste={handlePaste}
                         style={{
                           minHeight: TEXTAREA_MIN_HEIGHT,
@@ -1417,7 +1520,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           }
                         }}
                         value={input}
-                        onChange={(event) => handleInputChange?.(event)}
+                        onChange={(event) => trackInputChange(event)}
                         onPaste={handlePaste}
                         style={{
                           minHeight: TEXTAREA_MIN_HEIGHT,
