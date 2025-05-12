@@ -577,23 +577,23 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   }
                   
                   // If Research mode is on, store the message for Research processing but don't switch UI
-                  if (isResearchModeToggleOn) {
-                    // First reset the store to clear any previous data
-                    initialResearchMessageStore.set({
-                      text: '',
-                      files: [],
-                      imageDataList: [],
-                      autoSubmit: false
-                    });
+                  // if (isResearchModeToggleOn) {
+                  //   // First reset the store to clear any previous data
+                  //   initialResearchMessageStore.set({
+                  //     text: '',
+                  //     files: [],
+                  //     imageDataList: [],
+                  //     autoSubmit: false
+                  //   });
                     
-                    // Then store the message content and files in the store for ResearchChat to use in background
-                    initialResearchMessageStore.set({
-                      text: event.data.prompt,
-                      files: event.data.files || [],
-                      imageDataList: event.data.imageDataList || [],
-                      autoSubmit: true
-                    });
-                  }
+                  //   // Then store the message content and files in the store for ResearchChat to use in background
+                  //   initialResearchMessageStore.set({
+                  //     text: event.data.prompt,
+                  //     files: event.data.files || [],
+                  //     imageDataList: event.data.imageDataList || [],
+                  //     autoSubmit: true
+                  //   });
+                  // }
                   
                   // Send the message to the chat
                   if (sendMessage) {
