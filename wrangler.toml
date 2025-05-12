@@ -4,3 +4,8 @@ compatibility_flags = ["nodejs_compat"]
 compatibility_date = "2025-03-28"
 pages_build_output_dir = "./build/client"
 send_metrics = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "prompt-storage-db"
+database_id = "63c02afa-b9fe-423c-9217-bc2d1c88be2f"
