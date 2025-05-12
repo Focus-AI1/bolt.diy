@@ -40,4 +40,17 @@ export class PromptService {
       console.error('Error saving prompt:', error);
     }
   }
+
+  async getPrompts(): Promise<Prompt[]> {
+    try {
+      const { results } = await this.db
+        .prepare('SELECT * FROM prompts ORDER BY created_at DESC')
+        .all<Prompt>();
+      
+      return results;
+    } catch (error) {
+      console.error('Error retrieving prompts:', error);
+      return [];
+    }
+  }
 }
