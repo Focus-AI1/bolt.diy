@@ -12,21 +12,22 @@ const localPrompts: Array<{
 }> = [];
 
 export async function loader({ context }: LoaderFunctionArgs) {
-  // Check if we're in development and DB is not available
-  if (!context.env || !context.env.DB) {
-    console.log('Using local prompt storage for development');
-    return json({ prompts: localPrompts });
-  }
-
-  const { DB } = context.env;
-  const promptService = new PromptService(DB);
-
+  console.log('Env in loader:', context.env ? Object.keys(context.env) : 'No env');
+  
+  // Always try to use DB first, only fallback if it's clearly not available
   try {
-    const prompts = await promptService.getPrompts();
-    return json({ prompts });
+    const { DB } = context.env || {};
+    if (DB) {
+      const promptService = new PromptService(DB);
+      const prompts = await promptService.getPrompts();
+      return json({ prompts });
+    } else {
+      console.log('DB binding not available, using local storage');
+      return json({ prompts: localPrompts });
+    }
   } catch (error) {
     console.error('Error retrieving prompts:', error);
-    return json({ error: 'Error retrieving prompts' }, { status: 500 });
+    return json({ error: 'Error retrieving prompts', details: error.message }, { status: 500 });
   }
 }
 
@@ -44,9 +45,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Content is required' }, { status: 400 });
     }
 
-    // Check if we're in development and DB is not available
-    if (!context.env || !context.env.DB) {
-      console.log('Using local prompt storage for development');
+    console.log('Context in action:', context ? 'Available' : 'Not available');
+    console.log('Env in action:', context.env ? Object.keys(context.env) : 'No env');
+    
+    // Try to access DB directly with more defensive coding
+    const DB = context?.env?.DB;
+    
+    if (!DB) {
+      console.log('D1 database not available, using local storage fallback');
       const id = `local-${Date.now()}`;
       const timestamp = Date.now();
       const title = content.split('\n')[0].substring(0, 50) || 'Untitled Prompt';
@@ -61,13 +67,14 @@ export async function action({ request, context }: ActionFunctionArgs) {
       
       return json({ success: true, message: 'Prompt saved to local storage' });
     }
-
-    const { DB } = context.env;
+    
+    // If we got here, we have a DB connection
+    console.log('D1 database available, saving to database');
     const promptService = new PromptService(DB);
     await promptService.createPrompt(content);
-    return json({ success: true, message: 'Prompt saved successfully' });
+    return json({ success: true, message: 'Prompt saved to database' });
   } catch (error) {
     console.error('Error saving prompt:', error);
-    return json({ error: 'Error saving prompt' }, { status: 500 });
+    return json({ error: 'Error saving prompt', details: error.message }, { status: 500 });
   }
 }
