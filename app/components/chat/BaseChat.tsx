@@ -1259,10 +1259,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
                 
                 <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 px-2 sm:px-6">
-                  <div className="flex justify-center gap-2">
-                    {ImportButtons(importChat)}
-                    <GitCloneButton importChat={importChat} />
-                  </div>
+                  {!isMobileView && (
+                    <div className="flex justify-center gap-2">
+                      {ImportButtons(importChat)}
+                      <GitCloneButton importChat={importChat} />
+                    </div>
+                  )}
                   {ExamplePrompts((event, messageInput) => {
                     if (handleSendMessage) {
                       handleSendMessage?.(event, messageInput);
