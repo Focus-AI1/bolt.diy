@@ -1,35 +1,5 @@
 import { json, type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { PromptService } from '~/lib/db/prompt-service';
-import type { LoaderFunctionArgs } from '@remix-run/cloudflare';
-
-// Mock storage for local development
-const localPrompts: Array<{
-  id: string;
-  title: string;
-  content: string;
-  created_at: number;
-  updated_at: number;
-}> = [];
-
-export async function loader({ context }: LoaderFunctionArgs) {
-  console.log('Env in loader:', context.env ? Object.keys(context.env) : 'No env');
-  
-  // Always try to use DB first, only fallback if it's clearly not available
-  try {
-    const { DB } = context.env || {};
-    if (DB) {
-      const promptService = new PromptService(DB);
-      const prompts = await promptService.getPrompts();
-      return json({ prompts });
-    } else {
-      console.log('DB binding not available, using local storage');
-      return json({ prompts: localPrompts });
-    }
-  } catch (error) {
-    console.error('Error retrieving prompts:', error);
-    return json({ error: 'Error retrieving prompts', details: error.message }, { status: 500 });
-  }
-}
 
 export async function action({ request, context }: ActionFunctionArgs) {
   // Only handle POST requests for saving prompts
@@ -45,36 +15,30 @@ export async function action({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Content is required' }, { status: 400 });
     }
 
-    console.log('Context in action:', context ? 'Available' : 'Not available');
-    console.log('Env in action:', context.env ? Object.keys(context.env) : 'No env');
-    
-    // Try to access DB directly with more defensive coding
+    // Check if DB binding exists
     const DB = context?.env?.DB;
     
     if (!DB) {
-      console.log('D1 database not available, using local storage fallback');
-      const id = `local-${Date.now()}`;
-      const timestamp = Date.now();
-      const title = content.split('\n')[0].substring(0, 50) || 'Untitled Prompt';
-      
-      localPrompts.push({
-        id,
-        title,
-        content,
-        created_at: timestamp,
-        updated_at: timestamp
-      });
-      
-      return json({ success: true, message: 'Prompt saved to local storage' });
+      console.error('CRITICAL ERROR: D1 database binding not available in context.env.DB');
+      console.log('Context keys:', Object.keys(context || {}));
+      console.log('Env keys:', Object.keys(context?.env || {}));
+      return json({ 
+        success: false, 
+        message: 'Database binding not available - please check Cloudflare configuration' 
+      }, { status: 500 });
     }
     
-    // If we got here, we have a DB connection
-    console.log('D1 database available, saving to database');
+    // DB binding exists, save to database
+    console.log('D1 database binding found, attempting to save prompt...');
     const promptService = new PromptService(DB);
-    await promptService.createPrompt(content);
+    await promptService.savePrompt(content);
+    
     return json({ success: true, message: 'Prompt saved to database' });
   } catch (error) {
     console.error('Error saving prompt:', error);
-    return json({ error: 'Error saving prompt', details: error.message }, { status: 500 });
+    return json({ 
+      error: 'Error saving prompt', 
+      details: error.message 
+    }, { status: 500 });
   }
 }

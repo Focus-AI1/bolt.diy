@@ -2,13 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 export interface Prompt {
   id: string;
-  title: string;
   content: string;
   created_at: number;
-  updated_at: number;
-  tags?: string;
-  user_id?: string;
-  metadata?: string;
 }
 
 export class PromptService {
@@ -18,58 +13,43 @@ export class PromptService {
     this.db = db;
   }
 
-  async createPrompt(content: string): Promise<void> {
+  async ensureTableExists(): Promise<void> {
     try {
-      // Validate database connection
-      if (!this.db) {
-        throw new Error('Database connection not available');
-      }
-
-      const id = uuidv4();
-      const timestamp = Date.now();
-      const title = content.split('\n')[0].substring(0, 50) || 'Untitled Prompt';
-      
-      console.log(`Inserting prompt: id=${id}, title=${title.substring(0, 20)}...`);
-      
-      const result = await this.db
-        .prepare(
-          'INSERT INTO prompts (id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+      // Create the table if it doesn't exist
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS prompts (
+          id TEXT PRIMARY KEY,
+          content TEXT NOT NULL,
+          created_at INTEGER NOT NULL
         )
-        .bind(
-          id,
-          title,
-          content,
-          timestamp,
-          timestamp
-        )
-        .run();
-        
-      console.log('Database result:', result);
+      `);
+      console.log('Prompts table verified');
     } catch (error) {
-      console.error('Error saving prompt to database:', error);
-      // Re-throw to allow proper handling in the API
-      throw new Error(`Database error: ${error.message}`);
+      console.error('Error ensuring table exists:', error);
+      throw error;
     }
   }
 
-  async getPrompts(): Promise<Prompt[]> {
+  async savePrompt(content: string): Promise<void> {
     try {
-      // Validate database connection
-      if (!this.db) {
-        throw new Error('Database connection not available');
-      }
+      // First ensure the table exists
+      await this.ensureTableExists();
       
-      console.log('Fetching prompts from database');
+      // Insert the prompt
+      const id = uuidv4();
+      const timestamp = Date.now();
+      
+      console.log(`Saving prompt with ID: ${id}`);
+      
       const result = await this.db
-        .prepare('SELECT * FROM prompts ORDER BY created_at DESC')
-        .all<Prompt>();
+        .prepare('INSERT INTO prompts (id, content, created_at) VALUES (?, ?, ?)')
+        .bind(id, content, timestamp)
+        .run();
         
-      console.log(`Retrieved ${result.results?.length || 0} prompts`);
-      
-      return result.results || [];
+      console.log('Database write result:', result);
     } catch (error) {
-      console.error('Error retrieving prompts from database:', error);
-      throw new Error(`Database query error: ${error.message}`);
+      console.error('Error saving prompt to database:', error);
+      throw error;
     }
   }
 }

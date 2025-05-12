@@ -1824,11 +1824,24 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         const formData = new FormData();
         formData.append('content', content);
         
-        // Fire and forget - no need to wait for the response
+        // Fire and forget, but with improved error handling
         fetch('/api/prompts', {
           method: 'POST',
           body: formData,
-        }).catch(error => {
+        })
+        .then(response => {
+          if (!response.ok) {
+            return response.json().then(data => {
+              console.error('Failed to save prompt:', data);
+              throw new Error(`Server error: ${data.message || response.statusText}`);
+            });
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('Prompt save result:', data);
+        })
+        .catch(error => {
           console.error('Error saving prompt:', error);
         });
       } catch (error) {
