@@ -481,9 +481,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
       
       // Save the prompt to the database when a message is sent
-      // if (messageContent) {
-      //   savePromptToDatabase(messageContent);
-      // }
+      if (messageContent) {
+        savePromptToDatabase(messageContent);
+      }
       
       // Track message submission attempt
       if (typeof window !== 'undefined' && window.posthog) {
@@ -1797,22 +1797,22 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     );
 
     // Function to quietly save prompts to the database
-    // const savePromptToDatabase = (content: string) => {
-    //   try {
-    //     const formData = new FormData();
-    //     formData.append('content', content);
+    const savePromptToDatabase = (content: string) => {
+      try {
+        const formData = new FormData();
+        formData.append('content', content);
         
-    //     // Fire and forget - no need to wait for the response
-    //     fetch('/api/prompts', {
-    //       method: 'POST',
-    //       body: formData,
-    //     }).catch(error => {
-    //       console.error('Error saving prompt:', error);
-    //     });
-    //   } catch (error) {
-    //     console.error('Error preparing prompt save:', error);
-    //   }
-    // };
+        // Fire and forget - no need to wait for the response
+        fetch('/api/prompts', {
+          method: 'POST',
+          body: formData,
+        }).catch(error => {
+          console.error('Error saving prompt:', error);
+        });
+      } catch (error) {
+        console.error('Error preparing prompt save:', error);
+      }
+    };
 
     return <Tooltip.Provider delayDuration={200}>{baseChat}</Tooltip.Provider>;
   },
