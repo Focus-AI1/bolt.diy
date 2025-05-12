@@ -7,5 +7,5 @@ send_metrics = false
 
 [[d1_databases]]
 binding = "DB"
-database_name = "prompt-storage-db"
-database_id = "5b308b68-0293-4576-9f0d-3ad83007f60c"
+database_name = "startprd-db"
+database_id = "659c5568-8746-4082-a50b-6e7b7604068e"
