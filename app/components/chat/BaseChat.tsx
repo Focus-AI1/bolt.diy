@@ -425,8 +425,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         // Initialize PostHog only if it hasn't been initialized yet
         posthog.init('phc_ND0k0qQbVXCtKy9wPa7oVPMer8RN3yNYh5pvGNEJ0QE', {
           api_host: 'https://us.i.posthog.com',
-          // Disable autocapture to avoid capturing too much data
-          autocapture: false,
+          // turn on autocapture to ensure we capture as much data as possible
+          autocapture: true,
           // Only capture what we explicitly want
           capture_pageview: true,
           // Respect Do Not Track setting
