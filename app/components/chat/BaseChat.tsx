@@ -1824,26 +1824,38 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         const formData = new FormData();
         formData.append('content', content);
         
-        // Fire and forget, but with improved error handling
-        fetch('/api/prompts', {
-          method: 'POST',
-          body: formData,
-        })
-        .then(response => {
-          if (!response.ok) {
-            return response.json().then(data => {
-              console.error('Failed to save prompt:', data);
-              throw new Error(`Server error: ${data.message || response.statusText}`);
+        // Fire and forget, but with improved error handling and retry logic
+        const savePrompt = async (retryCount = 0, maxRetries = 2) => {
+          try {
+            const response = await fetch('/api/prompts', {
+              method: 'POST',
+              body: formData,
             });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+              console.error('Failed to save prompt:', data);
+              
+              // If we have retries left and it's a server error (5xx), retry
+              if (retryCount < maxRetries && response.status >= 500) {
+                console.log(`Retrying prompt save (${retryCount + 1}/${maxRetries})...`);
+                // Exponential backoff: 1s, 2s
+                setTimeout(() => savePrompt(retryCount + 1, maxRetries), 1000 * (retryCount + 1));
+                return;
+              }
+              
+              throw new Error(`Server error: ${data.message || response.statusText}`);
+            }
+            
+            console.log('Prompt saved successfully:', data);
+          } catch (error) {
+            console.error('Error saving prompt:', error);
           }
-          return response.json();
-        })
-        .then(data => {
-          console.log('Prompt save result:', data);
-        })
-        .catch(error => {
-          console.error('Error saving prompt:', error);
-        });
+        };
+        
+        // Start the save process
+        savePrompt();
       } catch (error) {
         console.error('Error preparing prompt save:', error);
       }

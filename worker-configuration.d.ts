@@ -18,4 +18,28 @@ interface Env {
   XAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
   AWS_BEDROCK_CONFIG: string;
+  DB: D1Database; // D1 database binding for prompt-storage-db
+}
+
+interface D1Database {
+  prepare: (query: string) => D1PreparedStatement;
+  exec: (query: string) => Promise<D1ExecResult>;
+}
+
+interface D1PreparedStatement {
+  bind: (...values: any[]) => D1PreparedStatement;
+  first: <T = any>(column?: string) => Promise<T>;
+  run: <T = any>() => Promise<D1Result<T>>;
+  all: <T = any>() => Promise<D1Result<T>>;
+}
+
+interface D1Result<T = any> {
+  results?: T[];
+  success: boolean;
+  meta?: object;
+}
+
+interface D1ExecResult {
+  success: boolean;
+  meta?: object;
 }
