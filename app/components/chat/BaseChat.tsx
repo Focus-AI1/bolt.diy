@@ -17,7 +17,6 @@ import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useStore } from '@nanostores/react';
 import { motion } from 'framer-motion';
-import posthog from 'posthog-js';
 
 import styles from './BaseChat.module.scss';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
@@ -204,7 +203,7 @@ const TypingPlaceholder = () => {
     const backspaceSpeed = 30; // ms per character
     const pauseBeforeBackspace = 1500; // ms to wait before backspacing
     
-    let timer: ReturnType<typeof setTimeout>;
+    let timer;
     
     if (isTyping) {
       // Typing forward
@@ -305,25 +304,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [isPrdModeToggleOn, setIsPrdModeToggleOn] = useState(true);
     const [isTicketModeToggleOn, setIsTicketModeToggleOn] = useState(true);
     const [isResearchModeToggleOn, setIsResearchModeToggleOn] = useState(false);
-    const [isMobileView, setIsMobileView] = useState(false);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
-
-    useEffect(() => {
-      const checkMobileView = () => {
-        setIsMobileView(window.innerWidth < 768);
-      };
-
-      if (typeof window !== 'undefined') {
-        checkMobileView();
-        window.addEventListener('resize', checkMobileView);
-      }
-
-      return () => {
-        if (typeof window !== 'undefined') {
-          window.removeEventListener('resize', checkMobileView);
-        }
-      };
-    }, []);
 
     useEffect(() => {
       if (data) {
@@ -437,58 +418,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
-    // Add PostHog initialization
-    useEffect(() => {
-      if (typeof window !== 'undefined' && !window.posthog) {
-        // Initialize PostHog only if it hasn't been initialized yet
-        posthog.init('phc_ND0k0qQbVXCtKy9wPa7oVPMer8RN3yNYh5pvGNEJ0QE', {
-          api_host: 'https://us.i.posthog.com',
-          // turn on autocapture to ensure we capture as much data as possible
-          autocapture: true,
-          // Only capture what we explicitly want
-          capture_pageview: true,
-          // Respect Do Not Track setting
-          respect_dnt: true,
-        });
-      }
-    }, []);
-    
-    // Add tracking for input changes with debounce
-    const debouncedInputRef = useRef<string>('');
-    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    
-    // Modified handleInputChange to track what users type
-    const trackInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      // Call the original handler first
-      if (handleInputChange) {
-        handleInputChange(event);
-      }
-      
-      // Track input changes with debounce to avoid too many events
-      const newInput = event.target.value;
-      debouncedInputRef.current = newInput;
-      
-      // Clear existing timer
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      
-      // Set new timer to track after 1 second of inactivity
-      debounceTimerRef.current = setTimeout(() => {
-        if (typeof window !== 'undefined' && window.posthog && debouncedInputRef.current) {
-          posthog.capture('chat_input_typed', {
-            input_length: debouncedInputRef.current.length,
-            input_preview: debouncedInputRef.current.substring(0, 100), // First 100 chars
-            has_files: uploadedFiles.length > 0,
-            chat_started: chatStarted,
-            model: model,
-            provider: provider?.name,
-          });
-        }
-      }, 1000);
-    };
-    
-    // Modify handleSendMessage to track submission attempts
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
       event.preventDefault();
 
@@ -497,164 +426,14 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       if (!messageContent && uploadedFiles.length === 0) {
         return;
       }
-      
+
       // Save the prompt to the database when a message is sent
       if (messageContent) {
         savePromptToDatabase(messageContent);
       }
-      
-      // Track message submission attempt
-      if (typeof window !== 'undefined' && window.posthog) {
-        posthog.capture('chat_message_submit_attempt', {
-          message_length: messageContent.length,
-          has_files: uploadedFiles.length > 0,
-          chat_started: chatStarted,
-          model: model,
-          provider: provider?.name,
-        });
-      }
 
       // Logic for handling the first message
       if (!chatStarted && triggerChatStart) {
-        // For the first message, if we are in browser environment, send a message to the parent
-        // to check for authentication before proceeding
-        if (typeof window !== 'undefined') {
-          // Track authentication request
-          if (window.posthog) {
-            posthog.capture('chat_auth_requested', {
-              message_length: messageContent.length,
-              has_files: uploadedFiles.length > 0,
-            });
-          }
-          
-          // Always send a message to parent frame to check authentication and process message,
-          // regardless of whether user is already authenticated
-          window.parent.postMessage({
-            type: 'SEND_MESSAGE',
-            prompt: messageContent,
-            files: uploadedFiles || [],
-            imageDataList: imageDataList || []
-          }, '*');
-
-          // Listen for a PROCESS_PENDING_PROMPT message from the parent frame
-          // This will be sent after authentication is complete
-          const processPendingPromptHandler = (event: MessageEvent) => {
-            if (event.data && event.data.type === 'PROCESS_PENDING_PROMPT') {
-              console.log('Received pending prompt to process:', event.data.prompt);
-              
-              // Track successful authentication
-              if (typeof window !== 'undefined' && window.posthog) {
-                posthog.capture('chat_auth_completed', {
-                  message_length: event.data.prompt.length,
-                  has_files: (event.data.files || []).length > 0,
-                });
-              }
-              
-              // Remove the event listener to avoid duplicate handling
-              window.removeEventListener('message', processPendingPromptHandler);
-              
-              try {
-                // Now trigger the chat start and send the message
-                triggerChatStart().then(() => {
-                  // If PRD mode is on, store the message for PRD processing but don't switch UI
-                  if (isPrdModeToggleOn) {
-                    // First reset the store to clear any previous data
-                    initialPrdMessageStore.set({
-                      text: '',
-                      files: [],
-                      imageDataList: [],
-                      autoSubmit: false
-                    });
-                    
-                    // Then store the message content and files in the store for PRDChat to use in background
-                    initialPrdMessageStore.set({
-                      text: event.data.prompt,
-                      files: event.data.files || [],
-                      imageDataList: event.data.imageDataList || [],
-                      autoSubmit: true
-                    });
-                  }
-                  
-                  // If Ticket mode is on, store the message for Ticket processing but don't switch UI
-                  if (isTicketModeToggleOn) {
-                    // First reset the store to clear any previous data
-                    initialTicketMessageStore.set({
-                      text: '',
-                      files: [],
-                      imageDataList: [],
-                      autoSubmit: false
-                    });
-                    
-                    // Then store the message content and files in the store for TicketChat to use in background
-                    initialTicketMessageStore.set({
-                      text: event.data.prompt,
-                      files: event.data.files || [],
-                      imageDataList: event.data.imageDataList || [],
-                      autoSubmit: true
-                    });
-                  }
-                  
-                  // If Research mode is on, store the message for Research processing but don't switch UI
-                  // if (isResearchModeToggleOn) {
-                  //   // First reset the store to clear any previous data
-                  //   initialResearchMessageStore.set({
-                  //     text: '',
-                  //     files: [],
-                  //     imageDataList: [],
-                  //     autoSubmit: false
-                  //   });
-                    
-                  //   // Then store the message content and files in the store for ResearchChat to use in background
-                  //   initialResearchMessageStore.set({
-                  //     text: event.data.prompt,
-                  //     files: event.data.files || [],
-                  //     imageDataList: event.data.imageDataList || [],
-                  //     autoSubmit: true
-                  //   });
-                  // }
-                  
-                  // Send the message to the chat
-                  if (sendMessage) {
-                    console.log('Sending message after authentication:', event.data.prompt);
-                    sendMessage({} as any, event.data.prompt);
-                    
-                    // Let parent know the message was sent successfully
-                    window.parent.postMessage({
-                      type: 'MESSAGE_SENT_SUCCESS',
-                      promptProcessed: true
-                    }, '*');
-                  }
-                }).catch(error => {
-                  console.error('Error processing prompt after authentication:', error);
-                  
-                  // Let parent know there was an error
-                  window.parent.postMessage({
-                    type: 'MESSAGE_SENT_ERROR',
-                    error: error.message
-                  }, '*');
-                });
-              } catch (error) {
-                console.error('Exception during prompt processing:', error);
-              }
-            }
-          };
-          
-          // Add the event listener for the PROCESS_PENDING_PROMPT message
-          window.addEventListener('message', processPendingPromptHandler);
-          
-          // Also send a message to confirm we're listening
-          window.parent.postMessage({
-            type: 'READY_FOR_PROMPT',
-            timestamp: Date.now()
-          }, '*');
-          
-          console.log('Ready to receive PROCESS_PENDING_PROMPT message');
-          
-          // Return early to prevent the regular flow
-          return;
-        }
-
-        // If we're not in the browser or we didn't return above, continue with the regular flow
         triggerChatStart(); // Mark chat as started regardless of mode
         
         // If PRD mode is on, store the message for PRD processing but don't switch UI
@@ -726,7 +505,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
 
       // Always proceed with sending the message to the regular chat endpoint
-      // unless we returned early above
       if (sendMessage) {
         sendMessage(event, messageInput);
 
@@ -745,53 +523,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         }
       }
     };
-
-    // Add PING_CHECK handler right after other useEffects
-    useEffect(() => {
-      if (typeof window !== 'undefined') {
-        // Listen for parent window messages
-        const handleParentMessage = (event: MessageEvent) => {
-          if (event.data && event.data.type === 'PING_CHECK') {
-            // Respond to ping to confirm we're alive
-            window.parent.postMessage({
-              type: 'PONG_RESPONSE',
-              timestamp: Date.now(),
-              originalTimestamp: event.data.timestamp
-            }, '*');
-            console.log('Received ping, sent pong response');
-          }
-        };
-        
-        window.addEventListener('message', handleParentMessage);
-        
-        return () => {
-          window.removeEventListener('message', handleParentMessage);
-        };
-      }
-    }, []);
-
-    // Add listener for auth cancellation
-    useEffect(() => {
-      if (typeof window !== 'undefined') {
-        const handleAuthCancellation = (event: MessageEvent) => {
-          if (event.data && event.data.type === 'AUTH_CANCELLED') {
-            // Track when user cancels authentication
-            if (window.posthog) {
-              posthog.capture('chat_auth_cancelled', {
-                prompt_length: input.length,
-                has_files: uploadedFiles.length > 0,
-              });
-            }
-          }
-        };
-        
-        window.addEventListener('message', handleAuthCancellation);
-        
-        return () => {
-          window.removeEventListener('message', handleAuthCancellation);
-        };
-      }
-    }, [input, uploadedFiles.length]);
 
     const handleFileUpload = () => {
       const input = document.createElement('input');
@@ -1021,7 +752,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           }
                         }}
                         value={input}
-                        onChange={(event) => trackInputChange(event)}
+                        onChange={(event) => handleInputChange?.(event)}
                         onPaste={handlePaste}
                         style={{
                           minHeight: TEXTAREA_MIN_HEIGHT,
@@ -1081,29 +812,25 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             disabled={isStreaming}
                           />
                           {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
-                          {!isMobileView && (
-                            <IconButton
-                              title="Model Settings"
-                              className={classNames(
-                                'transition-all flex items-center gap-1',
-                                {
-                                  'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                    isModelSettingsCollapsed,
-                                  'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                    !isModelSettingsCollapsed,
-                                })}
-                              onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
-                              disabled={!providerList || providerList.length === 0}
-                            >
-                              <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-                              {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
-                            </IconButton>
-                          )}
+                          <IconButton
+                            title="Model Settings"
+                            className={classNames(
+                              'transition-all flex items-center gap-1',
+                              {
+                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
+                                  isModelSettingsCollapsed,
+                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
+                                  !isModelSettingsCollapsed,
+                              })}
+                            onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
+                            disabled={!providerList || providerList.length === 0}
+                          >
+                            <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
+                            {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
+                          </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
-                        {/* Research button - hidden on mobile */}
-                        {!isMobileView && (
-                          <Tooltip.Root>
+                        <Tooltip.Root>
                             <Tooltip.Trigger asChild>
                               <button
                                 type="button"
@@ -1151,107 +878,110 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               </Tooltip.Content>
                             </Tooltip.Portal>
                           </Tooltip.Root>
-                        )}
-                        {/* PRD button - always shown unless chatStarted */}
-                        <Tooltip.Root>
-                          <Tooltip.Trigger asChild>
-                            <button
-                              title={`PRD Mode: ${isPrdModeToggleOn ? 'ON' : 'OFF'}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid',
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                lineHeight: 1.2,
-                                cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                opacity: chatStarted ? 0.5 : 1,
-                                transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                backgroundColor: isPrdModeToggleOn
-                                  ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                  : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                color: isPrdModeToggleOn
-                                  ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                  : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                borderColor: isPrdModeToggleOn
-                                  ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                  : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                              }}
-                              onClick={() => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn)}
-                              disabled={chatStarted}
-                            >
-                              <span style={{}}>
-                                PRD:
-                              </span>
-                              <span style={{ fontWeight: 600 }}>
-                                {isPrdModeToggleOn ? 'ON' : 'OFF'}
-                              </span>
-                            </button>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                              sideOffset={5}
-                            >
-                              Generate PRD first!
-                              <Tooltip.Arrow className="fill-gray-800" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                        {/* Ticket button - always shown unless chatStarted */}
-                        <Tooltip.Root>
-                          <Tooltip.Trigger asChild>
-                            <button
-                              title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid',
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                lineHeight: 1.2,
-                                cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                opacity: chatStarted ? 0.5 : 1,
-                                transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                backgroundColor: isTicketModeToggleOn
-                                  ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                  : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                color: isTicketModeToggleOn
-                                  ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                  : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                borderColor: isTicketModeToggleOn
-                                  ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                  : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                              }}
-                              onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
-                              disabled={chatStarted}
-                            >
-                              <span style={{}}>
-                                Ticket:
-                              </span>
-                              <span style={{ fontWeight: 600 }}>
-                                {isTicketModeToggleOn ? 'ON' : 'OFF'}
-                              </span>
-                            </button>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                              sideOffset={5}
-                            >
-                              Generate Tickets first!
-                              <Tooltip.Arrow className="fill-gray-800" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                          {/* Shift+Return hint removed */}
-                          {/* Supabase button removed for all users */}
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                title={`PRD Mode: ${isPrdModeToggleOn ? 'ON' : 'OFF'}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 500,
+                                  lineHeight: 1.2,
+                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
+                                  opacity: chatStarted ? 0.5 : 1,
+                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
+                                  backgroundColor: isPrdModeToggleOn
+                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
+                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
+                                  color: isPrdModeToggleOn
+                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
+                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
+                                  borderColor: isPrdModeToggleOn
+                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
+                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
+                                }}
+                                onClick={() => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn)} //working great!
+                                disabled={chatStarted}
+                              >
+                                <span style={{}}>
+                                  PRD:
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {isPrdModeToggleOn ? 'ON' : 'OFF'}
+                                </span>
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                sideOffset={5}
+                              >
+                                Generate PRD first!
+                                <Tooltip.Arrow className="fill-gray-800" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 500,
+                                  lineHeight: 1.2,
+                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
+                                  opacity: chatStarted ? 0.5 : 1,
+                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
+                                  backgroundColor: isTicketModeToggleOn
+                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
+                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
+                                  color: isTicketModeToggleOn
+                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
+                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
+                                  borderColor: isTicketModeToggleOn
+                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
+                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
+                                }}
+                                onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
+                                disabled={chatStarted}
+                              >
+                                <span style={{}}>
+                                  Ticket:
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {isTicketModeToggleOn ? 'ON' : 'OFF'}
+                                </span>
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                sideOffset={5}
+                              >
+                                Generate Tickets first!
+                                <Tooltip.Arrow className="fill-gray-800" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          {input.length > 3 ? (
+                            <div className="text-xs text-bolt-elements-textTertiary">
+                              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
+                              + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd>{' '}
+                              a new line
+                            </div>
+                          ) : null}
+                          <SupabaseConnection />
                         </div>
                       </div>
                     </div>
@@ -1259,12 +989,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
                 
                 <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 px-2 sm:px-6">
-                  {!isMobileView && (
-                    <div className="flex justify-center gap-2">
-                      {ImportButtons(importChat)}
-                      <GitCloneButton importChat={importChat} />
-                    </div>
-                  )}
+                  <div className="flex justify-center gap-2">
+                    {ImportButtons(importChat)}
+                    <GitCloneButton importChat={importChat} />
+                  </div>
                   {ExamplePrompts((event, messageInput) => {
                     if (handleSendMessage) {
                       handleSendMessage?.(event, messageInput);
@@ -1546,7 +1274,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           }
                         }}
                         value={input}
-                        onChange={(event) => trackInputChange(event)}
+                        onChange={(event) => handleInputChange?.(event)}
                         onPaste={handlePaste}
                         style={{
                           minHeight: TEXTAREA_MIN_HEIGHT,
@@ -1606,29 +1334,25 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             disabled={isStreaming}
                           />
                           {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
-                          {!isMobileView && (
-                            <IconButton
-                              title="Model Settings"
-                              className={classNames(
-                                'transition-all flex items-center gap-1',
-                                {
-                                  'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                    isModelSettingsCollapsed,
-                                  'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                    !isModelSettingsCollapsed,
-                                })}
-                              onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
-                              disabled={!providerList || providerList.length === 0}
-                            >
-                              <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-                              {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
-                            </IconButton>
-                          )}
+                          <IconButton
+                            title="Model Settings"
+                            className={classNames(
+                              'transition-all flex items-center gap-1',
+                              {
+                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
+                                  isModelSettingsCollapsed,
+                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
+                                  !isModelSettingsCollapsed,
+                              })}
+                            onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
+                            disabled={!providerList || providerList.length === 0}
+                          >
+                            <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
+                            {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
+                          </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
-                        {/* Research button - hidden on mobile */}
-                        {!isMobileView && (
-                          <Tooltip.Root>
+                        <Tooltip.Root>
                             <Tooltip.Trigger asChild>
                               <button
                                 type="button"
@@ -1676,107 +1400,110 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               </Tooltip.Content>
                             </Tooltip.Portal>
                           </Tooltip.Root>
-                        )}
-                        {/* PRD button - always shown unless chatStarted */}
-                        <Tooltip.Root>
-                          <Tooltip.Trigger asChild>
-                            <button
-                              title={`PRD Mode: ${isPrdModeToggleOn ? 'ON' : 'OFF'}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid',
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                lineHeight: 1.2,
-                                cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                opacity: chatStarted ? 0.5 : 1,
-                                transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                backgroundColor: isPrdModeToggleOn
-                                  ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                  : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                color: isPrdModeToggleOn
-                                  ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                  : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                borderColor: isPrdModeToggleOn
-                                  ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                  : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                              }}
-                              onClick={() => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn)}
-                              disabled={chatStarted}
-                            >
-                              <span style={{}}>
-                                PRD:
-                              </span>
-                              <span style={{ fontWeight: 600 }}>
-                                {isPrdModeToggleOn ? 'ON' : 'OFF'}
-                              </span>
-                            </button>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                              sideOffset={5}
-                            >
-                              Generate PRD first!
-                              <Tooltip.Arrow className="fill-gray-800" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                        {/* Ticket button - always shown unless chatStarted */}
-                        <Tooltip.Root>
-                          <Tooltip.Trigger asChild>
-                            <button
-                              title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid',
-                                fontSize: '0.8rem',
-                                fontWeight: 500,
-                                lineHeight: 1.2,
-                                cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                opacity: chatStarted ? 0.5 : 1,
-                                transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                backgroundColor: isTicketModeToggleOn
-                                  ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                  : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                color: isTicketModeToggleOn
-                                  ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                  : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                borderColor: isTicketModeToggleOn
-                                  ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                  : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                              }}
-                              onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
-                              disabled={chatStarted}
-                            >
-                              <span style={{}}>
-                                Ticket:
-                              </span>
-                              <span style={{ fontWeight: 600 }}>
-                                {isTicketModeToggleOn ? 'ON' : 'OFF'}
-                              </span>
-                            </button>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                              sideOffset={5}
-                            >
-                              Generate Tickets first!
-                              <Tooltip.Arrow className="fill-gray-800" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                          {/* Shift+Return hint removed */}
-                          {/* Supabase button removed for all users */}
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                title={`PRD Mode: ${isPrdModeToggleOn ? 'ON' : 'OFF'}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 500,
+                                  lineHeight: 1.2,
+                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
+                                  opacity: chatStarted ? 0.5 : 1,
+                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
+                                  backgroundColor: isPrdModeToggleOn
+                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
+                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
+                                  color: isPrdModeToggleOn
+                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
+                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
+                                  borderColor: isPrdModeToggleOn
+                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
+                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
+                                }}
+                                onClick={() => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn)} //working great!
+                                disabled={chatStarted}
+                              >
+                                <span style={{}}>
+                                  PRD:
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {isPrdModeToggleOn ? 'ON' : 'OFF'}
+                                </span>
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                sideOffset={5}
+                              >
+                                Generate PRD first!
+                                <Tooltip.Arrow className="fill-gray-800" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  border: '1px solid',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 500,
+                                  lineHeight: 1.2,
+                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
+                                  opacity: chatStarted ? 0.5 : 1,
+                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
+                                  backgroundColor: isTicketModeToggleOn
+                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
+                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
+                                  color: isTicketModeToggleOn
+                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
+                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
+                                  borderColor: isTicketModeToggleOn
+                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
+                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
+                                }}
+                                onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
+                                disabled={chatStarted}
+                              >
+                                <span style={{}}>
+                                  Ticket:
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {isTicketModeToggleOn ? 'ON' : 'OFF'}
+                                </span>
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                sideOffset={5}
+                              >
+                                Generate Tickets first!
+                                <Tooltip.Arrow className="fill-gray-800" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                          {input.length > 3 ? (
+                            <div className="text-xs text-bolt-elements-textTertiary">
+                              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
+                              + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd>{' '}
+                              a new line
+                            </div>
+                          ) : null}
+                          <SupabaseConnection />
                         </div>
                       </div>
                     </div>
@@ -1818,44 +1545,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       </div>
     );
 
-    // Function to quietly save prompts to the database
-    const savePromptToDatabase = (content: string) => {
+     // Function to quietly save prompts to the database
+     const savePromptToDatabase = (content: string) => {
       try {
         const formData = new FormData();
         formData.append('content', content);
         
-        // Fire and forget, but with improved error handling and retry logic
-        const savePrompt = async (retryCount = 0, maxRetries = 2) => {
-          try {
-            const response = await fetch('/api/prompts', {
-              method: 'POST',
-              body: formData,
-            });
-            
-            const data = await response.json();
-            
-            if (!response.ok) {
-              console.error('Failed to save prompt:', data);
-              
-              // If we have retries left and it's a server error (5xx), retry
-              if (retryCount < maxRetries && response.status >= 500) {
-                console.log(`Retrying prompt save (${retryCount + 1}/${maxRetries})...`);
-                // Exponential backoff: 1s, 2s
-                setTimeout(() => savePrompt(retryCount + 1, maxRetries), 1000 * (retryCount + 1));
-                return;
-              }
-              
-              throw new Error(`Server error: ${data.message || response.statusText}`);
-            }
-            
-            console.log('Prompt saved successfully:', data);
-          } catch (error) {
-            console.error('Error saving prompt:', error);
-          }
-        };
-        
-        // Start the save process
-        savePrompt();
+        // Fire and forget - no need to wait for the response
+        fetch('/api/prompts', {
+          method: 'POST',
+          body: formData,
+        }).catch(error => {
+          console.error('Error saving prompt:', error);
+        });
       } catch (error) {
         console.error('Error preparing prompt save:', error);
       }
