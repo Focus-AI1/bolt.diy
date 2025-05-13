@@ -4,6 +4,7 @@ import { chatStore } from '~/lib/stores/chat';
 import { classNames } from '~/utils/classNames';
 import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
+import { Link } from '@remix-run/react';
 
 export function Header() {
   const chat = useStore(chatStore);
@@ -17,11 +18,22 @@ export function Header() {
     >
       <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
         <div className="i-ph:sidebar-simple-duotone text-xl" />
-        <a href="/" className="text-2xl font-semibold text-accent flex items-center ml-3">
-          <img src="/logo-blue.svg" alt="logo" className="w-[120px] inline-block" />
-        </a>
+        <Link to="/" className="text-2xl font-semibold text-accent flex items-center">
+          {/* Light mode logo (hidden in dark mode) */}
+          <img 
+            src="/logo-blue.svg" 
+            alt="logo" 
+            className="w-[120px] inline-block dark:hidden" 
+          />
+          {/* Dark mode logo (hidden in light mode) */}
+          <img 
+            src="/logo-white.svg" 
+            alt="logo" 
+            className="w-[120px] inline-block hidden dark:inline-block" 
+          />
+        </Link>
       </div>
-      {chat.started && ( // Display ChatDescription and HeaderActionButtons only when the chat has started.
+      {chat.started && (
         <>
           <span className="flex-1 px-4 truncate text-center text-bolt-elements-textPrimary">
             <ClientOnly>{() => <ChatDescription />}</ClientOnly>

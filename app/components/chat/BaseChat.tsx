@@ -881,158 +881,60 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
-                        <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                type="button"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 500,
-                                  lineHeight: 1.2,
-                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                  opacity: chatStarted ? 0.5 : 1,
-                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                  backgroundColor: isResearchModeToggleOn
-                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                  color: isResearchModeToggleOn
-                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                  borderColor: isResearchModeToggleOn
-                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                                }}
-                                onClick={() => !chatStarted && setIsResearchModeToggleOn(!isResearchModeToggleOn)}
-                                disabled={chatStarted}
-                              >
-                                <span style={{}}>
-                                  Research:
-                                </span>
-                                <span style={{ fontWeight: 600 }}>
-                                  {isResearchModeToggleOn ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                                sideOffset={5}
-                              >
-                                Generate Research first!
-                                <Tooltip.Arrow className="fill-gray-800" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                title={`PRD Mode: ${isPrdModeToggleOn ? 'ON' : 'OFF'}`}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 500,
-                                  lineHeight: 1.2,
-                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                  opacity: chatStarted ? 0.5 : 1,
-                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                  backgroundColor: isPrdModeToggleOn
-                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                  color: isPrdModeToggleOn
-                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                  borderColor: isPrdModeToggleOn
-                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                                }}
-                                onClick={() => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn)} //working great!
-                                disabled={chatStarted}
-                              >
-                                <span style={{}}>
-                                  PRD:
-                                </span>
-                                <span style={{ fontWeight: 600 }}>
-                                  {isPrdModeToggleOn ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                                sideOffset={5}
-                              >
-                                Generate PRD first!
-                                <Tooltip.Arrow className="fill-gray-800" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 500,
-                                  lineHeight: 1.2,
-                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                  opacity: chatStarted ? 0.5 : 1,
-                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                  backgroundColor: isTicketModeToggleOn
-                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                  color: isTicketModeToggleOn
-                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                  borderColor: isTicketModeToggleOn
-                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                                }}
-                                onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
-                                disabled={chatStarted}
-                              >
-                                <span style={{}}>
-                                  Ticket:
-                                </span>
-                                <span style={{ fontWeight: 600 }}>
-                                  {isTicketModeToggleOn ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                                sideOffset={5}
-                              >
-                                Generate Tickets first!
-                                <Tooltip.Arrow className="fill-gray-800" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                          {input.length > 3 ? (
-                            <div className="text-xs text-bolt-elements-textTertiary">
-                              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
-                              + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd>{' '}
-                              a new line
-                            </div>
-                          ) : null}
-                          <SupabaseConnection />
+                          <div className="hidden sm:flex gap-2 items-center">
+                            {[
+                              { 
+                                label: 'Research', 
+                                isActive: isResearchModeToggleOn, 
+                                onClick: () => !chatStarted && setIsResearchModeToggleOn(!isResearchModeToggleOn),
+                                tooltip: 'Generate Research first!'
+                              },
+                              { 
+                                label: 'PRD', 
+                                isActive: isPrdModeToggleOn, 
+                                onClick: () => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn),
+                                tooltip: 'Generate PRD first!'
+                              },
+                              { 
+                                label: 'Ticket', 
+                                isActive: isTicketModeToggleOn, 
+                                onClick: () => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn),
+                                tooltip: 'Generate Tickets first!'
+                              }
+                            ].map(({ label, isActive, onClick, tooltip }) => (
+                              <Tooltip.Root key={label}>
+                                <Tooltip.Trigger asChild>
+                                  <button
+                                    type="button"
+                                    className={classNames(
+                                      "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                                      "border",
+                                      isActive 
+                                        ? "bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border-bolt-elements-item-borderAccent" 
+                                        : "bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary border-bolt-elements-borderColor hover:bg-bolt-elements-background-depth-4",
+                                      chatStarted ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                                    )}
+                                    onClick={onClick}
+                                    disabled={chatStarted}
+                                  >
+                                    {label}:
+                                    <span className="font-semibold ml-0.5">
+                                      {isActive ? 'ON' : 'OFF'}
+                                    </span>
+                                  </button>
+                                </Tooltip.Trigger>
+                                <Tooltip.Portal>
+                                  <Tooltip.Content
+                                    className="bg-bolt-elements-tooltip-background text-bolt-elements-tooltip-content text-xs px-2 py-1 rounded shadow-lg z-50"
+                                    sideOffset={5}
+                                  >
+                                    {tooltip}
+                                    <Tooltip.Arrow className="fill-bolt-elements-tooltip-background" />
+                                  </Tooltip.Content>
+                                </Tooltip.Portal>
+                              </Tooltip.Root>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1040,7 +942,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
                 
                 <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 px-2 sm:px-6">
-                  <div className="flex justify-center gap-2">
+                  <div className="hidden sm:flex justify-center gap-2">
                     {ImportButtons(importChat)}
                     <GitCloneButton importChat={importChat} />
                   </div>
@@ -1402,158 +1304,60 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
-                        <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                type="button"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 500,
-                                  lineHeight: 1.2,
-                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                  opacity: chatStarted ? 0.5 : 1,
-                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                  backgroundColor: isResearchModeToggleOn
-                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                  color: isResearchModeToggleOn
-                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                  borderColor: isResearchModeToggleOn
-                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                                }}
-                                onClick={() => !chatStarted && setIsResearchModeToggleOn(!isResearchModeToggleOn)}
-                                disabled={chatStarted}
-                              >
-                                <span style={{}}>
-                                  Research:
-                                </span>
-                                <span style={{ fontWeight: 600 }}>
-                                  {isResearchModeToggleOn ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                                sideOffset={5}
-                              >
-                                Generate Research first!
-                                <Tooltip.Arrow className="fill-gray-800" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                title={`PRD Mode: ${isPrdModeToggleOn ? 'ON' : 'OFF'}`}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 500,
-                                  lineHeight: 1.2,
-                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                  opacity: chatStarted ? 0.5 : 1,
-                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                  backgroundColor: isPrdModeToggleOn
-                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                  color: isPrdModeToggleOn
-                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                  borderColor: isPrdModeToggleOn
-                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                                }}
-                                onClick={() => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn)} //working great!
-                                disabled={chatStarted}
-                              >
-                                <span style={{}}>
-                                  PRD:
-                                </span>
-                                <span style={{ fontWeight: 600 }}>
-                                  {isPrdModeToggleOn ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                                sideOffset={5}
-                              >
-                                Generate PRD first!
-                                <Tooltip.Arrow className="fill-gray-800" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                          <Tooltip.Root>
-                            <Tooltip.Trigger asChild>
-                              <button
-                                title={`Ticket Mode: ${isTicketModeToggleOn ? 'ON' : 'OFF'}`}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  border: '1px solid',
-                                  fontSize: '0.8rem',
-                                  fontWeight: 500,
-                                  lineHeight: 1.2,
-                                  cursor: chatStarted ? 'not-allowed' : 'pointer',
-                                  opacity: chatStarted ? 0.5 : 1,
-                                  transition: 'background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out',
-                                  backgroundColor: isTicketModeToggleOn
-                                    ? 'var(--bolt-elements-item-backgroundAccentMuted, #eef2ff)'
-                                    : 'var(--bolt-elements-background-depth-3, #f9fafb)',
-                                  color: isTicketModeToggleOn
-                                    ? 'var(--bolt-elements-item-contentAccent, #4f46e5)'
-                                    : 'var(--bolt-elements-textSecondary, #6b7280)',
-                                  borderColor: isTicketModeToggleOn
-                                    ? 'var(--bolt-elements-item-borderAccent, #c7d2fe)'
-                                    : 'var(--bolt-elements-borderColor, #e5e7eb)',
-                                }}
-                                onClick={() => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn)}
-                                disabled={chatStarted}
-                              >
-                                <span style={{}}>
-                                  Ticket:
-                                </span>
-                                <span style={{ fontWeight: 600 }}>
-                                  {isTicketModeToggleOn ? 'ON' : 'OFF'}
-                                </span>
-                              </button>
-                            </Tooltip.Trigger>
-                            <Tooltip.Portal>
-                              <Tooltip.Content
-                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                                sideOffset={5}
-                              >
-                                Generate Tickets first!
-                                <Tooltip.Arrow className="fill-gray-800" />
-                              </Tooltip.Content>
-                            </Tooltip.Portal>
-                          </Tooltip.Root>
-                          {input.length > 3 ? (
-                            <div className="text-xs text-bolt-elements-textTertiary">
-                              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
-                              + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd>{' '}
-                              a new line
-                            </div>
-                          ) : null}
-                          <SupabaseConnection />
+                          <div className="hidden sm:flex gap-2 items-center">
+                            {[
+                              { 
+                                label: 'Research', 
+                                isActive: isResearchModeToggleOn, 
+                                onClick: () => !chatStarted && setIsResearchModeToggleOn(!isResearchModeToggleOn),
+                                tooltip: 'Generate Research first!'
+                              },
+                              { 
+                                label: 'PRD', 
+                                isActive: isPrdModeToggleOn, 
+                                onClick: () => !chatStarted && setIsPrdModeToggleOn(!isPrdModeToggleOn),
+                                tooltip: 'Generate PRD first!'
+                              },
+                              { 
+                                label: 'Ticket', 
+                                isActive: isTicketModeToggleOn, 
+                                onClick: () => !chatStarted && setIsTicketModeToggleOn(!isTicketModeToggleOn),
+                                tooltip: 'Generate Tickets first!'
+                              }
+                            ].map(({ label, isActive, onClick, tooltip }) => (
+                              <Tooltip.Root key={label}>
+                                <Tooltip.Trigger asChild>
+                                  <button
+                                    type="button"
+                                    className={classNames(
+                                      "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
+                                      "border",
+                                      isActive 
+                                        ? "bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border-bolt-elements-item-borderAccent" 
+                                        : "bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary border-bolt-elements-borderColor hover:bg-bolt-elements-background-depth-4",
+                                      chatStarted ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                                    )}
+                                    onClick={onClick}
+                                    disabled={chatStarted}
+                                  >
+                                    {label}:
+                                    <span className="font-semibold ml-0.5">
+                                      {isActive ? 'ON' : 'OFF'}
+                                    </span>
+                                  </button>
+                                </Tooltip.Trigger>
+                                <Tooltip.Portal>
+                                  <Tooltip.Content
+                                    className="bg-bolt-elements-tooltip-background text-bolt-elements-tooltip-content text-xs px-2 py-1 rounded shadow-lg z-50"
+                                    sideOffset={5}
+                                  >
+                                    {tooltip}
+                                    <Tooltip.Arrow className="fill-bolt-elements-tooltip-background" />
+                                  </Tooltip.Content>
+                                </Tooltip.Portal>
+                              </Tooltip.Root>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
