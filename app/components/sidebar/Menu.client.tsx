@@ -332,9 +332,13 @@ function UserButton() {
                       <button 
                         onClick={() => {
                           signOut().then(() => {
-                            window.location.href = '/';
+                            setTimeout(() => {
+                              navigate('/', { replace: true });
+                            }, 300);
+                          }).catch(error => {
+                            console.error("Sign out error:", error);
                           });
-                        }} 
+                        }}
                         className="w-full py-1.5 px-3 bg-[#01536b] hover:bg-[#014358] text-white text-sm font-medium rounded-md transition-colors"
                       >
                         Sign Out
@@ -662,11 +666,6 @@ export const Menu = () => {
     setIsSettingsOpen(false);
   };
 
-  const setDialogContentWithLogging = useCallback((content: DialogContent) => {
-    console.log('Setting dialog content:', content);
-    setDialogContent(content);
-  }, []);
-
   // Function to navigate to the correct route based on chat type
   const navigateToChatById = useCallback((item: ChatHistoryItem) => {
     // Check if the chat has a type field, if not, default to 'chat' for backward compatibility
@@ -892,7 +891,8 @@ export const Menu = () => {
             </DialogRoot>
           </div>
           <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-800 px-4 py-3">
-            <SettingsButton onClick={handleSettingsClick} />
+            {/* Will be uncommented in the future once we have full settings */}
+            {/* <SettingsButton onClick={handleSettingsClick} /> */}
             <ThemeSwitch />
           </div>
         </div>
