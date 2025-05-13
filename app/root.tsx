@@ -129,3 +129,5 @@ function App() {
 
 // Wrap the app with ClerkApp
 export default ClerkApp(App);
+// export default App;
+
