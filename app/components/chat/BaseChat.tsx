@@ -3,7 +3,7 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useState, useRef } from 'react';
+import React, { type RefCallback, useEffect, useState, useRef, useCallback } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { IconButton } from '~/components/ui/IconButton';
@@ -17,6 +17,8 @@ import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useStore } from '@nanostores/react';
 import { motion } from 'framer-motion';
+import { SignedIn, SignedOut, useUser, useClerk, useAuth } from '@clerk/remix';
+import { useNavigate, useLocation } from '@remix-run/react';
 
 import styles from './BaseChat.module.scss';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
@@ -203,7 +205,8 @@ const TypingPlaceholder = () => {
     const backspaceSpeed = 30; // ms per character
     const pauseBeforeBackspace = 1500; // ms to wait before backspacing
     
-    let timer;
+    // Explicitly type the timer variable
+    let timer: ReturnType<typeof setTimeout> | undefined;
     
     if (isTyping) {
       // Typing forward
@@ -232,6 +235,7 @@ const TypingPlaceholder = () => {
       }
     }
     
+    // Clear the timer on cleanup
     return () => clearTimeout(timer);
   }, [charIndex, currentPhrase, isTyping, phrases]);
   
@@ -241,6 +245,33 @@ const TypingPlaceholder = () => {
       <span className="animate-blink">|</span>
     </>
   );
+};
+
+// Helper functions for authentication check and redirection
+const useAuthCheck = () => {
+  const { isLoaded, isSignedIn } = useUser();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if user is authenticated
+  const isAuthenticated = useCallback(() => {
+    return isLoaded && isSignedIn;
+  }, [isLoaded, isSignedIn]);
+
+  // Redirect to sign in page
+  const redirectToSignIn = useCallback((event: React.UIEvent) => {
+    event.preventDefault();
+    
+    // Encode the current URL to redirect back after authentication
+    const returnUrl = encodeURIComponent(
+      `${location.pathname}${location.search}`
+    );
+    
+    // Navigate to sign-in with the return URL as a query parameter
+    navigate(`/sign-in?redirect_url=${returnUrl}`);
+  }, [navigate, location]);
+
+  return { isAuthenticated, redirectToSignIn };
 };
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -418,11 +449,31 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
+    const { isAuthenticated, redirectToSignIn } = useAuthCheck();
+    
+    // Create wrapper function for authentication checks before sending messages
+    const authenticatedSendMessage = (event: React.UIEvent, messageInput?: string) => {
+      event.preventDefault();
+      
+      const messageContent = messageInput ?? input;
+      if (!messageContent && uploadedFiles.length === 0) {
+        return;
+      }
+      
+      // Check if user is authenticated before proceeding
+      if (!isAuthenticated()) {
+        redirectToSignIn(event);
+        return;
+      }
+      
+      // If authenticated, proceed with sending the message
+      handleSendMessage(event, messageInput);
+    };
+
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
       event.preventDefault();
 
       const messageContent = messageInput ?? input;
-
       if (!messageContent && uploadedFiles.length === 0) {
         return;
       }
@@ -747,7 +798,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             if (isStreaming) {
                               handleStop?.();
                             } else {
-                              handleSendMessage?.(event);
+                              authenticatedSendMessage(event);
                             }
                           }
                         }}
@@ -775,7 +826,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               if (isStreaming) {
                                 handleStop?.();
                               } else if (input.length > 0 || uploadedFiles.length > 0) {
-                                handleSendMessage?.(event);
+                                authenticatedSendMessage(event);
                               }
                             }}
                           />
@@ -994,9 +1045,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     <GitCloneButton importChat={importChat} />
                   </div>
                   {ExamplePrompts((event, messageInput) => {
-                    if (handleSendMessage) {
-                      handleSendMessage?.(event, messageInput);
-                    }
+                    // Use the authenticated wrapper function directly without conditional check
+                    authenticatedSendMessage(event, messageInput);
                   })}
                   <StarterTemplates />
                 </div>
@@ -1269,7 +1319,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             if (isStreaming) {
                               handleStop?.();
                             } else {
-                              handleSendMessage?.(event);
+                              authenticatedSendMessage(event);
                             }
                           }
                         }}
@@ -1297,7 +1347,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               if (isStreaming) {
                                 handleStop?.();
                               } else if (input.length > 0 || uploadedFiles.length > 0) {
-                                handleSendMessage?.(event);
+                                authenticatedSendMessage(event);
                               }
                             }}
                           />
