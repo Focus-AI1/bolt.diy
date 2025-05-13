@@ -5,7 +5,7 @@ const StarterTemplates = () => {
   return (
     <div className="w-full max-w-[1200px] mx-auto px-4 mb-16">
       <div className="mb-4">
-        <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Build from a Template</h2>
+        <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Developer Templates</h2>
       </div>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
