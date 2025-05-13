@@ -17,7 +17,7 @@ export function Header() {
     >
       <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
         <div className="i-ph:sidebar-simple-duotone text-xl" />
-        <a href="/" className="text-2xl font-semibold text-accent flex items-center">
+        <a href="/" className="text-2xl font-semibold text-accent flex items-center ml-3">
           <img src="/logo-blue.svg" alt="logo" className="w-[120px] inline-block" />
         </a>
       </div>
