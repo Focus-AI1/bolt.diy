@@ -3,7 +3,7 @@
  * Preventing TS checks with files presented in the video for a better presentation.
  */
 import type { JSONValue, Message } from 'ai';
-import React, { type RefCallback, useEffect, useState, useRef } from 'react';
+import React, { type RefCallback, useEffect, useState, useRef, useCallback } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { IconButton } from '~/components/ui/IconButton';
@@ -17,6 +17,8 @@ import Cookies from 'js-cookie';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useStore } from '@nanostores/react';
 import { motion } from 'framer-motion';
+import { SignedIn, SignedOut, useUser, useClerk, useAuth } from '@clerk/remix';
+import { useNavigate, useLocation } from '@remix-run/react';
 
 import styles from './BaseChat.module.scss';
 import { ExportChatButton } from '~/components/chat/chatExportAndImport/ExportChatButton';
@@ -203,7 +205,8 @@ const TypingPlaceholder = () => {
     const backspaceSpeed = 30; // ms per character
     const pauseBeforeBackspace = 1500; // ms to wait before backspacing
     
-    let timer: ReturnType<typeof setTimeout>;
+    // Explicitly type the timer variable
+    let timer: ReturnType<typeof setTimeout> | undefined;
     
     if (isTyping) {
       // Typing forward
@@ -232,6 +235,7 @@ const TypingPlaceholder = () => {
       }
     }
     
+    // Clear the timer on cleanup
     return () => clearTimeout(timer);
   }, [charIndex, currentPhrase, isTyping, phrases]);
   
@@ -241,6 +245,33 @@ const TypingPlaceholder = () => {
       <span className="animate-blink">|</span>
     </>
   );
+};
+
+// Helper functions for authentication check and redirection
+const useAuthCheck = () => {
+  const { isLoaded, isSignedIn } = useUser();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if user is authenticated
+  const isAuthenticated = useCallback(() => {
+    return isLoaded && isSignedIn;
+  }, [isLoaded, isSignedIn]);
+
+  // Redirect to sign in page
+  const redirectToSignIn = useCallback((event: React.UIEvent) => {
+    event.preventDefault();
+    
+    // Encode the current URL to redirect back after authentication
+    const returnUrl = encodeURIComponent(
+      `${location.pathname}${location.search}`
+    );
+    
+    // Navigate to sign-in with the return URL as a query parameter
+    navigate(`/sign-in?redirect_url=${returnUrl}`);
+  }, [navigate, location]);
+
+  return { isAuthenticated, redirectToSignIn };
 };
 
 export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
@@ -418,140 +449,42 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
+    const { isAuthenticated, redirectToSignIn } = useAuthCheck();
+    
+    // Create wrapper function for authentication checks before sending messages
+    const authenticatedSendMessage = (event: React.UIEvent, messageInput?: string) => {
+      event.preventDefault();
+      
+      const messageContent = messageInput ?? input;
+      if (!messageContent && uploadedFiles.length === 0) {
+        return;
+      }
+      
+      // Check if user is authenticated before proceeding
+      if (!isAuthenticated()) {
+        redirectToSignIn(event);
+        return;
+      }
+      
+      // If authenticated, proceed with sending the message
+      handleSendMessage(event, messageInput);
+    };
+
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
       event.preventDefault();
 
       const messageContent = messageInput ?? input;
-
       if (!messageContent && uploadedFiles.length === 0) {
         return;
       }
 
+      // Save the prompt to the database when a message is sent
+      if (messageContent) {
+        savePromptToDatabase(messageContent);
+      }
+
       // Logic for handling the first message
       if (!chatStarted && triggerChatStart) {
-        // For the first message, if we are in browser environment, send a message to the parent
-        // to check for authentication before proceeding
-        if (typeof window !== 'undefined') {
-          // Always send a message to parent frame to check authentication and process message,
-          // regardless of whether user is already authenticated
-          window.parent.postMessage({
-            type: 'SEND_MESSAGE',
-            prompt: messageContent,
-            files: uploadedFiles || [],
-            imageDataList: imageDataList || []
-          }, '*');
-
-          // Listen for a PROCESS_PENDING_PROMPT message from the parent frame
-          // This will be sent after authentication is complete
-          const processPendingPromptHandler = (event: MessageEvent) => {
-            if (event.data && event.data.type === 'PROCESS_PENDING_PROMPT') {
-              console.log('Received pending prompt to process:', event.data.prompt);
-              
-              // Remove the event listener to avoid duplicate handling
-              window.removeEventListener('message', processPendingPromptHandler);
-              
-              try {
-                // Now trigger the chat start and send the message
-                triggerChatStart().then(() => {
-                  // If PRD mode is on, store the message for PRD processing but don't switch UI
-                  if (isPrdModeToggleOn) {
-                    // First reset the store to clear any previous data
-                    initialPrdMessageStore.set({
-                      text: '',
-                      files: [],
-                      imageDataList: [],
-                      autoSubmit: false
-                    });
-                    
-                    // Then store the message content and files in the store for PRDChat to use in background
-                    initialPrdMessageStore.set({
-                      text: event.data.prompt,
-                      files: event.data.files || [],
-                      imageDataList: event.data.imageDataList || [],
-                      autoSubmit: true
-                    });
-                  }
-                  
-                  // If Ticket mode is on, store the message for Ticket processing but don't switch UI
-                  if (isTicketModeToggleOn) {
-                    // First reset the store to clear any previous data
-                    initialTicketMessageStore.set({
-                      text: '',
-                      files: [],
-                      imageDataList: [],
-                      autoSubmit: false
-                    });
-                    
-                    // Then store the message content and files in the store for TicketChat to use in background
-                    initialTicketMessageStore.set({
-                      text: event.data.prompt,
-                      files: event.data.files || [],
-                      imageDataList: event.data.imageDataList || [],
-                      autoSubmit: true
-                    });
-                  }
-                  
-                  // If Research mode is on, store the message for Research processing but don't switch UI
-                  if (isResearchModeToggleOn) {
-                    // First reset the store to clear any previous data
-                    initialResearchMessageStore.set({
-                      text: '',
-                      files: [],
-                      imageDataList: [],
-                      autoSubmit: false
-                    });
-                    
-                    // Then store the message content and files in the store for ResearchChat to use in background
-                    initialResearchMessageStore.set({
-                      text: event.data.prompt,
-                      files: event.data.files || [],
-                      imageDataList: event.data.imageDataList || [],
-                      autoSubmit: true
-                    });
-                  }
-                  
-                  // Send the message to the chat
-                  if (sendMessage) {
-                    console.log('Sending message after authentication:', event.data.prompt);
-                    sendMessage({} as any, event.data.prompt);
-                    
-                    // Let parent know the message was sent successfully
-                    window.parent.postMessage({
-                      type: 'MESSAGE_SENT_SUCCESS',
-                      promptProcessed: true
-                    }, '*');
-                  }
-                }).catch(error => {
-                  console.error('Error processing prompt after authentication:', error);
-                  
-                  // Let parent know there was an error
-                  window.parent.postMessage({
-                    type: 'MESSAGE_SENT_ERROR',
-                    error: error.message
-                  }, '*');
-                });
-              } catch (error) {
-                console.error('Exception during prompt processing:', error);
-              }
-            }
-          };
-          
-          // Add the event listener for the PROCESS_PENDING_PROMPT message
-          window.addEventListener('message', processPendingPromptHandler);
-          
-          // Also send a message to confirm we're listening
-          window.parent.postMessage({
-            type: 'READY_FOR_PROMPT',
-            timestamp: Date.now()
-          }, '*');
-          
-          console.log('Ready to receive PROCESS_PENDING_PROMPT message');
-          
-          // Return early to prevent the regular flow
-          return;
-        }
-
-        // If we're not in the browser or we didn't return above, continue with the regular flow
         triggerChatStart(); // Mark chat as started regardless of mode
         
         // If PRD mode is on, store the message for PRD processing but don't switch UI
@@ -623,7 +556,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
 
       // Always proceed with sending the message to the regular chat endpoint
-      // unless we returned early above
       if (sendMessage) {
         sendMessage(event, messageInput);
 
@@ -642,30 +574,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         }
       }
     };
-
-    // Add PING_CHECK handler right after other useEffects
-    useEffect(() => {
-      if (typeof window !== 'undefined') {
-        // Listen for parent window messages
-        const handleParentMessage = (event: MessageEvent) => {
-          if (event.data && event.data.type === 'PING_CHECK') {
-            // Respond to ping to confirm we're alive
-            window.parent.postMessage({
-              type: 'PONG_RESPONSE',
-              timestamp: Date.now(),
-              originalTimestamp: event.data.timestamp
-            }, '*');
-            console.log('Received ping, sent pong response');
-          }
-        };
-        
-        window.addEventListener('message', handleParentMessage);
-        
-        return () => {
-          window.removeEventListener('message', handleParentMessage);
-        };
-      }
-    }, []);
 
     const handleFileUpload = () => {
       const input = document.createElement('input');
@@ -890,7 +798,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             if (isStreaming) {
                               handleStop?.();
                             } else {
-                              handleSendMessage?.(event);
+                              authenticatedSendMessage(event);
                             }
                           }
                         }}
@@ -918,7 +826,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               if (isStreaming) {
                                 handleStop?.();
                               } else if (input.length > 0 || uploadedFiles.length > 0) {
-                                handleSendMessage?.(event);
+                                authenticatedSendMessage(event);
                               }
                             }}
                           />
@@ -1137,9 +1045,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     <GitCloneButton importChat={importChat} />
                   </div>
                   {ExamplePrompts((event, messageInput) => {
-                    if (handleSendMessage) {
-                      handleSendMessage?.(event, messageInput);
-                    }
+                    // Use the authenticated wrapper function directly without conditional check
+                    authenticatedSendMessage(event, messageInput);
                   })}
                   <StarterTemplates />
                 </div>
@@ -1412,7 +1319,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             if (isStreaming) {
                               handleStop?.();
                             } else {
-                              handleSendMessage?.(event);
+                              authenticatedSendMessage(event);
                             }
                           }
                         }}
@@ -1440,7 +1347,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               if (isStreaming) {
                                 handleStop?.();
                               } else if (input.length > 0 || uploadedFiles.length > 0) {
-                                handleSendMessage?.(event);
+                                authenticatedSendMessage(event);
                               }
                             }}
                           />
@@ -1687,6 +1594,24 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
         </div>
       </div>
     );
+
+     // Function to quietly save prompts to the database
+     const savePromptToDatabase = (content: string) => {
+      try {
+        const formData = new FormData();
+        formData.append('content', content);
+        
+        // Fire and forget - no need to wait for the response
+        fetch('/api/prompts', {
+          method: 'POST',
+          body: formData,
+        }).catch(error => {
+          console.error('Error saving prompt:', error);
+        });
+      } catch (error) {
+        console.error('Error preparing prompt save:', error);
+      }
+    };
 
     return <Tooltip.Provider delayDuration={200}>{baseChat}</Tooltip.Provider>;
   },

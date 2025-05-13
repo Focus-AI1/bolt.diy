@@ -14,6 +14,10 @@ import { useSearchFilter } from '~/lib/hooks/useSearchFilter';
 import { classNames } from '~/utils/classNames';
 import { useStore } from '@nanostores/react';
 import { profileStore } from '~/lib/stores/profile';
+// Import Clerk components and our custom modal
+import { SignedIn, SignedOut, useUser, useClerk } from '@clerk/remix';
+import { ClerkAuthModal } from '~/components/auth/ClerkAuthModal';
+import { useNavigate } from '@remix-run/react';
 
 // Define the window interface extension for TypeScript
 declare global {
@@ -66,7 +70,10 @@ function UserButton() {
   const [userData, setUserData] = useState<{name?: string; imageUrl?: string; email?: string} | null>(null);
   const profile = useStore(profileStore);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { isLoaded: isUserLoaded, isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
 
   useEffect(() => {
     // Close menu when clicking outside
@@ -168,44 +175,100 @@ function UserButton() {
     };
   }, []);
   
-  // Use the user data if available, otherwise fall back to the profile store
-  const displayName = userData?.name || profile?.username || 'Guest User';
-  const hasAvatar = !!userData?.imageUrl || !!profile?.avatar;
-  const avatarUrl = userData?.imageUrl || profile?.avatar;
+  // Use Clerk user data if available, then fall back to userData from parent window, then profile store
+  const displayName = isSignedIn ? user?.fullName || user?.username : userData?.name || profile?.username || 'Guest User';
+  const hasAvatar = isSignedIn ? !!user?.imageUrl : !!userData?.imageUrl || !!profile?.avatar;
+  const avatarUrl = isSignedIn ? user?.imageUrl : userData?.imageUrl || profile?.avatar;
   
   // For debugging
-  const userSource = userData ? 'Clerk (parent window)' : profile?.username ? 'Profile Store' : 'Default';
+  const userSource = isSignedIn ? 'Clerk' : userData ? 'Parent window' : profile?.username ? 'Profile Store' : 'Default';
 
-  // Handler for managing account
+  // Handler for managing account - opens Clerk user profile if signed in, otherwise shows auth modal
   const handleManageAccount = () => {
-    try {
-      if (window.parent && window.parent !== window) {
-        console.log('Sending MANAGE_ACCOUNT message to parent');
-        window.parent.postMessage({ type: 'MANAGE_ACCOUNT' }, '*');
+    if (isSignedIn) {
+      // If signed in with Clerk, use Clerk's user profile
+      try {
+        window.open('/user/account', '_blank');
         setIsMenuOpen(false);
-      } else {
-        toast.info('Account management will be available soon!');
+      } catch (error) {
+        console.error('Error opening user account page:', error);
+        toast.error('Could not open account management page');
       }
-    } catch (error) {
-      console.error('Error sending manage account message to parent:', error);
-      toast.info('Account management will be available soon!');
+    } else {
+      // If not signed in with Clerk, try parent window communication
+      try {
+        if (window.parent && window.parent !== window) {
+          console.log('Sending MANAGE_ACCOUNT message to parent');
+          window.parent.postMessage({ type: 'MANAGE_ACCOUNT' }, '*');
+          setIsMenuOpen(false);
+        } else {
+          // Open auth modal if not in iframe
+          setIsAuthModalOpen(true);
+          setIsMenuOpen(false);
+        }
+      } catch (error) {
+        console.error('Error sending manage account message to parent:', error);
+        setIsAuthModalOpen(true);
+        setIsMenuOpen(false);
+      }
     }
   };
 
-  // Handler for signing out
+  // Handler for signing out - uses Clerk SignOutButton if signed in, otherwise shows auth modal
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const navigate = useNavigate();
+  
   const handleSignOut = () => {
-    try {
-      if (window.parent && window.parent !== window) {
-        console.log('Sending SIGN_OUT message to parent');
-        window.parent.postMessage({ type: 'SIGN_OUT' }, '*');
+    if (isSignedIn) {
+      // If signed in with Clerk, show the sign-out confirmation dropdown
+      setShowSignOutConfirm(true);
+    } else {
+      // If not signed in with Clerk, try parent window communication
+      try {
+        if (window.parent && window.parent !== window) {
+          console.log('Sending SIGN_OUT message to parent');
+          window.parent.postMessage({ type: 'SIGN_OUT' }, '*');
+          setIsMenuOpen(false);
+        } else {
+          // Use window.location.href instead of navigate to avoid scroll position issues
+          setIsMenuOpen(false);
+          window.location.href = '/sign-in';
+        }
+      } catch (error) {
+        console.error('Error sending sign out message to parent:', error);
+        window.location.href = '/sign-in';
         setIsMenuOpen(false);
-      } else {
-        toast.info('Sign out will be available soon!');
       }
-    } catch (error) {
-      console.error('Error sending sign out message to parent:', error);
-      toast.info('Sign out will be available soon!');
     }
+  };
+  
+  // Close the sign-out confirmation dropdown
+  const closeSignOutConfirm = () => {
+    setShowSignOutConfirm(false);
+  };
+  
+  // Handle click outside for sign-out dropdown
+  useEffect(() => {
+    function handleClickOutsideSignOut(event: MouseEvent) {
+      if (showSignOutConfirm && menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowSignOutConfirm(false);
+      }
+    }
+    
+    if (showSignOutConfirm) {
+      document.addEventListener('mousedown', handleClickOutsideSignOut);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideSignOut);
+    };
+  }, [showSignOutConfirm]);
+  
+  // Handler for sign-in/sign-up
+  const handleAuthClick = (mode: 'sign-in' | 'sign-up' = 'sign-in') => {
+    // Use window.location.href instead of navigate to avoid scroll position issues
+    setIsMenuOpen(false);
+    window.location.href = mode === 'sign-in' ? '/sign-in' : '/sign-up';
   };
   
   return (
@@ -220,8 +283,8 @@ function UserButton() {
       >
         {hasAvatar ? (
           <img
-            src={avatarUrl}
-            alt={displayName}
+            src={avatarUrl || ''} /* Fix TypeScript error by providing fallback empty string */
+            alt={displayName || ''}
             className="w-full h-full object-cover"
             loading="eager"
             decoding="sync"
@@ -239,25 +302,81 @@ function UserButton() {
             {userData?.email && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{userData.email}</p>
             )}
+            {isSignedIn && user?.emailAddresses && user.emailAddresses[0] && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{user.emailAddresses[0].emailAddress}</p>
+            )}
           </div>
           <div className="py-1">
-            <button
-              onClick={handleManageAccount}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <span className="i-ph:gear h-4 w-4 mr-2 opacity-80"></span>
-              Manage account
-            </button>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <span className="i-ph:sign-out h-4 w-4 mr-2 opacity-80"></span>
-              Sign out
-            </button>
+            <SignedIn>
+              {/* Show these buttons only when signed in with Clerk */}
+              {/* <button
+                onClick={handleManageAccount}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <span className="i-ph:gear h-4 w-4 mr-2 opacity-80"></span>
+                Manage account
+              </button> */}
+              <div className="relative">
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <span className="i-ph:sign-out h-4 w-4 mr-2 opacity-80"></span>
+                  Sign out
+                </button>
+                
+                {/* Sign Out Confirmation Dropdown */}
+                {showSignOutConfirm && (
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg z-50 py-1 border border-gray-200 dark:border-gray-700">
+                    <div className="p-3 flex flex-col gap-2">
+                      <button 
+                        onClick={() => {
+                          signOut().then(() => {
+                            window.location.href = '/';
+                          });
+                        }} 
+                        className="w-full py-1.5 px-3 bg-[#01536b] hover:bg-[#014358] text-white text-sm font-medium rounded-md transition-colors"
+                      >
+                        Sign Out
+                      </button>
+                      <button 
+                        onClick={closeSignOutConfirm}
+                        className="w-full py-1.5 px-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-white text-sm font-medium rounded-md transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SignedIn>
+            <SignedOut>
+              {/* Show these buttons when not signed in with Clerk */}
+              <button
+                onClick={() => handleAuthClick('sign-in')}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <span className="i-ph:sign-in h-4 w-4 mr-2 opacity-80"></span>
+                Sign in
+              </button>
+              <button
+                onClick={() => handleAuthClick('sign-up')}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <span className="i-ph:user-plus h-4 w-4 mr-2 opacity-80"></span>
+                Sign up
+              </button>
+            </SignedOut>
           </div>
         </div>
       )}
+      
+      {/* Clerk Authentication Modal */}
+      <ClerkAuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+        initialMode={localStorage.getItem('auth_initial_mode') === 'sign-up' ? 'sign-up' : 'sign-in'}
+      />
     </div>
   );
 }

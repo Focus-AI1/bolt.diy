@@ -254,28 +254,33 @@
     }, []);
   
     const scrollToBottom = useCallback<ScrollToBottom>(
-      (scrollOptions = {}) => {
-        if (typeof scrollOptions === 'string') {
+      (scrollOptions) => {
+        // Ensure scrollOptions is always an object
+        if (scrollOptions === null || scrollOptions === undefined) {
+          scrollOptions = {};
+        } else if (typeof scrollOptions === 'string') {
           scrollOptions = { animation: scrollOptions };
         }
   
-        if (!scrollOptions.preserveScrollPosition) {
+        // Add null check to prevent TypeError when scrollOptions is null
+        if (scrollOptions && !scrollOptions.preserveScrollPosition) {
           setIsAtBottom(true);
         }
   
-        const waitElapsed = Date.now() + (Number(scrollOptions.wait) || 0);
-        const behavior = mergeAnimations(optionsRef.current, scrollOptions.animation);
-        const { ignoreEscapes = false } = scrollOptions;
+        // Add null checks to prevent TypeErrors when accessing scrollOptions properties
+        const waitElapsed = Date.now() + (Number(scrollOptions?.wait) || 0);
+        const behavior = mergeAnimations(optionsRef.current, scrollOptions?.animation);
+        const { ignoreEscapes = false } = scrollOptions || {};
   
         let durationElapsed: number;
         let startTarget = state.calculatedTargetScrollTop;
   
-        if (scrollOptions.duration instanceof Promise) {
+        if (scrollOptions?.duration instanceof Promise) {
           scrollOptions.duration.finally(() => {
             durationElapsed = Date.now();
           });
         } else {
-          durationElapsed = waitElapsed + (scrollOptions.duration ?? 0);
+          durationElapsed = waitElapsed + (scrollOptions?.duration ?? 0);
         }
   
         const next = async (): Promise<boolean> => {
