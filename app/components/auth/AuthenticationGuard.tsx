@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from '@remix-run/react';
 import { useUser } from '@clerk/remix';
 import { isPublicRoute } from '~/lib/auth/protectedRoutes';
+import LoadingAnimation from '~/components/ui/LoadingAnimation';
 
 interface AuthenticationGuardProps {
   children: React.ReactNode;
@@ -51,28 +52,14 @@ export const AuthenticationGuard = ({ children }: AuthenticationGuardProps) => {
     }
   }, [isLoaded, isSignedIn, location, navigate, isRedirecting, user]);
 
-  // If still loading authentication state, you could show a loading indicator
+  // If still loading authentication state, show a loading indicator
   if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-t-cyan-600 border-gray-200 rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingAnimation size="lg" message="Loading..." />;
   }
   
-  // If redirecting, show a simple loading indicator to prevent UI flicker
+  // If redirecting, show a loading indicator to prevent UI flicker
   if (isRedirecting) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-t-cyan-600 border-gray-200 rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Redirecting...</p>
-        </div>
-      </div>
-    );
+    return <LoadingAnimation size="lg" message="Redirecting..." />;
   }
   
   // If route is public or user is authenticated, render children
