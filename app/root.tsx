@@ -13,7 +13,7 @@ import { ClientOnly } from 'remix-utils/client-only';
 // Clerk imports
 import { ClerkApp } from '@clerk/remix';
 import { rootAuthLoader } from '@clerk/remix/ssr.server';
-// import { AuthenticationGuard } from './components/auth/AuthenticationGuard';
+import { AuthenticationGuard } from './components/auth/AuthenticationGuard';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
@@ -120,14 +120,14 @@ function App() {
   return (
     <Layout>
       {/* Wrap the entire app with the AuthenticationGuard */}
-      {/* <AuthenticationGuard> */}
+      <AuthenticationGuard>
         <Outlet />
-      {/* </AuthenticationGuard> */}
+      </AuthenticationGuard>
     </Layout>
   );
 }
 
 // Wrap the app with ClerkApp
-// export default ClerkApp(App);
-export default App;
+export default ClerkApp(App);
+// export default App;
 
