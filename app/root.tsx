@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react';
-import type { LinksFunction } from '@remix-run/cloudflare';
+import type { LinksFunction, LoaderFunction } from '@remix-run/node';
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';
 import tailwindReset from '@unocss/reset/tailwind-compat.css?url';
 import { themeStore } from './lib/stores/theme';
@@ -9,6 +9,10 @@ import { useEffect } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { ClientOnly } from 'remix-utils/client-only';
+
+// Clerk imports
+import { ClerkApp } from '@clerk/remix';
+import { rootAuthLoader } from '@clerk/remix/ssr.server';
 
 import reactToastifyStyles from 'react-toastify/dist/ReactToastify.css?url';
 import globalStyles from './styles/index.scss?url';
@@ -88,7 +92,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 import { logStore } from './lib/stores/logs';
 
-export default function App() {
+// Add Clerk loader
+export const loader: LoaderFunction = (args) => rootAuthLoader(args);
+
+// Clerk error handling can be added here if needed
+
+function App() {
   const theme = useStore(themeStore);
 
   useEffect(() => {
@@ -106,3 +115,6 @@ export default function App() {
     </Layout>
   );
 }
+
+// Wrap the app with ClerkApp
+export default ClerkApp(App);
