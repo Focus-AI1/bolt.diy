@@ -881,7 +881,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
-                        <Tooltip.Root>
+                          <Tooltip.Root>
                             <Tooltip.Trigger asChild>
                               <button
                                 type="button"
@@ -1025,14 +1025,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               </Tooltip.Content>
                             </Tooltip.Portal>
                           </Tooltip.Root>
-                          {input.length > 3 ? (
-                            <div className="text-xs text-bolt-elements-textTertiary">
-                              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
-                              + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd>{' '}
-                              a new line
-                            </div>
-                          ) : null}
-                          <SupabaseConnection />
                         </div>
                       </div>
                     </div>
@@ -1402,7 +1394,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
-                        <Tooltip.Root>
+                          <Tooltip.Root>
                             <Tooltip.Trigger asChild>
                               <button
                                 type="button"
@@ -1546,14 +1538,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               </Tooltip.Content>
                             </Tooltip.Portal>
                           </Tooltip.Root>
-                          {input.length > 3 ? (
-                            <div className="text-xs text-bolt-elements-textTertiary">
-                              Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd>{' '}
-                              + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd>{' '}
-                              a new line
-                            </div>
-                          ) : null}
-                          <SupabaseConnection />
                         </div>
                       </div>
                     </div>
