@@ -34,6 +34,10 @@ export default function SignUpPage() {
               socialButtonsBlockButton: 'w-full',
               formFieldInput: 'dark:bg-gray-800 dark:text-white',
               formButtonPrimary: 'bg-[#01536b] hover:bg-[#01536b]/90', //PLEASE DO NOT CHANGE THIS COLOR!!!
+            },
+            layout: {
+              socialButtonsPlacement: 'bottom',
+              showOptionalFields: true
             }
           }}
         />
