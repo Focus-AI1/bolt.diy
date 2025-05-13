@@ -29,6 +29,12 @@ export const ClerkAuthModal = ({ isOpen, onClose, initialMode = 'sign-in' }: Cle
     }
   }, [session, isOpen, onClose]);
 
+  // Handle navigation to sign-in/sign-up routes
+  const handleAuthNavigation = () => {
+    onClose();
+    window.location.href = mode === 'sign-in' ? '/sign-in' : '/sign-up';
+  };
+
   const toggleMode = () => {
     setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in');
   };
@@ -46,85 +52,24 @@ export const ClerkAuthModal = ({ isOpen, onClose, initialMode = 'sign-in' }: Cle
               : 'Create a new account to get started.'}
           </p>
           
-          <div className="clerk-auth-container">
-            {mode === 'sign-in' ? (
-              <SignIn 
-                routing="virtual"
-                afterSignInUrl="/"
-                redirectUrl="/"
-                signUpUrl="/sign-up"
-                appearance={{
-                  elements: {
-                    rootBox: 'w-full',
-                    card: 'w-full shadow-none p-0 m-0 border-0',
-                    header: 'hidden',
-                    footer: 'hidden',
-                    main: 'p-3 m-3',
-                    formButtonPrimary: 'bg-cyan-800 hover:bg-cyan-900',
-                    formFieldInput: 'dark:bg-gray-800 dark:text-white border-gray-300 dark:border-gray-700',
-                    formFieldLabel: 'text-gray-700 dark:text-gray-300',
-                    socialButtonsBlockButton: 'border-gray-300 dark:border-gray-700',
-                    socialButtonsBlockButtonText: 'text-gray-700 dark:text-gray-300',
-                    dividerLine: 'bg-gray-300 dark:bg-gray-700',
-                    dividerText: 'text-gray-500 dark:text-gray-400',
-                    formFieldAction: 'text-cyan-800 hover:text-cyan-900 dark:text-cyan-600 dark:hover:text-cyan-500',
-                    footerActionLink: 'text-cyan-800 hover:text-cyan-900 dark:text-cyan-600 dark:hover:text-cyan-500',
-                  },
-                  layout: {
-                    socialButtonsPlacement: 'top',
-                    showOptionalFields: false,
-                  },
-                  variables: {
-                    borderRadius: '0.375rem',
-                    colorPrimary: '#01536b',
-                  }
-                }}
-              />
-            ) : (
-              <SignUp 
-                routing="virtual"
-                afterSignUpUrl="/"
-                redirectUrl="/"
-                signInUrl="/sign-in"
-                appearance={{
-                  elements: {
-                    rootBox: 'w-full',
-                    card: 'w-full shadow-none p-0 m-0 border-0',
-                    header: 'hidden',
-                    footer: 'hidden',
-                    main: 'p-3 m-3',
-                    formButtonPrimary: 'bg-cyan-800 hover:bg-cyan-900',
-                    formFieldInput: 'dark:bg-gray-800 dark:text-white border-gray-300 dark:border-gray-700',
-                    formFieldLabel: 'text-gray-700 dark:text-gray-300',
-                    socialButtonsBlockButton: 'border-gray-300 dark:border-gray-700',
-                    socialButtonsBlockButtonText: 'text-gray-700 dark:text-gray-300',
-                    dividerLine: 'bg-gray-300 dark:bg-gray-700',
-                    dividerText: 'text-gray-500 dark:text-gray-400',
-                    formFieldAction: 'text-cyan-800 hover:text-cyan-900 dark:text-cyan-600 dark:hover:text-cyan-500',
-                    footerActionLink: 'text-cyan-800 hover:text-cyan-900 dark:text-cyan-600 dark:hover:text-cyan-500',
-                  },
-                  layout: {
-                    socialButtonsPlacement: 'top',
-                    showOptionalFields: false,
-                  },
-                  variables: {
-                    borderRadius: '0.375rem',
-                    colorPrimary: '#01536b',
-                  }
-                }}
-              />
-            )}
-          </div>
-          
-          <div className="mt-6 text-center">
-            <button 
-              onClick={toggleMode}
-              className="text-sm text-cyan-800 hover:text-cyan-900 dark:text-cyan-600 dark:hover:text-cyan-500"
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <button
+              onClick={handleAuthNavigation}
+              className="w-full py-2 px-4 bg-cyan-800 hover:bg-cyan-900 text-white rounded-md transition-colors"
             >
-              {mode === 'sign-in' 
-                ? 'Don\'t have an account? Sign up' 
-                : 'Already have an account? Sign in'}
+              Continue to {mode === 'sign-in' ? 'Sign In' : 'Sign Up'} Page
             </button>
+          
+            <div className="text-center w-full">
+              <button 
+                onClick={toggleMode}
+                className="text-sm text-cyan-800 hover:text-cyan-900 dark:text-cyan-600 dark:hover:text-cyan-500"
+              >
+                {mode === 'sign-in' 
+                  ? 'Don\'t have an account? Sign up' 
+                  : 'Already have an account? Sign in'}
+              </button>
+            </div>
           </div>
         </div>
         <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">

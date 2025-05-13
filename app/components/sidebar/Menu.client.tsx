@@ -17,6 +17,7 @@ import { profileStore } from '~/lib/stores/profile';
 // Import Clerk components and our custom modal
 import { SignedIn, SignedOut, useUser, useClerk } from '@clerk/remix';
 import { ClerkAuthModal } from '~/components/auth/ClerkAuthModal';
+import { useNavigate } from '@remix-run/react';
 
 // Define the window interface extension for TypeScript
 declare global {
@@ -215,6 +216,7 @@ function UserButton() {
 
   // Handler for signing out - uses Clerk SignOutButton if signed in, otherwise shows auth modal
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const navigate = useNavigate();
   
   const handleSignOut = () => {
     if (isSignedIn) {
@@ -228,13 +230,13 @@ function UserButton() {
           window.parent.postMessage({ type: 'SIGN_OUT' }, '*');
           setIsMenuOpen(false);
         } else {
-          // Open auth modal if not in iframe
-          setIsAuthModalOpen(true);
+          // Use window.location.href instead of navigate to avoid scroll position issues
           setIsMenuOpen(false);
+          window.location.href = '/sign-in';
         }
       } catch (error) {
         console.error('Error sending sign out message to parent:', error);
-        setIsAuthModalOpen(true);
+        window.location.href = '/sign-in';
         setIsMenuOpen(false);
       }
     }
@@ -264,10 +266,9 @@ function UserButton() {
   
   // Handler for sign-in/sign-up
   const handleAuthClick = (mode: 'sign-in' | 'sign-up' = 'sign-in') => {
-    // Set the initial mode in localStorage
-    localStorage.setItem('auth_initial_mode', mode);
-    setIsAuthModalOpen(true);
+    // Use window.location.href instead of navigate to avoid scroll position issues
     setIsMenuOpen(false);
+    window.location.href = mode === 'sign-in' ? '/sign-in' : '/sign-up';
   };
   
   return (
