@@ -1,13 +1,17 @@
 import React, { useEffect, useState } from 'react';
 
-interface LoadingAnimationProps {
+interface ClerkLoadingOverlayProps {
   size?: 'sm' | 'md' | 'lg';
   message?: string;
   fullScreen?: boolean;
 }
 
-export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
-  size = 'md',
+/**
+ * Custom loading overlay to replace Clerk's default loading animation
+ * Used during authentication state loading
+ */
+const ClerkLoadingOverlay: React.FC<ClerkLoadingOverlayProps> = ({
+  size = 'lg',
   message = 'Loading...',
   fullScreen = true,
 }) => {
@@ -26,8 +30,8 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
       glow: '0 0 15px',
     },
     lg: {
-      logo: 'w-35 h-35',
-      orbit: 'w-24 h-24',
+      logo: 'w-34 h-34',
+      orbit: 'w-40 h-40',
       dot: 'w-2.5 h-2.5',
       glow: '0 0 20px',
     },
@@ -68,35 +72,35 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
       50% { transform: translateY(-5px); }
     }
     
-    .pulse-glow {
+    .clerkLoader-pulse-glow {
       animation: pulse-glow 2s infinite ease-in-out, float 3s infinite ease-in-out;
     }
     
-    .orbit-clockwise {
+    .clerkLoader-orbit-clockwise {
       animation: orbit-clockwise 4s infinite linear;
     }
     
-    .orbit-counter-clockwise {
+    .clerkLoader-orbit-counter-clockwise {
       animation: orbit-counter-clockwise 5s infinite linear;
     }
     
-    .dot-pulse {
+    .clerkLoader-dot-pulse {
       animation: dot-pulse 2s infinite ease-in-out;
     }
     
-    .dot-delay-1 {
+    .clerkLoader-dot-delay-1 {
       animation-delay: 0s;
     }
     
-    .dot-delay-2 {
+    .clerkLoader-dot-delay-2 {
       animation-delay: 0.5s;
     }
     
-    .dot-delay-3 {
+    .clerkLoader-dot-delay-3 {
       animation-delay: 1s;
     }
     
-    .dot-delay-4 {
+    .clerkLoader-dot-delay-4 {
       animation-delay: 1.5s;
     }
   `;
@@ -117,7 +121,7 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
 
       <div className="relative mx-auto flex items-center justify-center" style={{ width: 'fit-content' }}>
         {/* Main logo with sophisticated pulsing glow effect */}
-        <div className={`${sizeMap[size].logo} relative z-20 flex items-center justify-center pulse-glow`}>
+        <div className={`${sizeMap[size].logo} relative z-20 flex items-center justify-center clerkLoader-pulse-glow`}>
           <img 
             src="/logo-blue.svg" 
             className={`${sizeMap[size].logo}`} 
@@ -130,27 +134,27 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
         
         {/* Inner orbit container */}
         <div 
-          className={`absolute ${sizeMap[size].orbit} orbit-clockwise z-10`}
+          className={`absolute ${sizeMap[size].orbit} clerkLoader-orbit-clockwise z-10`}
         >
           {/* Inner orbiting dots with pulsing effect */}
-          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-sky-500 top-0 left-1/2 transform -translate-x-1/2 dot-pulse dot-delay-1`} 
+          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-sky-500 top-0 left-1/2 transform -translate-x-1/2 clerkLoader-dot-pulse clerkLoader-dot-delay-1`} 
                style={{ boxShadow: '0 0 5px rgba(14, 165, 233, 0.7)' }}></div>
-          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-cyan-600 bottom-0 left-1/2 transform -translate-x-1/2 dot-pulse dot-delay-3`}
+          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-cyan-600 bottom-0 left-1/2 transform -translate-x-1/2 clerkLoader-dot-pulse clerkLoader-dot-delay-3`}
                style={{ boxShadow: '0 0 5px rgba(8, 145, 178, 0.7)' }}></div>
         </div>
 
         {/* Outer orbit container */}
         <div 
-          className={`absolute ${sizeMap[size].orbit} orbit-counter-clockwise`}
+          className={`absolute ${sizeMap[size].orbit} clerkLoader-orbit-counter-clockwise`}
           style={{ 
             width: `calc(${sizeMap[size].orbit.split(' ')[0]} * 1.5)`, 
             height: `calc(${sizeMap[size].orbit.split(' ')[1]} * 1.5)` 
           }}
         >
           {/* Outer orbiting dots with pulsing effect */}
-          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-cyan-500 left-0 top-1/2 transform -translate-y-1/2 dot-pulse dot-delay-2`}
+          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-cyan-500 left-0 top-1/2 transform -translate-y-1/2 clerkLoader-dot-pulse clerkLoader-dot-delay-2`}
                style={{ boxShadow: '0 0 5px rgba(6, 182, 212, 0.7)' }}></div>
-          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-sky-600 right-0 top-1/2 transform -translate-y-1/2 dot-pulse dot-delay-4`}
+          <div className={`absolute ${sizeMap[size].dot} rounded-full bg-sky-600 right-0 top-1/2 transform -translate-y-1/2 clerkLoader-dot-pulse clerkLoader-dot-delay-4`}
                style={{ boxShadow: '0 0 5px rgba(2, 132, 199, 0.7)' }}></div>
         </div>
       </div>
@@ -159,7 +163,6 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
       {message && (
         <p className="mt-4 text-gray-600 dark:text-gray-400" 
            style={{ 
-             animation: 'pulse 2s infinite ease-in-out',
              opacity: 0.9
            }}>
           {message}
@@ -168,10 +171,10 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
     </div>
   );
 
-  // If fullScreen is true, center in the viewport
+  // If fullScreen is true, center in the viewport with fixed positioning
   if (fullScreen) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="fixed inset-0 flex items-center justify-center z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm">
         {spinnerElement}
       </div>
     );
@@ -181,4 +184,4 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
   return spinnerElement;
 };
 
-export default LoadingAnimation;
+export default ClerkLoadingOverlay;

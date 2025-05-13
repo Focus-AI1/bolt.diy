@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from '@remix-run/react';
 import { useUser } from '@clerk/remix';
 import { isPublicRoute } from '~/lib/auth/protectedRoutes';
-import LoadingAnimation from '~/components/ui/LoadingAnimation';
+import ClerkLoadingOverlay from '~/components/ui/ClerkLoadingOverlay';
 
 interface AuthenticationGuardProps {
   children: React.ReactNode;
@@ -52,16 +52,16 @@ export const AuthenticationGuard = ({ children }: AuthenticationGuardProps) => {
     }
   }, [isLoaded, isSignedIn, location, navigate, isRedirecting, user]);
 
-  // If still loading authentication state, show a loading indicator
+  // If still loading authentication state, show our custom Clerk loading overlay
   if (!isLoaded) {
-    return <LoadingAnimation size="lg" message="Loading..." />;
+    return <ClerkLoadingOverlay message="Loading..." />;
   }
   
-  // If redirecting, show a loading indicator to prevent UI flicker
+  // If redirecting, show our custom Clerk loading overlay to prevent UI flicker
   if (isRedirecting) {
-    return <LoadingAnimation size="lg" message="Redirecting..." />;
+    return <ClerkLoadingOverlay message="Redirecting..." />;
   }
   
   // If route is public or user is authenticated, render children
-  return <>{children};</>;
+  return <>{children}</>;
 };
