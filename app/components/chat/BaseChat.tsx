@@ -961,8 +961,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   "mr-[var(--workbench-width)]": showWorkbench && (chatMode === 'prd' || chatMode === 'ticket' || chatMode === 'research') 
                 }
               )}>
-                <div className="flex items-center justify-center px-6 py-3">
-                  <div className="flex items-center gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm">
+                <div className="flex items-center justify-center px-2 sm:px-6 py-3 w-full">
+                  <div className="flex items-center gap-1 sm:gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm w-full sm:w-auto justify-between sm:justify-center">
                     {['chat', 'research', 'prd', 'ticket'].map((mode) => (
                       mode === 'research' ? (
                         // Will be enabled in the future. Leave it for now.
@@ -970,7 +970,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           <Tooltip.Trigger asChild>
                             <button
                               className={classNames(
-                                'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 relative flex items-center justify-center',
+                                'px-2 sm:px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 relative flex items-center justify-center',
                                 'text-bolt-elements-textSecondary opacity-70 cursor-not-allowed'
                               )}
                               disabled={true}
@@ -994,13 +994,16 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           key={mode}
                           onClick={() => setChatMode(mode as ChatMode)}
                           className={classNames(
-                            'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
+                            'px-2 sm:px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
+                            'sm:flex-none flex-1', // Only apply flex-1 on mobile
                             chatMode === mode
                               ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
                               : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
                           )}
                         >
-                          {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                          {mode === 'chat' ? 'Prototype' : 
+                           mode === 'ticket' ? 'Tickets' : 
+                           mode.charAt(0).toUpperCase() + mode.slice(1)}
                         </button>
                       )
                     ))}
