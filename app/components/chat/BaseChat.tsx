@@ -963,7 +963,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               )}>
                 <div className="flex items-center justify-center px-2 sm:px-6 py-3 w-full">
                   <div className="flex items-center gap-1 sm:gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm w-full sm:w-auto justify-between sm:justify-center">
-                    {['chat', 'research', 'prd', 'ticket'].map((mode) => (
+                    {['prd', 'ticket', 'chat', 'research'].map((mode) => (
                       mode === 'research' ? (
                         // Will be enabled in the future. Leave it for now.
                         <Tooltip.Root key={mode}>
@@ -971,7 +971,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             <button
                               className={classNames(
                                 'px-2 sm:px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 relative flex items-center justify-center',
-                                'text-bolt-elements-textSecondary opacity-70 cursor-not-allowed'
+                                'text-bolt-elements-textSecondary opacity-70 cursor-not-allowed',
+                                'w-full sm:w-24', // Fixed width for consistent sizing
+                                'min-w-[60px]' // Minimum width for mobile
                               )}
                               disabled={true}
                             >
@@ -995,7 +997,9 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           onClick={() => setChatMode(mode as ChatMode)}
                           className={classNames(
                             'px-2 sm:px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
-                            'sm:flex-none flex-1', // Only apply flex-1 on mobile
+                            'w-full sm:w-24', // Fixed width for consistent sizing
+                            'min-w-[60px]', // Minimum width for mobile
+                            'text-center', // Center text
                             chatMode === mode
                               ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
                               : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
