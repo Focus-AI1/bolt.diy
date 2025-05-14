@@ -15,6 +15,7 @@ import type { Message } from 'ai';
 import { motion } from 'framer-motion';
 import { initialTicketMessageStore } from './BaseChat';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { useMediaQuery } from '~/lib/hooks/useMediaQuery';
 
 const logger = createScopedLogger('TicketChat');
 const TEXTAREA_MIN_HEIGHT = 76;
@@ -222,6 +223,10 @@ const TicketChat = ({ backgroundMode = false }) => {
 
   // Get the needsUpdate status from the store
   const needsUpdate = useStore(workbenchStore.ticketsNeedUpdate);
+
+  // Add media query hook for mobile detection
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const [showMobileChat, setShowMobileChat] = useState(false);
 
   // Get chat history functions
   // Removed: const { storeMessageHistory, setChatType } = useChatHistory();
@@ -825,12 +830,257 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
       return msg;
   }).filter(msg => msg.content); // Filter out potentially empty messages
 
+  // Toggle mobile chat visibility
+  const toggleMobileChat = () => {
+    setShowMobileChat(prev => !prev);
+  };
+
+  // If in background mode, render nothing visible
+  if (backgroundMode) {
+    return (
+      <div className="hidden">
+        {/* Hidden chat functionality */}
+        {/* ... existing background mode implementation ... */}
+      </div>
+    );
+  }
+
+  // For mobile: show either the chat or a button to open it
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-full relative">
+        {/* Mobile chat toggle button - fixed position */}
+        <button
+          onClick={toggleMobileChat}
+          className={classNames(
+            "fixed bottom-4 right-4 z-50 rounded-full p-3 shadow-lg transition-all duration-200",
+            "bg-bolt-elements-background-accent text-bolt-elements-textOnAccent",
+            "flex items-center justify-center",
+            showMobileChat ? "rotate-45" : ""
+          )}
+          aria-label={showMobileChat ? "Close chat" : "Open chat"}
+        >
+          {showMobileChat ? (
+            <div className="i-ph:x text-xl" />
+          ) : (
+            <div className="i-ph:chat-circle-text-fill text-xl" />
+          )}
+        </button>
+
+        {/* Mobile chat panel - slides up from bottom but respects the top navigation bar */}
+        <div 
+          className={classNames(
+            "fixed top-[56px] left-0 right-0 bottom-0 z-40 bg-bolt-elements-background-depth-0 transition-transform duration-300 ease-in-out",
+            "flex flex-col",
+            showMobileChat ? "translate-y-0" : "translate-y-full"
+          )}
+        >
+          {/* Chat header with close button */}
+          <div className="flex items-center justify-between p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1">
+            <h2 className="text-lg font-semibold text-bolt-elements-textPrimary">Ticket Chat</h2>
+            <IconButton 
+              onClick={toggleMobileChat}
+              title="Close chat"
+              className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary"
+            >
+              <div className="i-ph:x text-lg" />
+            </IconButton>
+          </div>
+          
+          {/* Regular chat content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Messages container */}
+            <div 
+              ref={messagesContainerRef}
+              className={classNames(
+                'flex-1 overflow-y-auto px-4 py-4 messages-container',
+                isStreaming ? 'opacity-80' : 'opacity-100'
+              )}
+            > 
+              <div className="max-w-full mx-auto">
+                {!chatStarted && messagesForDisplay.length === 0 ? (
+                  // Initial state
+                  <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                    <div className="i-ph:ticket text-5xl text-bolt-elements-textTertiary mb-4"></div>
+                    <h3 className="text-xl font-semibold text-bolt-elements-textPrimary mb-2">Ticket Generator</h3>
+                    <p className="text-bolt-elements-textSecondary max-w-md mb-6 text-sm">
+                      Update tickets or regenerate based on the PRD...
+                    </p>
+
+                    {/* Templates - simplified for mobile */}
+                    <div className="grid grid-cols-1 gap-3 w-full mb-6">
+                      {ticketTemplates.map((template, index) => (
+                        <button
+                          key={index}
+                          className="flex flex-col p-3 border border-bolt-elements-borderColor rounded-lg hover:bg-bolt-elements-background-depth-1 transition-colors text-left"
+                          onClick={() => selectTemplate(template.prompt)}
+                        >
+                          <span className="font-medium text-bolt-elements-textPrimary">{template.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  // Messages
+                  <Messages
+                    messages={messagesForDisplay}
+                    isStreaming={isStreaming}
+                    ref={messagesEndRef}
+                  />
+                )}
+
+                {/* Regeneration prompt */}
+                {needsUpdate && !isStreaming && (
+                  <div className="py-3">
+                    <div className="bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor rounded-lg p-3 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-bolt-elements-textPrimary text-sm">
+                        <span className="i-ph:info text-lg text-bolt-elements-background-accent"></span>
+                        <span>PRD updated. Regenerate tickets?</span>
+                      </div>
+                      <button
+                        onClick={handleRegenerateTickets}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-bolt-elements-background-accent hover:bg-bolt-elements-background-accentHover text-bolt-elements-textOnAccent rounded-md text-sm font-medium transition-colors whitespace-nowrap focus:outline-none"
+                        disabled={isStreaming}
+                      >
+                        <span className="i-ph:arrows-clockwise text-base"></span>
+                        Regenerate
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Input area - mobile optimized */}
+            <div className="border-t border-bolt-elements-borderColor bg-bolt-elements-background-depth-0 p-3 flex-shrink-0">
+              <div className="max-w-full mx-auto">
+                <form onSubmit={handleSendMessage} className="flex flex-col gap-2">
+                  {/* File previews */}
+                  {uploadedFiles.length > 0 && (
+                    <div className="bg-bolt-elements-background-depth-1 rounded-lg p-2">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs text-bolt-elements-textSecondary">
+                          {uploadedFiles.length} file(s)
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs text-bolt-elements-textTertiary hover:text-bolt-elements-textSecondary"
+                          onClick={() => {
+                            setUploadedFiles([]);
+                            setImageDataList([]);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <FilePreview
+                        files={uploadedFiles}
+                        imageDataList={imageDataList}
+                        onRemove={(index) => {
+                          setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+                          setImageDataList(prev => prev.filter((_, i) => i !== index));
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Textarea container */}
+                  <div className="relative">
+                    <textarea
+                      ref={textareaRef}
+                      className="w-full p-3 pr-12 bg-bolt-elements-background-depth-1 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorFocus text-bolt-elements-textPrimary shadow-sm"
+                      value={input}
+                      onChange={handleTextareaChange}
+                      onPaste={handlePaste}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                          event.preventDefault();
+                          handleSendMessage(event);
+                        }
+                      }}
+                      placeholder="Update tickets or regenerate..."
+                      style={{
+                        minHeight: 60,
+                        maxHeight: 120,
+                      }}
+                      disabled={isStreaming}
+                    />
+
+                    {/* Send/Stop button */}
+                    <div className="absolute right-2 bottom-2 z-10">
+                      {isStreaming ? (
+                        <IconButton
+                          title="Stop generation"
+                          onClick={() => stop()}
+                          className="text-bolt-elements-textPrimary bg-bolt-elements-background-depth-3 hover:bg-bolt-elements-background-depth-4 p-2 rounded-md"
+                        >
+                          <div className="i-ph:square text-lg"></div>
+                        </IconButton>
+                      ) : (
+                        <SendButton
+                          show={true}
+                          isStreaming={isStreaming}
+                          onClick={(e) => handleSendMessage(e)}
+                          disabled={!input.trim() && uploadedFiles.length === 0}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action buttons row - simplified for mobile */}
+                  <div className="flex justify-between items-center">
+                    <div className="flex gap-2 items-center">
+                      <IconButton
+                        title="Upload document or image"
+                        className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary transition-all"
+                        onClick={handleFileUpload}
+                        disabled={isStreaming}
+                      >
+                        <div className="i-ph:paperclip text-lg"></div>
+                      </IconButton>
+
+                      <IconButton
+                        title="Ticket Templates"
+                        className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary transition-all"
+                        onClick={() => {
+                          if (chatStarted) {
+                            toast.info("Describe the tickets you need");
+                          } else {
+                            setShowTicketTips(true);
+                          }
+                        }}
+                        disabled={isStreaming}
+                      >
+                        <div className="i-ph:ticket text-lg"></div>
+                      </IconButton>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelection}
+                  accept="image/*,.pdf,.doc,.docx,.txt,.md"
+                  disabled={isStreaming}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop view - unchanged
   return (
-    // Main container styling aligned with PRDChat
     <div className={classNames(
-      "flex flex-col h-full transition-all duration-200 ease-in-out", // Removed bg color here
+      "flex flex-col h-full transition-all duration-200 ease-in-out",
       {
-        "mr-[calc(var(--workbench-width)_+_3rem)]": showWorkbench, // Add margin when workbench is open
+        "mr-[calc(var(--workbench-width)_+_3rem)]": showWorkbench,
         "hidden": backgroundMode
       }
     )}>

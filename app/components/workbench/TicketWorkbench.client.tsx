@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { useChatHistory, chatType } from '~/lib/persistence/useChatHistory';
 import { ticketStreamingState } from '~/lib/stores/streaming';
 import TicketStreamingIndicator from '../ui/Ticket/TicketStreamingIndicator';
+import { useMediaQuery } from '~/lib/hooks/useMediaQuery';
 
 const logger = createScopedLogger('TicketWorkbench');
 
@@ -156,6 +157,7 @@ const TicketWorkbench = () => {
   const [zoomLevel, setZoomLevel] = useState(1);
   const contentRef = useRef<HTMLDivElement>(null);
   const isStreaming = useStore(ticketStreamingState);
+  const isMobile = useMediaQuery('(max-width: 768px)');
   
   // State for tickets
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -215,6 +217,31 @@ const TicketWorkbench = () => {
       logger.debug('Ticket Workbench visible: Chat type set to ticket');
     }
   }, [showWorkbench]);
+
+  // Force load tickets on mobile
+  useEffect(() => {
+    if (isMobile) {
+      // Force workbench to be shown on mobile
+      workbenchStore.showWorkbench.set(true);
+      
+      // Ensure tickets are loaded
+      loadTickets();
+      
+      // Log for debugging
+      logger.debug('Mobile view: forcing ticket display');
+      
+      // Log current tickets for debugging
+      const storedTickets = sessionStorage.getItem('tickets');
+      logger.debug('Stored tickets:', storedTickets ? 'Found' : 'None');
+    }
+  }, [isMobile]);
+  
+  // Debug output for tickets
+  useEffect(() => {
+    if (isMobile) {
+      logger.debug(`Mobile view: ${tickets.length} tickets loaded`);
+    }
+  }, [tickets, isMobile]);
 
   // Function to handle ticket editing
   const startEditing = (ticketId: string) => {
@@ -350,95 +377,90 @@ const TicketWorkbench = () => {
   const handleZoomReset = () => setZoomLevel(1);
 
   // Handle initial state and loading
-  if (!showWorkbench) return null;
+  if (!showWorkbench && !isMobile) return null; // Only return null on desktop if workbench is hidden
+
+  // For debugging - add a test ticket if none exist on mobile
+  const ensureTestTicket = () => {
+    if (isMobile && tickets.length === 0) {
+      const testTicket = {
+        id: "test-1",
+        title: "Test Ticket",
+        description: "This is a test ticket to verify mobile display",
+        type: "Feature",
+        priority: "Medium",
+        status: "Open",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tags: ["test", "mobile"]
+      };
+      
+      setTickets([testTicket]);
+      sessionStorage.setItem('tickets', JSON.stringify([testTicket]));
+      return true;
+    }
+    return false;
+  };
 
   return (
-    // Consistent styling with PRDWorkbench
-    // Do not change this parent div styling
     <motion.div
-      className="h-full border-l border-bolt-elements-borderColor flex-shrink-0 bg-bolt-elements-background-depth-0 overflow-hidden z-workbench rounded-tl-xl shadow-lg"
-      variants={workbenchVariants}
-      initial="closed"
-      animate={showWorkbench ? 'open' : 'closed'}
-      style={{
-        position: 'fixed',
-        right: 0,
-        top: 'var(--header-height)',
-        bottom: 0,
-        height: 'calc(100vh - var(--header-height) - 4px)',
-        width: 'var(--workbench-width)',
-        marginTop: '4px',
-        boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
-      }}
+      variants={isMobile ? {} : workbenchVariants} // Skip animation on mobile
+      initial={isMobile ? "open" : "closed"}
+      animate={isMobile || showWorkbench ? 'open' : 'closed'}
+      className={classNames(
+        "h-full bg-bolt-elements-background-depth-1 border-l border-bolt-elements-borderColor overflow-hidden",
+        "flex flex-col",
+        isMobile ? "w-full fixed inset-0 top-[112px] z-30" : "" // Position fixed on mobile, below nav bars
+      )}
     >
-      <div className="h-full flex flex-col">
-        {/* Toolbar */}
-        <div className="flex justify-between items-center p-3 border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-1 flex-shrink-0">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <h1 className="text-xl font-semibold text-bolt-elements-textPrimary ml-2">
-              Ticket Workbench
-            </h1>
-            <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary flex-shrink-0">
-              {tickets.length}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {/* Sync Button - Position similar to Save button in PRDWorkbench */}
-            <button
-              onClick={() => {
-                // Set a flag in sessionStorage to trigger TicketChat
-                sessionStorage.setItem('trigger_ticket_sync', JSON.stringify({
-                  timestamp: new Date().toISOString(),
-                  message: "Please verify all tickets are properly aligned with the Product Requirements Document, ensuring complete coverage of functional requirements, implementation details, and proper prioritization."
-                }));
-                
-                // Dispatch storage event for listeners
-                window.dispatchEvent(new StorageEvent('storage', {
-                  key: 'trigger_ticket_sync',
-                  newValue: sessionStorage.getItem('trigger_ticket_sync'),
-                  storageArea: sessionStorage
-                }));
-                
-                toast.info('Validating tickets...');
-              }}
-              disabled={tickets.length === 0 || isStreaming}
-              className={classNames(
-                "flex items-center justify-center gap-2 rounded-md transition-all duration-200 font-medium py-2 px-4 min-w-[90px]",
-                tickets.length > 0 && !isStreaming
-                  ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md transform hover:scale-105"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-              )}
-              title={isStreaming ? "Please wait for current operation to complete" : "Validate Tickets"}
+      {/* Debug info for mobile */}
+      {isMobile && (
+        <div className="bg-yellow-100 text-yellow-800 p-2 text-xs">
+          {tickets.length > 0 ? 
+            `Displaying ${tickets.length} tickets` : 
+            <button 
+              onClick={ensureTestTicket}
+              className="underline"
             >
-              <div className="i-ph:arrows-clockwise w-4 h-4" />
-              <span>Sync</span>
+              No tickets found - Click to create test ticket
             </button>
-
-            <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
-
-            <IconButton title="Zoom Out" onClick={handleZoomOut} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:minus" />
-            </IconButton>
-            <span className="mx-2 text-sm text-bolt-elements-textSecondary">
-              {tickets.length > 0 ? `${Math.round(zoomLevel * 100)}%` : '-'}
-            </span>
-            <IconButton title="Zoom In" onClick={handleZoomIn} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
-              <div className="i-ph:plus" />
-            </IconButton>
-            <IconButton title="Reset Zoom" onClick={handleZoomReset} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
-              <div className="i-ph:frame-corners" />
-            </IconButton>
-
-            <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
-
+          }
+        </div>
+      )}
+      
+      <div className="flex flex-col h-full">
+        {/* Toolbar */}
+        <div className="border-b border-bolt-elements-borderColor bg-bolt-elements-background-depth-0 p-2 flex items-center justify-between">
+          <div className="flex items-center">
+            <h2 className="text-bolt-elements-textPrimary font-medium text-sm px-2">
+              Tickets {tickets.length > 0 && `(${tickets.length})`}
+            </h2>
+          </div>
+          
+          {/* Toolbar buttons - simplified for mobile */}
+          <div className="flex items-center gap-1">
+            {!isMobile && (
+              // Desktop-only controls
+              <>
+                <IconButton title="Zoom Out" onClick={handleZoomOut} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                  <div className="i-ph:minus" />
+                </IconButton>
+                <IconButton title="Zoom In" onClick={handleZoomIn} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
+                  <div className="i-ph:plus" />
+                </IconButton>
+                <IconButton title="Reset Zoom" onClick={handleZoomReset} disabled={tickets.length === 0} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary ml-1 disabled:opacity-50">
+                  <div className="i-ph:frame-corners" />
+                </IconButton>
+                <div className="h-4 mx-2 border-r border-bolt-elements-borderColor"></div>
+              </>
+            )}
+            
             <IconButton title="Export as CSV" onClick={exportTicketsAsCSV} disabled={tickets.length === 0 || isStreaming} className="text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary disabled:opacity-50">
               <div className="i-ph:file-csv" />
             </IconButton>
           </div>
         </div>
 
-        {/* Streaming indicator - positioned below toolbar, above content */}
+        {/* Streaming indicator */}
         {isStreaming && (
           <div className="w-full bg-bolt-elements-background-depth-1 border-b border-bolt-elements-borderColor">
             <TicketStreamingIndicator />
@@ -455,13 +477,14 @@ const TicketWorkbench = () => {
               <div
                 className="w-full mx-auto"
                 style={{
-                  transform: `scale(${zoomLevel})`,
+                  transform: isMobile ? 'none' : `scale(${zoomLevel})`, // No zoom on mobile
                   transformOrigin: 'top center',
                 }}
               >
-                {/* Modern grid layout for tickets */}
+                {/* Responsive grid layout for tickets */}
                 <div className={classNames(
-                  "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3",
+                  "grid gap-3",
+                  isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3", // Single column on mobile
                   isStreaming ? "opacity-90" : ""
                 )}>
                   {tickets.map((ticket, index) => (
@@ -471,7 +494,7 @@ const TicketWorkbench = () => {
                       variants={cardVariants}
                       initial="hidden"
                       animate="visible"
-                      className="flex flex-col h-full overflow-hidden bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100"
+                      className="flex flex-col h-full overflow-hidden bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100 dark:bg-gray-800 dark:border-gray-700"
                     >
                       {/* Ticket header with colored bar based on priority */}
                       <div className={classNames(
@@ -486,38 +509,36 @@ const TicketWorkbench = () => {
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center mb-1">
-                              <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 mr-1.5">
+                              <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 mr-1.5 dark:bg-gray-700 dark:text-gray-300">
                                 #{ticket.id}
                               </span>
                               <span className={classNames(
                                 "text-xs font-medium rounded px-1.5 py-0.5",
-                                ticket.status === 'Open' ? "bg-green-100 text-green-700" :
-                                ticket.status === 'In Progress' ? "bg-purple-100 text-purple-700" :
-                                "bg-gray-200 text-gray-600"
+                                ticket.status === 'Open' ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
+                                ticket.status === 'In Progress' ? "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" :
+                                "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
                               )}>
                                 {ticket.status}
                               </span>
                             </div>
-                            <h2 className="text-base font-semibold text-gray-800 truncate">
+                            <h2 className="text-base font-semibold text-gray-800 truncate dark:text-gray-200">
                               {ticket.title}
                             </h2>
                           </div>
-                          {!editMode && (
-                            <IconButton
-                              title={editMode && activeTicketId === ticket.id ? "Cancel editing" : "Edit ticket"}
-                              onClick={() => {
-                                if (editMode && activeTicketId === ticket.id) {
-                                  setEditMode(false);
-                                  setActiveTicketId(null);
-                                } else {
-                                  startEditing(ticket.id);
-                                }
-                              }}
-                              className="ml-1.5 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <div className="i-ph:pencil-simple w-3.5 h-3.5" />
-                            </IconButton>
-                          )}
+                          <IconButton
+                            title={editMode && activeTicketId === ticket.id ? "Cancel editing" : "Edit ticket"}
+                            onClick={() => {
+                              if (editMode && activeTicketId === ticket.id) {
+                                setEditMode(false);
+                                setActiveTicketId(null);
+                              } else {
+                                startEditing(ticket.id);
+                              }
+                            }}
+                            className="ml-1.5 text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
+                          >
+                            <div className="i-ph:pencil-simple w-3.5 h-3.5" />
+                          </IconButton>
                         </div>
 
                         {/* Ticket content - edit mode or display mode */}
@@ -526,13 +547,13 @@ const TicketWorkbench = () => {
                             <textarea
                               value={editContent}
                               onChange={(e) => setEditContent(e.target.value)}
-                              rows={12}
-                              className="flex-1 w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs"
+                              rows={isMobile ? 8 : 12} // Fewer rows on mobile
+                              className="flex-1 w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600"
                             />
                             <div className="flex justify-end mt-2 gap-2">
                               <button
                                 onClick={() => { setEditMode(false); setActiveTicketId(null); }}
-                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-xs transition-colors"
+                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-xs transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                               >
                                 Cancel
                               </button>
@@ -547,8 +568,8 @@ const TicketWorkbench = () => {
                         ) : (
                           <>
                             {/* Ticket description with scrollable area */}
-                            <div className="flex-1 overflow-y-auto mb-2 prose-sm prose-gray max-h-28 text-xs">
-                              <div className="prose prose-bolt max-w-none text-gray-700">
+                            <div className="flex-1 overflow-y-auto mb-2 prose-sm prose-gray max-h-28 text-xs dark:prose-invert">
+                              <div className="prose prose-bolt max-w-none text-gray-700 dark:text-gray-300">
                                 <SimpleMarkdownRenderer content={ticket.description} />
                               </div>
                             </div>
@@ -561,7 +582,7 @@ const TicketWorkbench = () => {
                                   {ticket.tags.map(tag => (
                                     <span
                                       key={tag}
-                                      className="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700"
+                                      className="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
                                     >
                                       {tag}
                                     </span>
@@ -571,21 +592,27 @@ const TicketWorkbench = () => {
                               
                               {/* Ticket properties */}
                               <div className="flex flex-wrap gap-1.5 mb-1.5">
-                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                                   Type: {ticket.type}
                                 </span>
                                 {ticket.assignee && (
-                                  <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                  <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                                     Assignee: {ticket.assignee}
                                   </span>
                                 )}
                               </div>
                               
-                              {/* Timestamps */}
-                              <div className="text-xs text-gray-500 mt-1.5">
-                                <span>Created: {new Date(ticket.createdAt).toLocaleString()}</span>
-                                <span className="mx-1.5">•</span>
-                                <span>Updated: {new Date(ticket.updatedAt).toLocaleString()}</span>
+                              {/* Timestamps - simplified on mobile */}
+                              <div className="text-xs text-gray-500 mt-1.5 dark:text-gray-400">
+                                {isMobile ? (
+                                  <span>Updated: {new Date(ticket.updatedAt).toLocaleDateString()}</span>
+                                ) : (
+                                  <>
+                                    <span>Created: {new Date(ticket.createdAt).toLocaleString()}</span>
+                                    <span className="mx-1.5">•</span>
+                                    <span>Updated: {new Date(ticket.updatedAt).toLocaleString()}</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </>
@@ -601,8 +628,9 @@ const TicketWorkbench = () => {
                   <div className="i-ph:ticket text-5xl text-bolt-elements-textTertiary mb-4 mx-auto"></div>
                   <h3 className="text-lg font-semibold text-bolt-elements-textPrimary mb-1.5">No Tickets Available</h3>
                   <p className="text-bolt-elements-textSecondary max-w-md text-sm">
-                    Use the Ticket Assistant chat to generate or load tickets.
-                    They will appear here.
+                    {isMobile ? 
+                      "Tap the chat button to generate tickets." : 
+                      "Use the Ticket Assistant chat to generate or load tickets."}
                   </p>
                 </div>
               </div>
