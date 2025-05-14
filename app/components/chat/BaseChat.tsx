@@ -1004,7 +1004,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               'truncate', // Prevent text overflow
                               chatMode === mode
                                 ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
-                                : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
+                                : 'bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4 border border-bolt-elements-borderColor'
                             )}
                           >
                             {mode === 'chat' ? 'Prototype' : 
