@@ -961,49 +961,59 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   "mr-[var(--workbench-width)]": showWorkbench && (chatMode === 'prd' || chatMode === 'ticket' || chatMode === 'research') 
                 }
               )}>
-                <div className="flex items-center justify-center px-6 py-3">
-                  <div className="flex items-center gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm">
-                    {['chat', 'research', 'prd', 'ticket'].map((mode) => (
-                      mode === 'research' ? (
-                        // Will be enabled in the future. Leave it for now.
-                        <Tooltip.Root key={mode}>
-                          <Tooltip.Trigger asChild>
-                            <button
-                              className={classNames(
-                                'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 relative flex items-center justify-center',
-                                'text-bolt-elements-textSecondary opacity-70 cursor-not-allowed'
-                              )}
-                              disabled={true}
-                            >
-                              {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                              <span className="ml-1 px-1 py-0.5 bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-[10px] font-semibold rounded">BETA</span>
-                            </button>
-                          </Tooltip.Trigger>
-                          <Tooltip.Portal>
-                            <Tooltip.Content
-                              className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
-                              sideOffset={5}
-                            >
-                              Your administrator must enable a search tool to use research
-                              <Tooltip.Arrow className="fill-gray-800" />
-                            </Tooltip.Content>
-                          </Tooltip.Portal>
-                        </Tooltip.Root>
-                      ) : (
-                        <button
-                          key={mode}
-                          onClick={() => setChatMode(mode as ChatMode)}
-                          className={classNames(
-                            'px-4 py-2 text-sm font-medium rounded-md transition-all duration-200',
-                            chatMode === mode
-                              ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
-                              : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
-                          )}
-                        >
-                          {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                        </button>
-                      )
-                    ))}
+                <div className="flex items-center justify-center px-2 sm:px-6 py-3 w-full">
+                  <div className="flex items-center gap-0.5 sm:gap-2 p-1 bg-bolt-elements-background-depth-3 rounded-lg shadow-sm w-full max-w-[100%] sm:max-w-md mx-auto justify-between sm:justify-center">
+                    <div className="grid grid-cols-4 w-full gap-0.5 sm:gap-2">
+                      {['prd', 'ticket', 'chat', 'research'].map((mode) => (
+                        mode === 'research' ? (
+                          // Will be enabled in the future. Leave it for now.
+                          <Tooltip.Root key={mode}>
+                            <Tooltip.Trigger asChild>
+                              <button
+                                className={classNames(
+                                  'px-1 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 relative flex items-center justify-center',
+                                  'text-bolt-elements-textSecondary opacity-70 cursor-not-allowed',
+                                  'w-full', // Full width within grid cell
+                                  'min-w-0' // Allow shrinking
+                                )}
+                                disabled={true}
+                              >
+                                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                                <span className="ml-0.5 px-0.5 py-0.5 bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-[8px] sm:text-[10px] font-semibold rounded">BETA</span>
+                              </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                              <Tooltip.Content
+                                className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50"
+                                sideOffset={5}
+                              >
+                                Your administrator must enable a search tool to use research
+                                <Tooltip.Arrow className="fill-gray-800" />
+                              </Tooltip.Content>
+                            </Tooltip.Portal>
+                          </Tooltip.Root>
+                        ) : (
+                          <button
+                            key={mode}
+                            onClick={() => setChatMode(mode as ChatMode)}
+                            className={classNames(
+                              'px-1 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md transition-all duration-200',
+                              'w-full', // Full width within grid cell
+                              'min-w-0', // Allow shrinking
+                              'text-center', // Center text
+                              'truncate', // Prevent text overflow
+                              chatMode === mode
+                                ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
+                                : 'text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4'
+                            )}
+                          >
+                            {mode === 'chat' ? 'Prototype' : 
+                             mode === 'ticket' ? 'Tickets' : 
+                             mode.charAt(0).toUpperCase() + mode.slice(1)}
+                          </button>
+                        )
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
