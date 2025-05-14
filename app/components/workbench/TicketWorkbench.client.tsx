@@ -471,7 +471,7 @@ const TicketWorkbench = () => {
                       variants={cardVariants}
                       initial="hidden"
                       animate="visible"
-                      className="flex flex-col h-full overflow-hidden bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100"
+                      className="flex flex-col h-full overflow-hidden bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-100 dark:border-gray-700"
                     >
                       {/* Ticket header with colored bar based on priority */}
                       <div className={classNames(
@@ -486,19 +486,19 @@ const TicketWorkbench = () => {
                         <div className="flex justify-between items-start mb-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center mb-1">
-                              <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded px-1.5 py-0.5 mr-1.5">
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded px-1.5 py-0.5 mr-1.5">
                                 #{ticket.id}
                               </span>
                               <span className={classNames(
                                 "text-xs font-medium rounded px-1.5 py-0.5",
-                                ticket.status === 'Open' ? "bg-green-100 text-green-700" :
-                                ticket.status === 'In Progress' ? "bg-purple-100 text-purple-700" :
-                                "bg-gray-200 text-gray-600"
+                                ticket.status === 'Open' ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400" :
+                                ticket.status === 'In Progress' ? "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400" :
+                                "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                               )}>
                                 {ticket.status}
                               </span>
                             </div>
-                            <h2 className="text-base font-semibold text-gray-800 truncate">
+                            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 truncate">
                               {ticket.title}
                             </h2>
                           </div>
@@ -513,7 +513,7 @@ const TicketWorkbench = () => {
                                   startEditing(ticket.id);
                                 }
                               }}
-                              className="ml-1.5 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="ml-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <div className="i-ph:pencil-simple w-3.5 h-3.5" />
                             </IconButton>
@@ -527,12 +527,12 @@ const TicketWorkbench = () => {
                               value={editContent}
                               onChange={(e) => setEditContent(e.target.value)}
                               rows={12}
-                              className="flex-1 w-full p-2 border border-gray-300 rounded-lg bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs"
+                              className="flex-1 w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-xs"
                             />
                             <div className="flex justify-end mt-2 gap-2">
                               <button
                                 onClick={() => { setEditMode(false); setActiveTicketId(null); }}
-                                className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded text-xs transition-colors"
+                                className="px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded text-xs transition-colors"
                               >
                                 Cancel
                               </button>
@@ -547,8 +547,8 @@ const TicketWorkbench = () => {
                         ) : (
                           <>
                             {/* Ticket description with scrollable area */}
-                            <div className="flex-1 overflow-y-auto mb-2 prose-sm prose-gray max-h-28 text-xs">
-                              <div className="prose prose-bolt max-w-none text-gray-700">
+                            <div className="flex-1 overflow-y-auto mb-2 prose-sm prose-gray dark:prose-invert max-h-28 text-xs">
+                              <div className="prose prose-bolt max-w-none text-gray-700 dark:text-gray-300">
                                 <SimpleMarkdownRenderer content={ticket.description} />
                               </div>
                             </div>
@@ -561,7 +561,7 @@ const TicketWorkbench = () => {
                                   {ticket.tags.map(tag => (
                                     <span
                                       key={tag}
-                                      className="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700"
+                                      className="px-1.5 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
                                     >
                                       {tag}
                                     </span>
@@ -571,18 +571,18 @@ const TicketWorkbench = () => {
                               
                               {/* Ticket properties */}
                               <div className="flex flex-wrap gap-1.5 mb-1.5">
-                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
                                   Type: {ticket.type}
                                 </span>
                                 {ticket.assignee && (
-                                  <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600">
+                                  <span className="px-1.5 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
                                     Assignee: {ticket.assignee}
                                   </span>
                                 )}
                               </div>
                               
                               {/* Timestamps */}
-                              <div className="text-xs text-gray-500 mt-1.5">
+                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
                                 <span>Created: {new Date(ticket.createdAt).toLocaleString()}</span>
                                 <span className="mx-1.5">•</span>
                                 <span>Updated: {new Date(ticket.updatedAt).toLocaleString()}</span>
