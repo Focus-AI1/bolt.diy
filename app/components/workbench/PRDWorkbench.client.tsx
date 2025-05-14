@@ -465,40 +465,19 @@ const PRDWorkbench = () => {
   const shouldShowEditor = useMemo(() => {
     return !!editorContent || !!prdDocument || isStreaming;
   }, [editorContent, prdDocument, isStreaming]);
-
-  // Add component for document statistics and cursor position with modern design
-  const DocumentStatistics = ({ editor }: { editor: Editor | null }) => {
-    const [stats, setStats] = useState({ words: 0, chars: 0, lines: 0 });
-    const [cursorPosition, setCursorPosition] = useState({ line: 1, col: 1 });
+  
+  // Add component for document statistics with modern design - only word and character counts
+  const DocumentStatistics = ({ editor }: { editor: Editor }) => {
+    const [stats, setStats] = useState({ words: 0, chars: 0 });
     
     const calculateStats = () => {
-      if (!editor) return { words: 0, chars: 0, lines: 0 };
+      if (!editor) return { words: 0, chars: 0 };
       
       const text = editor.getText();
       const words = text.trim() ? text.trim().split(/\s+/).length : 0;
       const chars = text.length;
-      const lines = (text.match(/\n/g) || []).length + 1;
       
-      return { words, chars, lines };
-    };
-    
-    // Calculate cursor position (line and column)
-    const calculateCursorPosition = () => {
-      if (!editor) return { line: 1, col: 1 };
-      
-      const { from } = editor.state.selection;
-      const text = editor.getText();
-      
-      // Calculate line number
-      const textBefore = text.slice(0, from);
-      const line = (textBefore.match(/\n/g) || []).length + 1;
-      
-      // Calculate column (accounting for tab characters)
-      const lastNewline = textBefore.lastIndexOf('\n');
-      const lineText = lastNewline >= 0 ? textBefore.slice(lastNewline + 1) : textBefore;
-      const col = lineText.length + 1;
-      
-      return { line, col };
+      return { words, chars };
     };
     
     useEffect(() => {
@@ -507,24 +486,16 @@ const PRDWorkbench = () => {
         setStats(calculateStats());
       };
       
-      // Update on selection change
-      const selectionHandler = () => {
-        setCursorPosition(calculateCursorPosition());
-      };
-      
       if (editor) {
         editor.on('update', updateHandler);
-        editor.on('selectionUpdate', selectionHandler);
         
         // Initial calculation
         updateHandler();
-        selectionHandler();
       }
       
       return () => {
         if (editor) {
           editor.off('update', updateHandler);
-          editor.off('selectionUpdate', selectionHandler);
         }
       };
     }, [editor]);
@@ -532,24 +503,17 @@ const PRDWorkbench = () => {
     if (!editor) return null;
     
     return (
-      <div className="flex items-center h-10 px-5 border-t border-b border-bolt-elements-borderColor text-sm text-bolt-elements-textSecondary font-mono bg-bolt-elements-background-depth-1">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-1.5" title="Word count">
-            <div className="i-ph:text-aa text-base opacity-70" />
-            <span>{stats.words} words</span>
+      <div className="flex items-center justify-end h-7 px-7 border-t border-bolt-elements-borderColor text-xs text-bolt-elements-textSecondary bg-bolt-elements-background-depth-1 transition-all duration-200">
+        <div className="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1" title="Word count">
+            <div className="i-ph:text-aa text-[0.7rem] opacity-70" />
+            <span className="tracking-tight font-light">{stats.words.toLocaleString()} words</span>
           </div>
-          <div className="flex items-center gap-1.5" title="Character count">
-            <div className="i-ph:textbox text-base opacity-70" />
-            <span>{stats.chars} chars</span>
+          <div className="h-3 border-r border-bolt-elements-borderColor opacity-30 mr-1"></div>
+          <div className="flex items-center gap-1" title="Character count">
+            <div className="i-ph:textbox text-[0.7rem] opacity-70" />
+            <span className="tracking-tight font-light">{stats.chars.toLocaleString()} chars</span>
           </div>
-          <div className="flex items-center gap-1.5" title="Line count">
-            <div className="i-ph:list-numbers text-base opacity-70" />
-            <span>{stats.lines} lines</span>
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded bg-bolt-elements-background-depth-2" title="Cursor position">
-            <div className="i-ph:caret text-base opacity-70" />
-            <span>Ln {cursorPosition.line}, Col {cursorPosition.col}</span>
         </div>
       </div>
     );
@@ -652,7 +616,11 @@ const PRDWorkbench = () => {
           {/* Fixed Editor Toolbar - only visible when NOT streaming */}
           {editorInstance && !isStreaming && (
             <div className={toolbarStyles.fixedToolbar}>
-              <EditorToolbar editor={editorInstance} readOnly={false} />
+              <div className="flex justify-between items-center w-full">
+                <div className="flex-grow">
+                  <EditorToolbar editor={editorInstance} readOnly={false} />
+                </div>
+              </div>
             </div>
           )}
           
