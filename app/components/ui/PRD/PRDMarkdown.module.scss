@@ -4,23 +4,22 @@
   line-height: 1.6;
   color: var(--bolt-elements-textPrimary);
   
-  /* Support for custom font families */
+  /* Font styling */
   [style*="font-family"] {
-    font-family: inherit; /* Inherit from parent by default */
+    font-family: inherit;
   }
   
-  /* Support for custom font sizes */
   [style*="font-size"] {
-    line-height: 1.4; /* Adjust line height for different font sizes */
+    line-height: 1.4;
   }
   
-  /* Base document spacing - ensure proper spacing between all elements */
+  /* Base document spacing and structure */
   :global(.ProseMirror) {
-    padding: 1rem 2rem 1rem 4rem; /* Adjusted padding for line numbers */
+    padding: 1rem 2rem 1rem 4rem;
     position: relative;
-    counter-reset: line 0; /* Reset line counter to start from 1 */
+    counter-reset: line 0;
     
-    /* Modern gutter styling for line numbers - VSCode-inspired */
+    /* Gutter for line numbers */
     &::before {
       content: '';
       position: absolute;
@@ -38,7 +37,7 @@
       }
     }
     
-    /* Enhanced content grid with subtle vertical guides for tab spacing */
+    /* Content grid with tab spacing guides */
     background-image: repeating-linear-gradient(to right, 
       transparent, 
       transparent calc(4ch - 1px),
@@ -66,7 +65,7 @@
       );
     }
     
-    /* Line number row implementation - VSCode style */
+    /* Line number container */
     .line-number-rows {
       position: absolute;
       pointer-events: none;
@@ -78,14 +77,14 @@
       z-index: 1;
     }
     
-    /* Add distinct spacing between all direct children */
+    /* Direct children with line numbers */
     & > * {
       margin-bottom: 1.2rem;
       position: relative;
-      min-height: 1.4rem; /* Ensure empty lines have height */
-      counter-increment: line; /* Increment line counter */
+      min-height: 1.4rem;
+      counter-increment: line;
       
-      /* Line numbers - VSCode-inspired modern sleek design */
+      /* Line numbers styling */
       &::before {
         content: counter(line);
         position: absolute;
@@ -99,11 +98,11 @@
         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
         transition: opacity 0.2s ease, color 0.2s ease;
         pointer-events: none;
-        top: 0.25rem; /* Vertically align with text */
+        top: 0.25rem;
         padding-right: 0.75rem;
       }
       
-      /* Cursor line highlight - improved with subtle gradient */
+      /* Cursor line highlighting */
       &.ProseMirror-selectednode,
       &.highlight-line {
         background: linear-gradient(to right, 
@@ -122,7 +121,7 @@
       }
     }
     
-    /* Improve active line highlighting - more VSCode-like */
+    /* Active line highlighting */
     .ProseMirror-gapcursor ~ * {
       &::before {
         opacity: 0.9 !important;
@@ -131,7 +130,7 @@
     }
   }
   
-  /* Headings with improved spacing */
+  /* Headings */
   :global(h1), :global(h2), :global(h3), :global(h4), :global(h5), :global(h6),
   :global(.enhanced-heading) {
     margin-top: 2.5rem;
@@ -143,6 +142,7 @@
     clear: both;
   }
   
+  /* Specific heading levels */
   :global(h1), :global(.enhanced-heading.level-1) {
     font-size: 2.2rem;
     padding-bottom: 0.5rem;
@@ -164,23 +164,26 @@
     font-size: 1.2rem;
     margin-top: 1rem;
     margin-bottom: 0.1rem !important;
+    padding-left: 0.5rem;
   }
   
   :global(h4), :global(.enhanced-heading.level-4) {
     font-size: 1.2rem;
     margin-top: 1.8rem;
     margin-bottom: 0.8rem;
+    padding-left: 1rem;
   }
   
-  /* Paragraphs and spacing */
+  /* Paragraphs */
   :global(p), :global(.enhanced-paragraph) {
     line-height: 1.8;
-    margin-bottom: 0.3rem;
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
     position: relative;
-    padding-left: 0;
+    padding-left: 1.5rem;
   }
 
-  /* Always add space after headings */
+  /* Space after headings */
   :global(h1) + :global(p),
   :global(h2) + :global(p),
   :global(h3) + :global(p),
@@ -188,66 +191,69 @@
     margin-top: 1.2rem;
   }
 
-  /* Lists - Enhanced for better hierarchy */
+  /* Lists */
   :global(ul), :global(ol), :global(.enhanced-ul), :global(.enhanced-ol) {
     padding-left: 3.5rem;
     margin-top: 1rem;
     margin-bottom: 1.2rem;
   }
   
-  /* Improved bullet styling */
   :global(ul), :global(.enhanced-ul) {
     list-style-type: disc;
   }
   
-  /* Ensure ordered lists display numbers */
   :global(ol), :global(.enhanced-ol) {
-    list-style-type: decimal;
-    counter-reset: item;
-    
-    & > li, & > :global(.enhanced-li) {
-      counter-increment: item;
-      display: block;
-      position: relative;
-      
-      &::before {
-        content: counter(item) ".";
-        position: absolute;
-        font-weight: 500;
-        left: -2.5rem;
-        width: 2rem;
-        text-align: right;
-        color: var(--bolt-elements-textSecondary);
+    list-style-type: decimal !important;
+    padding-left: 2.5rem;
+  }
+  
+  /* ADDED: Remove top/bottom margins from ol.enhanced-ol elements */
+  :global(ol.enhanced-ol) {
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
+  }
+  
+  /* Ordered list hierarchy */
+  :global(.ProseMirror) {
+    :global(ol) {
+      list-style-type: decimal !important;
+
+      & > li {
+        display: list-item !important;
+        padding-left: 0;
       }
     }
     
-    /* Handle nested ordered lists with different counter styles */
-    & :global(ol), & :global(.enhanced-ol) {
-      counter-reset: nested-item;
+    /* Handle nested ordered lists */
+    :global(ol ol) {
+      list-style-type: lower-alpha !important;
       
-      & > li, & > :global(.enhanced-li) {
-        counter-increment: nested-item;
+      & > li {
+        list-style-type: lower-alpha !important;
+      }
+      
+      /* Third level */
+      & :global(ol) {
+        list-style-type: lower-roman !important;
         
-        &::before {
-          content: counter(nested-item, lower-alpha) ".";
+        & > li {
+          list-style-type: lower-roman !important;
         }
       }
     }
   }
   
-  /* Task list specific styling has been removed */
   
   :global(li), :global(.enhanced-li) {
     margin-bottom: 0.3rem;
     position: relative;
   }
   
-  /* Blockquote with modern styling */
+  /* Blockquotes */
   :global(blockquote), :global(.enhanced-blockquote) {
     position: relative;
     margin: 1.5rem 0;
-    padding: 0.75rem 1.5rem;
-    padding-left: 2rem;
+    padding: 0.75rem 1.5rem 0.75rem 2rem;
     background-color: rgba(0, 0, 0, 0.02);
     border-radius: 4px;
     border-left: 4px solid rgba(59, 130, 246, 0.5);
@@ -255,7 +261,7 @@
     color: var(--bolt-elements-textSecondary);
     overflow: hidden;
     
-    /* Add quotation mark as background element */
+    /* Quotation mark */
     &::before {
       content: '\201C';
       position: absolute;
@@ -267,7 +273,6 @@
       z-index: 0;
     }
     
-    /* Ensure content is above the quotation mark */
     & > * {
       position: relative;
       z-index: 1;
@@ -279,7 +284,6 @@
       background-color: rgba(0, 0, 0, 0.01);
     }
     
-    /* Dark mode adjustments */
     :global(.dark) & {
       background-color: rgba(255, 255, 255, 0.03);
       border-left-color: rgba(59, 130, 246, 0.4);
@@ -295,7 +299,7 @@
     }
   }
   
-  /* Code blocks with enhanced styling */
+  /* Code blocks */
   :global(pre), :global(.enhanced-code-block) {
     position: relative;
     background-color: rgba(0, 0, 0, 0.03);
@@ -308,7 +312,7 @@
     line-height: 1.5;
     counter-reset: code-line;
     
-    /* Line numbers for code blocks */
+    /* Code block line numbers */
     & code {
       display: block;
       position: relative;
@@ -331,7 +335,7 @@
       }
     }
     
-    /* Copy button for code blocks */
+    /* Copy button */
     &::after {
       content: 'Copy';
       position: absolute;
@@ -362,21 +366,19 @@
   
   /* Editor-specific styles */
   :global(.markdown-editor) {
-    /* Improve cursor visibility */
     caret-color: #3b82f6;
+    white-space: pre-wrap;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    position: relative;
     
-    /* Better focus styles */
+    /* Focus styling */
     &:focus-within {
       outline: none;
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
     }
     
-    /* Improved tab handling - preserve whitespace properly */
-    white-space: pre-wrap;
-    tab-size: 4;
-    -moz-tab-size: 4;
-    
-    /* Enhance keyboard interaction styles */
+    /* Element focus styling */
     & p, & h1, & h2, & h3, & pre, & ul, & ol {
       transition: background-color 0.1s ease;
       
@@ -385,14 +387,14 @@
       }
     }
     
-    /* Preserve indentation in code blocks */
+    /* Code formatting */
     & pre, & code {
       tab-size: 2;
       -moz-tab-size: 2;
       font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
     }
     
-    /* Highlight active line more clearly */
+    /* Active line highlight */
     & .ProseMirror-focused {
       & p.highlight-line, & li.highlight-line, & h1.highlight-line, & h2.highlight-line {
         background: linear-gradient(to right, 
@@ -404,7 +406,7 @@
       }
     }
     
-    /* Selection styles */
+    /* Selection styling */
     & ::selection {
       background-color: rgba(59, 130, 246, 0.2);
     }
@@ -415,17 +417,14 @@
       }
     }
     
-    /* Improved code editor-like gutter */
-    position: relative;
-    
-    /* VSCode-like gutter */
+    /* Editor gutter styling */
     &::before {
       content: '';
       position: absolute;
       left: 0;
       top: 0;
       bottom: 0;
-      width: 3.5rem; /* Width of the gutter */
+      width: 3.5rem;
       background-color: rgba(0, 0, 0, 0.03);
       border-right: 1px solid rgba(0, 0, 0, 0.06);
       z-index: 0;
@@ -438,7 +437,7 @@
       }
     }
     
-    /* Modern scrollbar styling */
+    /* Scrollbar styling */
     &::-webkit-scrollbar {
       width: 14px;
       height: 14px;
@@ -453,10 +452,10 @@
       border: 4px solid transparent;
       background-clip: content-box;
       border-radius: 10px;
-    }
-    
-    &::-webkit-scrollbar-thumb:hover {
-      background-color: rgba(0, 0, 0, 0.3);
+      
+      &:hover {
+        background-color: rgba(0, 0, 0, 0.3);
+      }
     }
     
     :global(.dark) & {
@@ -465,14 +464,14 @@
         border: 4px solid transparent;
         background-clip: content-box;
         border-radius: 10px;
-      }
-      
-      &::-webkit-scrollbar-thumb:hover {
-        background-color: rgba(255, 255, 255, 0.25);
+        
+        &:hover {
+          background-color: rgba(255, 255, 255, 0.25);
+        }
       }
     }
     
-    /* Status indicators and document statistics */
+    /* Status bar */
     .statusBar {
       display: flex;
       justify-content: space-between;
@@ -495,7 +494,7 @@
       }
     }
     
-    /* Micro-interactions and animations */
+    /* Animation for editor elements */
     .ProseMirror {
       transition: background-color 0.3s ease, opacity 0.3s ease;
       
@@ -504,7 +503,7 @@
       }
     }
     
-    /* Mode transition animations */
+    /* Mode transition animation */
     &.mode-transition {
       transition: transform 0.3s ease, opacity 0.3s ease;
     }
@@ -548,7 +547,7 @@
     }
   }
   
-  /* Paper style editor option with enhanced styling */
+  /* Paper style editor */
   &.paperStyle {
     background-color: #fff;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 10px 15px -5px rgba(0, 0, 0, 0.1);
@@ -557,7 +556,7 @@
     :global(.markdown-editor) {
       background-color: #fff;
       
-      /* Paper background texture with subtle grid lines */
+      /* Paper background with grid */
       & .ProseMirror {
         background-image: 
           linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
@@ -569,7 +568,6 @@
         line-height: 1.8;
       }
       
-      /* Enhanced heading styles in paper mode */
       & h1 {
         font-weight: 700;
         letter-spacing: -0.01em;
@@ -577,7 +575,6 @@
       }
     }
     
-    /* Dark mode */
     :global(.dark) & {
       background-color: var(--bolt-elements-background-depth-1);
       
@@ -598,7 +595,49 @@
   }
 }
 
-/* Enhanced animations */
+/* Image styles */
+:global(img), :global(.prd-editor-image) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 1rem 0;
+  display: block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  
+  &:hover {
+    transform: scale(1.01);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  
+  /* Image alignment */
+  &.align-center {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  &.align-left {
+    float: left;
+    margin-right: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  &.align-right {
+    float: right;
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  :global(.dark) & {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    
+    &:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+  }
+}
+
+/* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -609,7 +648,6 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* Highlight animation for cursor line */
 @keyframes highlightLine {
   0% { background-color: rgba(59, 130, 246, 0.1); }
   100% { background-color: rgba(59, 130, 246, 0.04); }
@@ -619,7 +657,6 @@
   animation: highlightLine 0.5s ease-out forwards;
 }
 
-/* Tab indentation animation */
 @keyframes indentPulse {
   0% { background-color: rgba(59, 130, 246, 0.1); }
   100% { background-color: transparent; }
@@ -629,7 +666,6 @@
   animation: indentPulse 0.5s ease-out forwards;
 }
 
-/* New animation for line numbers on active line */
 @keyframes activeLineNumberPulse {
   0% { color: var(--bolt-elements-textPrimary); opacity: 1; }
   100% { color: var(--bolt-elements-textSecondary); opacity: 0.9; }
@@ -639,15 +675,34 @@
   animation: activeLineNumberPulse 0.3s ease-out forwards;
 }
 
-/* VSCode-like selection highlight */
+/* Selection highlight */
 ::selection {
   background-color: rgba(59, 130, 246, 0.3);
 }
 
-/* Nested lists - reduced margins for better hierarchy */
+/* NEW RULES: Reset padding for content directly inside list items */
+:global(li) > :global(p),
+:global(.enhanced-li) > :global(.enhanced-paragraph),
+:global(li) > :global(h1),
+:global(li) > :global(h2),
+:global(li) > :global(h3),
+:global(li) > :global(h4),
+:global(li) > :global(h5),
+:global(li) > :global(h6),
+:global(.enhanced-li) > :global(.enhanced-heading) {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* Nested list spacing and indentation */
+:global(ul) > :global(li) > :global(ul),
+:global(ul) > :global(li) > :global(ol),
 :global(ol) > :global(li) > :global(ul),
-:global(.enhanced-ol) > :global(.enhanced-li) > :global(ul),
-:global(.enhanced-ol) > :global(.enhanced-li) > :global(.enhanced-ul) {
+:global(ol) > :global(li) > :global(ol),
+:global(.enhanced-ul) > :global(.enhanced-li) > :global(.enhanced-ul),
+:global(.enhanced-ul) > :global(.enhanced-li) > :global(.enhanced-ol),
+:global(.enhanced-ol) > :global(.enhanced-li) > :global(.enhanced-ul),
+:global(.enhanced-ol) > :global(.enhanced-li) > :global(.enhanced-ol) {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }

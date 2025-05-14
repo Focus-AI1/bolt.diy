@@ -4,11 +4,10 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
-import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
 import Typography from '@tiptap/extension-typography';
 import Highlight from '@tiptap/extension-highlight';
 import ListItem from '@tiptap/extension-list-item';
+import Image from '@tiptap/extension-image';
 import { classNames } from '~/utils/classNames';
 import styles from './PRDMarkdown.module.scss';
 import toolbarStyles from './PRDToolbar.module.scss';
@@ -98,6 +97,29 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
   if (!editor) return null;
   
   const toolbarDisabled = readOnly;
+  
+  // Image upload handler
+  const addImage = useCallback(() => {
+    if (toolbarDisabled) return;
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          if (typeof result === 'string') {
+            editor.chain().focus().setImage({ src: result, alt: file.name }).run();
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  }, [editor, toolbarDisabled]);
   
   return (
     <div className={toolbarStyles.toolbar}>
@@ -241,6 +263,56 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
             <i className="fas fa-highlighter" />
           </ToolbarButton>
         </div>
+
+        {/* Alignment Group */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+            active={editor.isActive({ textAlign: 'left' })}
+            title="Align Left"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-align-left" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+            active={editor.isActive({ textAlign: 'center' })}
+            title="Align Center"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-align-center" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+            active={editor.isActive({ textAlign: 'right' })}
+            title="Align Right"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-align-right" />
+          </ToolbarButton>
+          
+          <ToolbarButton 
+            onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+            active={editor.isActive({ textAlign: 'justify' })}
+            title="Justify"
+            disabled={toolbarDisabled}
+          >
+            <i className="fas fa-align-justify" />
+          </ToolbarButton>
+        </div>
+        
+        {/* Image */}
+        <div className={toolbarStyles.buttonGroup}>
+          <ToolbarButton
+            onClick={addImage}
+            disabled={toolbarDisabled}
+            title="Insert Image"
+          >
+            <div className="i-ph:image" />
+          </ToolbarButton>
+        </div>
         
         {/* List Group */}
         <div className={toolbarStyles.buttonGroup}>
@@ -282,73 +354,10 @@ export const EditorToolbar = ({ editor, readOnly = false }: { editor: Editor | n
             <i className="fas fa-minus" />
           </ToolbarButton>
           
-          <ToolbarButton 
-            onClick={() => {
-              const diagramContent = 'graph TD\n    A[Start] --> B[Process]\n    B --> C[End]';
-              editor.chain().focus().setCodeBlock({ language: 'mermaid' }).insertContent(diagramContent).run();
-            }}
-            active={editor.isActive('codeBlock', { language: 'mermaid' })}
-            title="Insert Diagram"
-            disabled={toolbarDisabled}
-          >
-            <i className="fas fa-project-diagram" />
-          </ToolbarButton>
+          {/* Insert Diagram functionality removed as requested */}
         </div>
         
-        {/* Media Group */}
-        <div className={toolbarStyles.buttonGroup}>
-          <ToolbarButton 
-            onClick={() => {
-              const url = window.prompt('Enter the URL:');
-              if (url) {
-                if (editor.isActive('link')) {
-                  editor.chain().focus().unsetLink().run();
-                }
-                editor.chain().focus().setLink({ href: url }).run();
-              }
-            }}
-            active={editor.isActive('link')}
-            title="Insert Link"
-            disabled={toolbarDisabled}
-          >
-            <i className="fas fa-link" />
-          </ToolbarButton>
-          
-          <ToolbarButton 
-            onClick={() => {
-              const url = window.prompt('Enter the image URL:');
-              if (url) {
-                editor.chain().focus().setImage({ src: url }).run();
-              }
-            }}
-            title="Insert Image"
-            disabled={toolbarDisabled}
-          >
-            <i className="fas fa-image" />
-          </ToolbarButton>
-        </div>
-        
-        {/* Alignment Group */}
-        <div className={toolbarStyles.buttonGroup}>
-          <ToolbarDropdown
-            title="Text Align"
-            value={editor.isActive({ textAlign: 'left' }) ? 'left' :
-                   editor.isActive({ textAlign: 'center' }) ? 'center' :
-                   editor.isActive({ textAlign: 'right' }) ? 'right' :
-                   editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'}
-            onChange={(value) => {
-              if (toolbarDisabled) return;
-              editor.chain().focus().setTextAlign(value as 'left' | 'center' | 'right' | 'justify').run();
-            }}
-            options={[
-              { value: 'left', label: 'Align Left' },
-              { value: 'center', label: 'Align Center' },
-              { value: 'right', label: 'Align Right' },
-              { value: 'justify', label: 'Justify' },
-            ]}
-            disabled={toolbarDisabled}
-          />
-        </div>
+        {/* Media Group removed as requested */}
       </div>
     </div>
   );
@@ -424,6 +433,11 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
     normalizedMarkdown = normalizedMarkdown.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     normalizedMarkdown = normalizedMarkdown.replace(/\*(.*?)\*/g, '<em>$1</em>');
     
+    // Process images - add support for image markdown syntax
+    normalizedMarkdown = normalizedMarkdown.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, src) => {
+      return `<img src="${src}" alt="${alt || ''}" class="prd-editor-image">`;
+    });
+    
     // Process horizontal rule
     normalizedMarkdown = normalizedMarkdown.replace(/^---+$/gm, '<hr class="enhanced-hr">');
     
@@ -458,12 +472,12 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
             blockquoteContents[blockquoteLevel] = '';
             blockquoteLevel--;
           }
-          // Add content to current level
-          if (blockquoteContents[blockquoteLevel].length > 0) {
+        // Add content to current level
+        if (blockquoteContents[blockquoteLevel].length > 0) {
             blockquoteContents[blockquoteLevel] += '<br/>';
-          }
-          blockquoteContents[blockquoteLevel] += content;
-        } else {
+        }
+        blockquoteContents[blockquoteLevel] += content;
+      } else {
           // Continue current blockquote level
           if (blockquoteContents[blockquoteLevel].length > 0 && content.trim().length > 0) {
             // Add paragraph break if not empty
@@ -623,12 +637,14 @@ const parseMarkdownToProseMirror = (markdown: string): string => {
             const startNum = parseInt(number);
             result += `<ol start="${startNum}" class="enhanced-ol" style="--list-level: ${indentLevel / 2}">`;
           }
+          // Use the actual number from the markdown for the counter
           listStack.push({type: 'ol', indent: indentLevel, counter: parseInt(number)});
         } else {
           // Continue existing list
           result += '</li>';
-          // Update the counter
-          listStack[listStack.length - 1].counter++;
+          // Use the actual number from the markdown instead of incrementing
+          const actualNumber = parseInt(number);
+          listStack[listStack.length - 1].counter = actualNumber;
         }
         
         result += `<li ${getListItemAttributes('ol', listStack[listStack.length - 1].counter)}>${content}`;
@@ -1033,6 +1049,155 @@ const KeyboardExtension = Extension.create({
   },
 });
 
+// Enhanced extension for handling image drops and pastes with improved handling
+const ImageHandlerExtension = Extension.create({
+  name: 'imageHandler',
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('imageHandler'),
+        props: {
+          handleDOMEvents: {
+            drop: (view, event) => {
+              const hasFiles = event.dataTransfer?.files?.length;
+              
+              if (!hasFiles) {
+                return false;
+              }
+              
+              const images = Array.from(event.dataTransfer.files).filter(file => 
+                /image\/(png|jpe?g|gif|svg|webp)/.test(file.type)
+              );
+              
+              if (images.length === 0) {
+                return false;
+              }
+              
+              // Prevent default to stop browser from opening the image
+              event.preventDefault();
+              
+              // Get the position where the image should be inserted
+              const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+              
+              if (!coordinates) {
+                return false;
+              }
+              
+              // Use a transaction batch to optimize performance
+              let transaction = view.state.tr;
+              
+              // Process each image sequentially to maintain order
+              const processNextImage = (index = 0) => {
+                if (index >= images.length) {
+                  // All images processed, dispatch the transaction
+                  view.dispatch(transaction);
+                  return;
+                }
+                
+                const image = images[index];
+                const reader = new FileReader();
+                
+                reader.onload = readerEvent => {
+                  const result = readerEvent.target?.result;
+                  if (typeof result === 'string') {
+                    const { schema } = view.state;
+                    const node = schema.nodes.image.create({
+                      src: result,
+                      alt: image.name,
+                    });
+                    
+                    // Insert at the current position and update for next image
+                    transaction = transaction.insert(coordinates.pos, node);
+                    
+                    // Process the next image
+                    processNextImage(index + 1);
+                  }
+                };
+                
+                reader.readAsDataURL(image);
+              };
+              
+              // Start processing the images
+              processNextImage();
+              
+              return true;
+            },
+            paste: (view, event) => {
+              if (!event.clipboardData) return false;
+              
+              // Check if clipboard contains images
+              const hasImageItems = Array.from(event.clipboardData.items).some(item => 
+                item.type.startsWith('image/')
+              );
+              
+              if (!hasImageItems) return false;
+              
+              // Process each item in clipboard
+              const items = Array.from(event.clipboardData.items);
+              const imageItems = items.filter(item => item.type.startsWith('image/'));
+              
+              if (imageItems.length === 0) return false;
+              
+              // Prevent default to stop browser from pasting the image
+              event.preventDefault();
+              
+              // Get the current cursor position
+              const { selection } = view.state;
+              
+              // Use a transaction batch for better performance
+              let transaction = view.state.tr;
+              
+              // Process each pasted image sequentially
+              const processNextImage = (index = 0) => {
+                if (index >= imageItems.length) {
+                  // All images processed, dispatch the transaction
+                  view.dispatch(transaction);
+                  return;
+                }
+                
+                const item = imageItems[index];
+                const file = item.getAsFile();
+                
+                if (!file) {
+                  // Skip this item if it's not a valid file
+                  processNextImage(index + 1);
+                  return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = readerEvent => {
+                  const result = readerEvent.target?.result;
+                  if (typeof result === 'string') {
+                    const { schema } = view.state;
+                    const node = schema.nodes.image.create({
+                      src: result,
+                      alt: 'Pasted image',
+                    });
+                    
+                    // Insert at the current position
+                    transaction = transaction.insert(selection.from, node);
+                    
+                    // Process the next image
+                    processNextImage(index + 1);
+                  }
+                };
+                
+                reader.readAsDataURL(file);
+              };
+              
+              // Start processing the images
+              processNextImage();
+              
+              return true;
+            },
+          },
+        },
+      }),
+    ];
+  },
+});
+
 // Component for code block with copy button functionality
 const CodeBlockExtension = Extension.create({
   name: 'codeBlockWithCopy',
@@ -1126,11 +1291,12 @@ const PRDTipTapEditor = ({
   onEditorReady,
   useMarkdownMode = false // Parameter kept for backward compatibility
 }: PRDTipTapEditorProps) => {
-  const [internalContent, setInternalContent] = useState<string>(content || '');
-  // Removed showEditorToolbar state since toolbar is moved to parent component
-  const isUpdatingRef = useRef(false);
+  // Internal content state to avoid re-renders
+  const [internalContent, setInternalContent] = useState<string>(content || "");
   const [modeTransition, setModeTransition] = useState(false);
-  
+  const isUpdatingRef = useRef(false);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+
   // Update internal content when prop changes
   useEffect(() => {
     setInternalContent(content);
@@ -1175,14 +1341,20 @@ const PRDTipTapEditor = ({
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Image,
-      Link,
       Typography,
       Highlight,
+      // Add image extension with configuration
+      Image.configure({
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'prd-editor-image',
+        },
+      }),
       // Add our custom extensions
       CursorLineHighlight,
       KeyboardExtension,
       CodeBlockExtension,
+      ImageHandlerExtension,
       // Add text styling extensions
       TextStyle,
       FontFamily.configure({
@@ -1302,6 +1474,9 @@ const PRDTipTapEditor = ({
       onEditorReady(editor);
     }
   }, [editor, onEditorReady]);
+  
+  // Note: Image drag-and-drop and paste functionality is now handled by the ImageHandlerExtension
+  // which provides a more robust implementation at the ProseMirror level
 
   // Removed toolbar hover handlers since toolbar is moved to parent component
 
