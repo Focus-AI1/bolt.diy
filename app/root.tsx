@@ -101,7 +101,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
 import { logStore } from './lib/stores/logs';
 
 // Add Clerk loader
-export const loader: LoaderFunction = (args) => rootAuthLoader(args);
+export const loader: LoaderFunction = async (args) => {
+  return rootAuthLoader(
+    args, 
+    ({ request }) => {
+      // Your existing loader logic
+      return { /* your data */ };
+    },
+    {
+      // Try with VITE_ prefix
+      publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.VITE_CLERK_SECRET_KEY || process.env.CLERK_SECRET_KEY
+    }
+  );
+};
 
 // Clerk error handling can be added here if needed
 
