@@ -16,7 +16,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
     }
 
     // Check if DB binding exists with detailed diagnostics
-    const DB = context?.env?.DB;
+    const DB = context.cloudflare.env.DB;
     
     if (!DB) {
       // Enhanced diagnostics for debugging binding issues
