@@ -1066,7 +1066,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     />
                   )}
                 </div>
-                <div className="w-full max-w-chat mx-auto z-prompt mb-6 flex-shrink-0 relative">
+                <div className="w-full max-w-chat mx-auto z-prompt mb-6 flex-shrink-0 relative pl-4">
                   <ScrollToBottom />
                   <div className="bg-bolt-elements-background-depth-2 mb-4">
                     {actionAlert && (
