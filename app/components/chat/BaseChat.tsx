@@ -1017,7 +1017,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             )}
             {chatMode === 'chat' ? (
               <StickToBottom
-                className="flex-1 overflow-y-auto pt-2 flex flex-col"
+                className="flex-1 overflow-y-auto pt-2 flex flex-col ml-3"
                 resize="smooth"
                 initial="smooth"
               >

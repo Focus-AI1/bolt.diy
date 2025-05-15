@@ -699,12 +699,12 @@ ${ticketsContext}
     <div className={classNames(
       "flex flex-col h-full transition-all duration-200 ease-in-out",
       {
-        "mr-[calc(var(--workbench-width)_+_3rem)]": showWorkbench,
+        "mr-[calc(var(--workbench-width)_+_1rem)]": showWorkbench,
         "hidden": backgroundMode // Hide the UI when in background mode
       }
     )}>
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden ml-10">
         {/* PRD Tips Modal */}
         {showPRDTips && !chatStarted && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-bolt-elements-background-overlay">
