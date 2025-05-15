@@ -336,6 +336,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [isTicketModeToggleOn, setIsTicketModeToggleOn] = useState(true);
     const [isResearchModeToggleOn, setIsResearchModeToggleOn] = useState(false);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
+    
+    // Set default model to Claude 3.7 Sonnet when component mounts
+    useEffect(() => {
+      if (setModel && setProvider) {
+        // Find Anthropic provider
+        const anthropicProvider = providerList?.find(p => p.name === 'Anthropic');
+        if (anthropicProvider) {
+          setProvider(anthropicProvider);
+          // Set the model to Claude 3.7 Sonnet
+          setModel('claude-3-7-sonnet-20250219');
+        }
+      }
+    }, [providerList, setModel, setProvider]);
 
     useEffect(() => {
       if (data) {
@@ -863,22 +876,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             disabled={isStreaming}
                           />
                           {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
-                          <IconButton
-                            title="Model Settings"
-                            className={classNames(
-                              'transition-all flex items-center gap-1',
-                              {
-                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                  isModelSettingsCollapsed,
-                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                  !isModelSettingsCollapsed,
-                              })}
-                            onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
-                            disabled={!providerList || providerList.length === 0}
-                          >
-                            <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-                            {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
-                          </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
                           <div className="hidden sm:flex gap-2 items-center">
@@ -1296,22 +1293,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             disabled={isStreaming}
                           />
                           {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
-                          <IconButton
-                            title="Model Settings"
-                            className={classNames(
-                              'transition-all flex items-center gap-1',
-                              {
-                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                  isModelSettingsCollapsed,
-                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                  !isModelSettingsCollapsed,
-                              })}
-                            onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
-                            disabled={!providerList || providerList.length === 0}
-                          >
-                            <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-                            {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
-                          </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
                           <div className="hidden sm:flex gap-2 items-center">
