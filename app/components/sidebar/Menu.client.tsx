@@ -739,7 +739,7 @@ export const Menu = () => {
           stiffness: 400,
           damping: 30
         }}
-        className="fixed top-0 left-0 h-screen z-[100] cursor-pointer"
+        className="fixed top-0 left-0 h-screen z-[100] cursor-pointer hidden sm:block" /* Hide on mobile, visible on sm and above */
         onClick={() => {
           console.log('Menu toggle strip clicked, toggling from', open, 'to', !open);
           toggleMenu();
@@ -821,6 +821,7 @@ export const Menu = () => {
           'bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800/50',
           'shadow-sm text-sm',
           isSettingsOpen ? 'z-40' : 'z-sidebar',
+          'hidden sm:flex' /* Hide on mobile, display flex on sm breakpoint and above */
         )}
       >
         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50">
