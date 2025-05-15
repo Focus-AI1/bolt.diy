@@ -3,7 +3,7 @@ import { STARTER_TEMPLATES } from '~/utils/constants';
 
 const StarterTemplates = () => {
   return (
-    <div className="w-full max-w-[1200px] mx-auto px-4 mb-16">
+    <div className="w-full max-w-[1200px] mx-auto px-4 mb-16 mt-2">
       <div className="mb-4">
         <h2 className="text-xl font-semibold text-bolt-elements-textPrimary">Developer Templates</h2>
       </div>
