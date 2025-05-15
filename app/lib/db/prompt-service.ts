@@ -28,7 +28,7 @@ export class PromptService {
           content TEXT NOT NULL,
           created_at INTEGER NOT NULL
         )
-      `);
+      `.replaceAll('\n', ''));
       
       console.log('Prompts table verified', result);
       return {
