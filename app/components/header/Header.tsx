@@ -17,8 +17,8 @@ export function Header() {
       })}
     >
       <div className="flex items-center gap-2 z-logo text-bolt-elements-textPrimary cursor-pointer">
-        <div className="i-ph:sidebar-simple-duotone text-xl" />
-        <Link to="/" className="text-2xl font-semibold text-accent flex items-center">
+        {/* <div className="i-ph:sidebar-simple-duotone text-xl" /> */}
+        <Link to="/" className="text-2xl font-semibold text-accent flex items-center ml-8 mb-3">
           {/* Light mode logo (hidden in dark mode) */}
           <img 
             src="/logo-blue.svg" 
