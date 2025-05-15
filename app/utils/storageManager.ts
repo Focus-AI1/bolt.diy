@@ -17,7 +17,7 @@
 // Default settings
 const DEFAULT_SETTINGS = {
   maxSnapshotCount: 20,
-  quotaWarningThreshold: 0.8, // 80% of available space
+  quotaWarningThreshold: 0.7, // 70% of available space
   estimatedQuota: 5 * 1024 * 1024, // 5MB (conservative estimate)
   compressionThreshold: 100 * 1024, // 100KB
 };

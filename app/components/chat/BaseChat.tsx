@@ -659,8 +659,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             
             {!chatStarted && chatMode === 'chat' && (
               <div className="flex flex-col h-full overflow-y-auto">
-                <div id="intro" className="mt-[6vh] mb-8 max-w-[90%] mx-auto text-center px-4 lg:px-0">
-                  <h1 className="text-3xl lg:text-5xl font-bold text-bolt-elements-textPrimary mb-4 animate-fade-in flex items-center justify-center gap-2 flex-wrap lg:flex-nowrap">
+                <div id="intro" className="mt-[6vh] mb-3 max-w-[90%] mx-auto text-center px-4 lg:px-0">
+                  <h1 className="text-3xl lg:text-5xl font-bold text-bolt-elements-textPrimary mb-3 animate-fade-in flex items-center justify-center gap-2 flex-wrap lg:flex-nowrap">
                     <span>Create something in seconds</span>
                     <span className="text-bolt-elements-item-contentAccent">
                       <RotatingText />
@@ -672,7 +672,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
                 
                 {/* Input area positioned between intro and import buttons */}
-                <div className="w-full max-w-chat mx-auto mb-8 px-4 lg:px-0">
+                <div className="w-full max-w-chat mx-auto mb-3 px-4 lg:px-0">
                   <div className={classNames(
                     'bg-bolt-elements-background-depth-2 p-3 rounded-lg border border-bolt-elements-borderColor relative w-full',
                   )}>
@@ -942,10 +942,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 </div>
                 
                 <div id="examples" className="flex flex-col justify-center gap-2 mt-4 pb-4 px-2 sm:px-6">
-                  <div className="hidden sm:flex justify-center gap-2">
+                  {/* <div className="hidden sm:flex justify-center gap-2">
                     {ImportButtons(importChat)}
                     <GitCloneButton importChat={importChat} />
-                  </div>
+                  </div> */}
                   {ExamplePrompts((event, messageInput) => {
                     // Use the authenticated wrapper function directly without conditional check
                     authenticatedSendMessage(event, messageInput);

@@ -17,7 +17,7 @@ export default class AnthropicProvider extends BaseProvider {
       name: 'claude-3-7-sonnet-20250219',
       label: 'Claude 3.7 Sonnet',
       provider: 'Anthropic',
-      maxTokenAllowed: 8000,
+      maxTokenAllowed: 60000,
     },
     {
       name: 'claude-3-5-sonnet-latest',
@@ -35,12 +35,41 @@ export default class AnthropicProvider extends BaseProvider {
       name: 'claude-3-5-haiku-latest',
       label: 'Claude 3.5 Haiku (new)',
       provider: 'Anthropic',
-      maxTokenAllowed: 8000,
+      maxTokenAllowed: 4096,
     },
-    { name: 'claude-3-opus-latest', label: 'Claude 3 Opus', provider: 'Anthropic', maxTokenAllowed: 8000 },
-    { name: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet', provider: 'Anthropic', maxTokenAllowed: 8000 },
-    { name: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku', provider: 'Anthropic', maxTokenAllowed: 8000 },
+    { name: 'claude-3-opus-latest', label: 'Claude 3 Opus', provider: 'Anthropic', maxTokenAllowed: 4096 },
+    { name: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet', provider: 'Anthropic', maxTokenAllowed: 4096 },
+    { name: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku', provider: 'Anthropic', maxTokenAllowed: 4096 },
   ];
+
+  private modelTokenLimits: Record<string, number> = {
+    'claude-3-haiku': 4096,
+    'claude-3.5-haiku': 4096,
+    'claude-3-sonnet': 4096,
+    'claude-3.5-sonnet': 8000,
+    'claude-3-opus': 4096,
+    'claude-3.5-opus': 4096,
+    'claude-3-7-sonnet': 60000,
+  };
+
+  private getModelTokenLimit(modelId: string): number {
+    // First try exact match
+    for (const model of this.staticModels) {
+      if (model.name === modelId) {
+        return model.maxTokenAllowed;
+      }
+    }
+    
+    // Then try prefix match for dynamic models
+    for (const [prefix, limit] of Object.entries(this.modelTokenLimits)) {
+      if (modelId.includes(prefix)) {
+        return limit;
+      }
+    }
+    
+    // Conservative default
+    return 4096;
+  }
 
   async getDynamicModels(
     apiKeys?: Record<string, string>,
@@ -75,7 +104,7 @@ export default class AnthropicProvider extends BaseProvider {
       name: m.id,
       label: `${m.display_name}`,
       provider: this.name,
-      maxTokenAllowed: 32000,
+      maxTokenAllowed: this.getModelTokenLimit(m.id),
     }));
   }
 
@@ -93,6 +122,7 @@ export default class AnthropicProvider extends BaseProvider {
       defaultBaseUrlKey: '',
       defaultApiTokenKey: 'ANTHROPIC_API_KEY',
     });
+    
     const anthropic = createAnthropic({
       apiKey,
     });
