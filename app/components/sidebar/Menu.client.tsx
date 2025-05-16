@@ -755,21 +755,17 @@ export const Menu = () => {
         }}
       >
         {/* Enhanced full height toggle bar with premium design */}
-        <div className="h-full w-[40px] bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-850 border-r border-gray-200 dark:border-gray-700 relative group transition-all duration-300">
-          {/* Subtle vertical accent line */}
-          <div className="absolute top-0 bottom-0 left-[6px] w-[1px] bg-gradient-to-b from-[#01536b]/0 via-[#01536b]/20 to-[#01536b]/0 dark:from-[#01536b]/0 dark:via-[#01536b]/30 dark:to-[#01536b]/0"></div>
+        <div className="h-full w-[40px] bg-gradient-to-b from-gray-50 via-white to-gray-50 dark:from-gray-800 dark:via-gray-850 dark:to-gray-800 border-r border-gray-200 dark:border-gray-700 relative group transition-all duration-300 rounded-tr-2xl rounded-br-2xl shadow-[2px_0px_12px_rgba(0,0,0,0.03)] dark:shadow-[2px_0px_12px_rgba(0,0,0,0.15)] overflow-hidden">
+          {/* Subtle gradient overlay in Focus AI theme colors */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#01536b]/15 via-[#01536b]/5 to-[#01536b]/15 dark:from-[#01536b]/20 dark:via-[#01536b]/8 dark:to-[#01536b]/20 opacity-90 rounded-tr-2xl rounded-br-2xl"></div>
           
-          {/* Secondary subtle accent line */}
-          <div className="absolute top-0 bottom-0 right-[6px] w-[1px] bg-gradient-to-b from-[#01536b]/0 via-[#01536b]/10 to-[#01536b]/0 dark:from-[#01536b]/0 dark:via-[#01536b]/20 dark:to-[#01536b]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+          {/* Sleek gradient */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#01536b]/3 via-transparent to-[#01536b]/3 opacity-50 dark:opacity-60 pointer-events-none rounded-tr-2xl rounded-br-2xl"></div>
           
-          {/* Vertical pattern - subtle dots */}
-          <div className="absolute inset-0 opacity-20 dark:opacity-30 pointer-events-none" 
-               style={{backgroundImage: 'radial-gradient(circle, #01536b 1px, transparent 1px)', backgroundSize: '12px 12px', backgroundPosition: 'center'}}></div>
-          
-          {/* Hover overlay with smooth transition */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#01536b]/0 to-[#01536b]/5 dark:from-[#01536b]/0 dark:to-[#01536b]/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          {/* Enhanced hover overlay with darker gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#01536b]/15 via-[#01536b]/10 to-[#01536b]/20 dark:from-[#01536b]/20 dark:via-[#01536b]/15 dark:to-[#01536b]/25 opacity-0 group-hover:opacity-100 transition-all duration-300 rounded-tr-2xl rounded-br-2xl"></div>
 
-          {/* Center arrow indicator */}
+          {/* Center arrow indicator with improved styling */}
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <motion.div
               animate={{ rotate: open ? 180 : 0 }}
@@ -804,9 +800,18 @@ export const Menu = () => {
             </motion.div>
           </div>
           
-          {/* Visual indicators for top and bottom - subtle bullets */}
-          <div className="absolute top-[20%] left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#01536b]/30 dark:bg-[#01536b]/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100"></div>
-          <div className="absolute bottom-[20%] left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#01536b]/30 dark:bg-[#01536b]/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100"></div>
+          {/* Visual indicators for top and bottom - subtle bullets with glow */}
+          <div className="absolute top-[20%] left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#01536b]/60 dark:bg-[#01536b]/70 shadow-[0_0_4px_rgba(1,83,107,0.4)] opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100"></div>
+          <div className="absolute bottom-[20%] left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#01536b]/60 dark:bg-[#01536b]/70 shadow-[0_0_4px_rgba(1,83,107,0.4)] opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100"></div>
+          
+          {/* Top decorative gradient - stronger */}
+          <div className="absolute top-0 left-0 right-0 h-[150px] bg-gradient-to-b from-[#01536b]/25 to-transparent dark:from-[#01536b]/30 dark:to-transparent opacity-80 pointer-events-none rounded-tr-2xl"></div>
+          
+          {/* Bottom decorative gradient - stronger */}
+          <div className="absolute bottom-0 left-0 right-0 h-[150px] bg-gradient-to-t from-[#01536b]/25 to-transparent dark:from-[#01536b]/30 dark:to-transparent opacity-80 pointer-events-none rounded-br-2xl"></div>
+          
+          {/* Edge glow for floating effect */}
+          <div className="absolute inset-y-0 -right-0.5 w-[3px] bg-gradient-to-r from-[#01536b]/10 to-transparent opacity-70 pointer-events-none rounded-tr-2xl rounded-br-2xl"></div>
         </div>
       </motion.div>
 

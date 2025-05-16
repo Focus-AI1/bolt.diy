@@ -648,7 +648,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       >
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div ref={scrollRef} className="flex flex-col lg:flex-row w-full h-full overflow-hidden">
-          <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full overflow-hidden')}>
+          <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full overflow-hidden ml-7')}>
             {/* Hidden PRDChat component that runs in the background when isPrdModeToggleOn is true */}
             {isPrdModeToggleOn && chatStarted && chatMode === 'chat' && (
               <div className="hidden">
@@ -907,7 +907,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                       "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
                                       "border",
                                       isActive 
-                                        ? "bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border-bolt-elements-item-borderAccent" 
+                                        ? "bg-[#01536b] text-white border-[#01536b]" 
                                         : "bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary border-bolt-elements-borderColor hover:bg-bolt-elements-background-depth-4",
                                       chatStarted ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                                     )}
@@ -976,7 +976,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                 disabled={true}
                               >
                                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                                <span className="ml-0.5 px-0.5 py-0.5 bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-[8px] sm:text-[10px] font-semibold rounded">BETA</span>
+                                <span className="ml-0.5 px-0.5 py-0.5 bg-[#00536B] text-white text-[8px] sm:text-[10px] font-semibold rounded">BETA</span>
                               </button>
                             </Tooltip.Trigger>
                             <Tooltip.Portal>
@@ -1000,7 +1000,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               'text-center', // Center text
                               'truncate', // Prevent text overflow
                               chatMode === mode
-                                ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
+                                ? 'bg-[#01536b] text-white shadow-sm'
                                 : 'bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4 border border-bolt-elements-borderColor'
                             )}
                           >
@@ -1017,7 +1017,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
             )}
             {chatMode === 'chat' ? (
               <StickToBottom
-                className="flex-1 overflow-y-auto pt-2 flex flex-col ml-3"
+                className="flex-1 overflow-y-auto pt-2 flex flex-col"
                 resize="smooth"
                 initial="smooth"
               >
@@ -1029,7 +1029,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           <div className={styles.chatContainer}>
                             <div className="flex flex-col h-full">
                               <div className="flex flex-col flex-1 overflow-hidden">
-                                <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0 sm:px-6 sm:pt-6">
+                                <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0 sm:px-6 sm:pt-6" style={{ paddingRight: '12px' }}>
                                   <Messages
                                     ref={messageRef}
                                     messages={messages}
@@ -1066,7 +1066,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     />
                   )}
                 </div>
-                <div className="w-full max-w-chat mx-auto z-prompt mb-6 flex-shrink-0 relative pl-4">
+                <div className="w-full max-w-chat mx-auto z-prompt mb-6 flex-shrink-0 relative">
                   <ScrollToBottom />
                   <div className="bg-bolt-elements-background-depth-2 mb-4">
                     {actionAlert && (
@@ -1324,7 +1324,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                       "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
                                       "border",
                                       isActive 
-                                        ? "bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border-bolt-elements-item-borderAccent" 
+                                        ? "bg-[#01536b] text-white border-[#01536b]" 
                                         : "bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary border-bolt-elements-borderColor hover:bg-bolt-elements-background-depth-4",
                                       chatStarted ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                                     )}
