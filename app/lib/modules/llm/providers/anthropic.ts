@@ -17,19 +17,19 @@ export default class AnthropicProvider extends BaseProvider {
       name: 'claude-3-7-sonnet-20250219',
       label: 'Claude 3.7 Sonnet',
       provider: 'Anthropic',
-      maxTokenAllowed: 60000,
+      maxTokenAllowed: 64000,
     },
     {
       name: 'claude-3-5-sonnet-latest',
       label: 'Claude 3.5 Sonnet (new)',
       provider: 'Anthropic',
-      maxTokenAllowed: 8000,
+      maxTokenAllowed: 8192,
     },
     {
       name: 'claude-3-5-sonnet-20240620',
       label: 'Claude 3.5 Sonnet (old)',
       provider: 'Anthropic',
-      maxTokenAllowed: 8000,
+      maxTokenAllowed: 8192,
     },
     {
       name: 'claude-3-5-haiku-latest',
@@ -46,10 +46,10 @@ export default class AnthropicProvider extends BaseProvider {
     'claude-3-haiku': 4096,
     'claude-3.5-haiku': 4096,
     'claude-3-sonnet': 4096,
-    'claude-3.5-sonnet': 8000,
+    'claude-3.5-sonnet': 8192,
     'claude-3-opus': 4096,
     'claude-3.5-opus': 4096,
-    'claude-3-7-sonnet': 60000,
+    'claude-3-7-sonnet': 64000,
   };
 
   private getModelTokenLimit(modelId: string): number {
@@ -68,7 +68,7 @@ export default class AnthropicProvider extends BaseProvider {
     }
     
     // Conservative default
-    return 4096;
+    return 8192;
   }
 
   async getDynamicModels(
