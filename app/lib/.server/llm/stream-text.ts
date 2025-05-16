@@ -159,10 +159,15 @@ ${props.summary}
 
   try {
     if (hasMultimodalContent) {
+      /*
+       * For multimodal content, we need to preserve the original array structure
+       * but make sure the roles are valid and content items are properly formatted
+       */
       const multimodalMessages = originalMessages.map((msg) => ({
         role: msg.role === 'system' || msg.role === 'user' || msg.role === 'assistant' ? msg.role : 'user',
         content: Array.isArray(msg.content)
           ? msg.content.map((item) => {
+              // Ensure each content item has the correct format
               if (typeof item === 'string') {
                 return { type: 'text', text: item };
               }
@@ -177,131 +182,97 @@ ${props.summary}
                 }
               }
 
+              // Default fallback for unknown formats
               return { type: 'text', text: String(item || '') };
             })
           : [{ type: 'text', text: typeof msg.content === 'string' ? msg.content : String(msg.content || '') }],
       }));
 
-      logger.debug(`Using multimodal format for streaming with ${modelDetails.name}`);
-      
-      try {
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Stream request timed out')), 60000); // 60-second timeout
-        });
-        
-        const streamPromise = _streamText({
-          model: provider.getModelInstance({
-            model: modelDetails.name,
-            serverEnv,
-            apiKeys,
-            providerSettings,
-          }),
-          system: systemPrompt,
-          maxTokens: dynamicMaxTokens,
-          messages: multimodalMessages as any,
-          ...options,
-        });
-        
-        return await Promise.race([streamPromise, timeoutPromise]) as any;
-      } catch (multimodalError) {
-        logger.warn(`Multimodal streaming failed: ${multimodalError.message}. Falling back to text-only format.`);
-        return await fallbackToTextOnly();
-      }
+      return await _streamText({
+        model: provider.getModelInstance({
+          model: modelDetails.name,
+          serverEnv,
+          apiKeys,
+          providerSettings,
+        }),
+        system: systemPrompt,
+        maxTokens: dynamicMaxTokens,
+        messages: multimodalMessages as any,
+        ...options,
+      });
     } else {
+      // For non-multimodal content, we use the standard approach
       const normalizedTextMessages = processedMessages.map((msg) => ({
         role: msg.role === 'system' || msg.role === 'user' || msg.role === 'assistant' ? msg.role : 'user',
         content: typeof msg.content === 'string' ? msg.content : String(msg.content || ''),
       }));
 
-      logger.debug(`Using standard format for streaming with ${modelDetails.name}`);
-      
-      try {
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Stream request timed out')), 60000); // 60-second timeout
-        });
-        
-        const streamPromise = _streamText({
-          model: provider.getModelInstance({
-            model: modelDetails.name,
-            serverEnv,
-            apiKeys,
-            providerSettings,
-          }),
-          system: systemPrompt,
-          maxTokens: dynamicMaxTokens,
-          messages: convertToCoreMessages(normalizedTextMessages),
-          ...options,
-        });
-        
-        return await Promise.race([streamPromise, timeoutPromise]) as any;
-      } catch (textError) {
-        logger.warn(`Standard streaming failed: ${textError.message}. Attempting recovery.`);
-        return await fallbackToTextOnly();
-      }
+      return await _streamText({
+        model: provider.getModelInstance({
+          model: modelDetails.name,
+          serverEnv,
+          apiKeys,
+          providerSettings,
+        }),
+        system: systemPrompt,
+        maxTokens: dynamicMaxTokens,
+        messages: convertToCoreMessages(normalizedTextMessages),
+        ...options,
+      });
     }
   } catch (error: any) {
+    // Special handling for format errors
     if (error.message && error.message.includes('messages must be an array of CoreMessage or UIMessage')) {
       logger.warn('Message format error detected, attempting recovery with explicit formatting...');
-      return await fallbackToTextOnly();
+
+      // Create properly formatted messages for all cases as a last resort
+      const fallbackMessages = processedMessages.map((msg) => {
+        // Determine text content with careful type handling
+        let textContent = '';
+
+        if (typeof msg.content === 'string') {
+          textContent = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          // Handle array content safely
+          const contentArray = msg.content as any[];
+          textContent = contentArray
+            .map((contentItem) =>
+              typeof contentItem === 'string'
+                ? contentItem
+                : contentItem?.text || contentItem?.image || String(contentItem || ''),
+            )
+            .join(' ');
+        } else {
+          textContent = String(msg.content || '');
+        }
+
+        return {
+          role: msg.role === 'system' || msg.role === 'user' || msg.role === 'assistant' ? msg.role : 'user',
+          content: [
+            {
+              type: 'text',
+              text: textContent,
+            },
+          ],
+        };
+      });
+
+      // Try one more time with the fallback format
+      return await _streamText({
+        model: provider.getModelInstance({
+          model: modelDetails.name,
+          serverEnv,
+          apiKeys,
+          providerSettings,
+        }),
+        system: systemPrompt,
+        maxTokens: dynamicMaxTokens,
+        messages: fallbackMessages as any,
+        ...options,
+      });
     }
 
-    if (error.message && (error.message.includes('rate limit') || error.message.includes('429'))) {
-      logger.warn(`Rate limit error detected: ${error.message}`);
-      throw new Error(`Model provider rate limit reached. Please try again in a few minutes.`);
-    }
-    
-    if (error.message && error.message.toLowerCase().includes('token limit')) {
-      logger.warn(`Token limit error detected: ${error.message}`);
-      throw new Error(`Message exceeds model's token limit. Please reduce the length of your message or try a model with higher token limits.`);
-    }
-
+    // If it's not a format error, re-throw the original error
     throw error;
   }
-  
-  async function fallbackToTextOnly() {
-    const fallbackMessages = processedMessages.map((msg) => {
-      let textContent = '';
-
-      if (typeof msg.content === 'string') {
-        textContent = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        const contentArray = msg.content as any[];
-        textContent = contentArray
-          .map((contentItem) =>
-            typeof contentItem === 'string'
-              ? contentItem
-              : contentItem?.text || contentItem?.image || String(contentItem || ''),
-          )
-          .join(' ');
-      } else {
-        textContent = String(msg.content || '');
-      }
-
-      return {
-        role: msg.role === 'system' || msg.role === 'user' || msg.role === 'assistant' ? msg.role : 'user',
-        content: [
-          {
-            type: 'text',
-            text: textContent,
-          },
-        ],
-      };
-    });
-
-    logger.debug('Using fallback format for streaming as last resort');
-    
-    return await _streamText({
-      model: provider.getModelInstance({
-        model: modelDetails.name,
-        serverEnv,
-        apiKeys,
-        providerSettings,
-      }),
-      system: systemPrompt,
-      maxTokens: dynamicMaxTokens,
-      messages: fallbackMessages as any,
-      ...options,
-    });
-  }
 }
-
