@@ -415,6 +415,7 @@ function CurrentDateTime() {
 export const Menu = () => {
   const { duplicateCurrentChat, exportChat } = useChatHistory();
   const menuRef = useRef<HTMLDivElement>(null);
+  const toggleButtonRef = useRef<HTMLDivElement>(null);
   const [list, setList] = useState<ChatHistoryItem[]>([]);
   const [open, setOpen] = useState(false);
   const [dialogContent, setDialogContent] = useState<DialogContent>(null);
@@ -422,6 +423,12 @@ export const Menu = () => {
   const profile = useStore(profileStore);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+
+  // Defining toggle function at component level for accessibility throughout the component
+  const toggleMenu = () => {
+    console.log('Toggle menu called, current state:', open);
+    setOpen(!open);
+  };
 
   const { filteredItems: filteredList, handleSearchChange } = useSearchFilter({
     items: list,
@@ -628,29 +635,26 @@ export const Menu = () => {
   }, [open, selectionMode]);
 
   useEffect(() => {
-    const enterThreshold = 40;
-    const exitThreshold = 40;
-
-    function onMouseMove(event: MouseEvent) {
-      if (isSettingsOpen) {
+    // Handle clicking outside to close menu
+    function handleClickOutside(event: MouseEvent) {
+      // Don't close if clicking the toggle button itself
+      if (toggleButtonRef.current && toggleButtonRef.current.contains(event.target as Node)) {
+        console.log('Click on toggle button detected, not closing menu');
         return;
       }
-
-      if (event.pageX < enterThreshold) {
-        setOpen(true);
-      }
-
-      if (menuRef.current && event.clientX > menuRef.current.getBoundingClientRect().right + exitThreshold) {
+      
+      // Close if clicking outside the menu when it's open
+      if (open && menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        console.log('Click outside detected, closing menu');
         setOpen(false);
       }
     }
 
-    window.addEventListener('mousemove', onMouseMove);
-
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isSettingsOpen]);
+  }, [open]);
 
   const handleDuplicate = async (id: string) => {
     await duplicateCurrentChat(id);
@@ -723,6 +727,94 @@ export const Menu = () => {
 
   return (
     <>
+      {/* Full-height vertical toggle bar with professional arrow indicator */}
+      <motion.div
+        ref={toggleButtonRef}
+        initial={{ x: 0 }}
+        animate={{ 
+          x: open ? 339 : 0,
+        }}
+        transition={{
+          type: "spring",
+          stiffness: 400,
+          damping: 30
+        }}
+        className="fixed top-0 left-0 h-screen z-[100] cursor-pointer hidden sm:block" /* Hide on mobile, visible on sm and above */
+        onClick={() => {
+          console.log('Menu toggle strip clicked, toggling from', open, 'to', !open);
+          toggleMenu();
+        }}
+        aria-label={open ? "Close sidebar menu" : "Open sidebar menu"}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            toggleMenu();
+            e.preventDefault(); // Prevent scrolling when space is pressed
+          }
+        }}
+      >
+        {/* Enhanced full height toggle bar with premium design */}
+        <div className="h-full w-[40px] bg-gradient-to-b from-gray-50 via-white to-gray-50 dark:from-gray-800 dark:via-gray-850 dark:to-gray-800 border-r border-gray-200 dark:border-gray-700 relative group transition-all duration-300 rounded-tr-2xl rounded-br-2xl shadow-[2px_0px_12px_rgba(0,0,0,0.03)] dark:shadow-[2px_0px_12px_rgba(0,0,0,0.15)] overflow-hidden">
+          {/* Subtle gradient overlay in Focus AI theme colors */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#01536b]/15 via-[#01536b]/5 to-[#01536b]/15 dark:from-[#01536b]/20 dark:via-[#01536b]/8 dark:to-[#01536b]/20 opacity-90 rounded-tr-2xl rounded-br-2xl"></div>
+          
+          {/* Sleek gradient */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#01536b]/3 via-transparent to-[#01536b]/3 opacity-50 dark:opacity-60 pointer-events-none rounded-tr-2xl rounded-br-2xl"></div>
+          
+          {/* Enhanced hover overlay with darker gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[#01536b]/15 via-[#01536b]/10 to-[#01536b]/20 dark:from-[#01536b]/20 dark:via-[#01536b]/15 dark:to-[#01536b]/25 opacity-0 group-hover:opacity-100 transition-all duration-300 rounded-tr-2xl rounded-br-2xl"></div>
+
+          {/* Center arrow indicator with improved styling */}
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <motion.div
+              animate={{ rotate: open ? 180 : 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              className="relative"
+            >
+              {/* Enhanced circular background with subtle glow */}
+              <div className="absolute inset-0 bg-white dark:bg-gray-800 rounded-full shadow-[0_2px_12px_rgba(1,83,107,0.18)] dark:shadow-[0_2px_12px_rgba(1,83,107,0.3)] scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 transition-all duration-300"></div>
+              
+              {/* Premium arrow design with improved contrast */}
+              <div className="relative z-10 w-8 h-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-100 dark:border-gray-700 transition-all duration-300 group-hover:shadow-md">
+                <svg 
+                  width="20" 
+                  height="20" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="text-[#01536b] dark:text-[#01536b] group-hover:text-[#01536b] dark:group-hover:text-[#01536b] transition-colors"
+                >
+                  <path 
+                    d="M10.5 8L14.5 12L10.5 16" 
+                    stroke="currentColor" 
+                    strokeWidth="2.5"
+                    strokeLinecap="round" 
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                
+                {/* Enhanced glow effect on hover */}
+                <div className="absolute inset-0 rounded-full bg-[#01536b]/0 group-hover:bg-[#01536b]/10 transition-all duration-300"></div>
+              </div>
+            </motion.div>
+          </div>
+          
+          {/* Visual indicators for top and bottom - subtle bullets with glow */}
+          <div className="absolute top-[20%] left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#01536b]/60 dark:bg-[#01536b]/70 shadow-[0_0_4px_rgba(1,83,107,0.4)] opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100"></div>
+          <div className="absolute bottom-[20%] left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#01536b]/60 dark:bg-[#01536b]/70 shadow-[0_0_4px_rgba(1,83,107,0.4)] opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100"></div>
+          
+          {/* Top decorative gradient - stronger */}
+          <div className="absolute top-0 left-0 right-0 h-[150px] bg-gradient-to-b from-[#01536b]/25 to-transparent dark:from-[#01536b]/30 dark:to-transparent opacity-80 pointer-events-none rounded-tr-2xl"></div>
+          
+          {/* Bottom decorative gradient - stronger */}
+          <div className="absolute bottom-0 left-0 right-0 h-[150px] bg-gradient-to-t from-[#01536b]/25 to-transparent dark:from-[#01536b]/30 dark:to-transparent opacity-80 pointer-events-none rounded-br-2xl"></div>
+          
+          {/* Edge glow for floating effect */}
+          <div className="absolute inset-y-0 -right-0.5 w-[3px] bg-gradient-to-r from-[#01536b]/10 to-transparent opacity-70 pointer-events-none rounded-tr-2xl rounded-br-2xl"></div>
+        </div>
+      </motion.div>
+
       <motion.div
         ref={menuRef}
         initial="closed"
@@ -734,6 +826,7 @@ export const Menu = () => {
           'bg-white dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800/50',
           'shadow-sm text-sm',
           isSettingsOpen ? 'z-40' : 'z-sidebar',
+          'hidden sm:flex' /* Hide on mobile, display flex on sm breakpoint and above */
         )}
       >
         <div className="h-12 flex items-center justify-between px-4 border-b border-gray-100 dark:border-gray-800/50 bg-gray-50/50 dark:bg-gray-900/50">
@@ -746,7 +839,7 @@ export const Menu = () => {
             <div className="flex gap-2">
               <a
                 href="/"
-                className="flex-1 flex gap-2 items-center bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 rounded-lg px-4 py-2 transition-colors"
+                className="flex-1 flex gap-2 items-center bg-[#01536b]/10 dark:bg-[#01536b]/10 text-[#01536b] dark:text-[#01536b]/90 hover:bg-[#01536b]/20 dark:hover:bg-[#01536b]/20 rounded-lg px-4 py-2 transition-colors"
               >
                 <span className="inline-block i-ph:plus-circle h-4 w-4" />
                 <span className="text-sm font-medium">Start new chat</span>

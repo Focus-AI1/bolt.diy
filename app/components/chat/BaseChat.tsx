@@ -336,6 +336,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [isTicketModeToggleOn, setIsTicketModeToggleOn] = useState(true);
     const [isResearchModeToggleOn, setIsResearchModeToggleOn] = useState(false);
     const showWorkbench = useStore(workbenchStore.showWorkbench);
+    
+    // Set default model to Claude 3.7 Sonnet when component mounts
+    useEffect(() => {
+      if (setModel && setProvider) {
+        // Find Anthropic provider
+        const anthropicProvider = providerList?.find(p => p.name === 'Anthropic');
+        if (anthropicProvider) {
+          setProvider(anthropicProvider);
+          // Set the model to Claude 3.7 Sonnet
+          setModel('claude-3-7-sonnet-20250219');
+        }
+      }
+    }, [providerList, setModel, setProvider]);
 
     useEffect(() => {
       if (data) {
@@ -635,7 +648,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       >
         <ClientOnly>{() => <Menu />}</ClientOnly>
         <div ref={scrollRef} className="flex flex-col lg:flex-row w-full h-full overflow-hidden">
-          <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full overflow-hidden')}>
+          <div className={classNames(styles.Chat, 'flex flex-col flex-grow lg:min-w-[var(--chat-min-width)] h-full overflow-hidden ml-7')}>
             {/* Hidden PRDChat component that runs in the background when isPrdModeToggleOn is true */}
             {isPrdModeToggleOn && chatStarted && chatMode === 'chat' && (
               <div className="hidden">
@@ -863,22 +876,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             disabled={isStreaming}
                           />
                           {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
-                          <IconButton
-                            title="Model Settings"
-                            className={classNames(
-                              'transition-all flex items-center gap-1',
-                              {
-                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                  isModelSettingsCollapsed,
-                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                  !isModelSettingsCollapsed,
-                              })}
-                            onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
-                            disabled={!providerList || providerList.length === 0}
-                          >
-                            <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-                            {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
-                          </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
                           <div className="hidden sm:flex gap-2 items-center">
@@ -910,7 +907,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                       "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
                                       "border",
                                       isActive 
-                                        ? "bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border-bolt-elements-item-borderAccent" 
+                                        ? "bg-[#01536b] text-white border-[#01536b]" 
                                         : "bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary border-bolt-elements-borderColor hover:bg-bolt-elements-background-depth-4",
                                       chatStarted ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                                     )}
@@ -979,7 +976,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                 disabled={true}
                               >
                                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                                <span className="ml-0.5 px-0.5 py-0.5 bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-[8px] sm:text-[10px] font-semibold rounded">BETA</span>
+                                <span className="ml-0.5 px-0.5 py-0.5 bg-[#00536B] text-white text-[8px] sm:text-[10px] font-semibold rounded">BETA</span>
                               </button>
                             </Tooltip.Trigger>
                             <Tooltip.Portal>
@@ -1003,7 +1000,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                               'text-center', // Center text
                               'truncate', // Prevent text overflow
                               chatMode === mode
-                                ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shadow-sm'
+                                ? 'bg-[#01536b] text-white shadow-sm'
                                 : 'bg-bolt-elements-background-depth-2 text-bolt-elements-textSecondary hover:bg-bolt-elements-background-depth-4 border border-bolt-elements-borderColor'
                             )}
                           >
@@ -1032,7 +1029,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           <div className={styles.chatContainer}>
                             <div className="flex flex-col h-full">
                               <div className="flex flex-col flex-1 overflow-hidden">
-                                <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0 sm:px-6 sm:pt-6">
+                                <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0 sm:px-6 sm:pt-6" style={{ paddingRight: '12px' }}>
                                   <Messages
                                     ref={messageRef}
                                     messages={messages}
@@ -1296,22 +1293,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                             disabled={isStreaming}
                           />
                           {chatStarted && <ClientOnly>{() => <ExportChatButton exportChat={exportChat} />}</ClientOnly>}
-                          <IconButton
-                            title="Model Settings"
-                            className={classNames(
-                              'transition-all flex items-center gap-1',
-                              {
-                                'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent':
-                                  isModelSettingsCollapsed,
-                                'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault':
-                                  !isModelSettingsCollapsed,
-                              })}
-                            onClick={() => setIsModelSettingsCollapsed(!isModelSettingsCollapsed)}
-                            disabled={!providerList || providerList.length === 0}
-                          >
-                            <div className={`i-ph:caret-${isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
-                            {isModelSettingsCollapsed ? <span className="text-xs">{model}</span> : <span />}
-                          </IconButton>
                         </div>
                         <div className="flex gap-2 items-center">
                           <div className="hidden sm:flex gap-2 items-center">
@@ -1343,7 +1324,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                                       "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200",
                                       "border",
                                       isActive 
-                                        ? "bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent border-bolt-elements-item-borderAccent" 
+                                        ? "bg-[#01536b] text-white border-[#01536b]" 
                                         : "bg-bolt-elements-background-depth-3 text-bolt-elements-textSecondary border-bolt-elements-borderColor hover:bg-bolt-elements-background-depth-4",
                                       chatStarted ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                                     )}

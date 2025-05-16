@@ -72,6 +72,25 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     const totalMessageContent = messages.reduce((acc, message) => acc + message.content, '');
     logger.debug(`Total message length: ${totalMessageContent.split(' ').length}, words`);
 
+    // Extract model and provider information early
+    const lastUserMessage = messages.filter((x) => x.role == 'user').slice(-1)[0];
+    const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
+    
+    // More complete validation of messages to prevent errors
+    const validatedMessages = messages.map(message => {
+      // Ensure content is always a string
+      const content = typeof message.content === 'string' 
+        ? message.content 
+        : Array.isArray(message.content)
+          ? message.content.map(item => typeof item === 'string' ? item : JSON.stringify(item)).join(' ')
+          : String(message.content || '');
+          
+      // Ensure role is valid
+      const role = ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'user';
+      
+      return { ...message, content, role };
+    });
+
     let lastChunk: string | undefined = undefined;
 
     const dataStream = createDataStream({
@@ -98,29 +117,26 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           // Create a summary of the chat
           console.log(`Messages count: ${messages.length}`);
 
-          summary = await createSummary({
-            messages: [...messages],
-            env: context.cloudflare?.env,
-            apiKeys,
-            providerSettings,
-            promptId,
-            contextOptimization,
-            onFinish(resp) {
-              if (resp.usage) {
-                logger.debug('createSummary token usage', JSON.stringify(resp.usage));
-                cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
-                cumulativeUsage.promptTokens += resp.usage.promptTokens || 0;
-                cumulativeUsage.totalTokens += resp.usage.totalTokens || 0;
-              }
-            },
-          });
-          dataStream.writeData({
-            type: 'progress',
-            label: 'summary',
-            status: 'complete',
-            order: progressCounter++,
-            message: 'Analysis Complete',
-          } satisfies ProgressAnnotation);
+          try {
+            summary = await createSummary({
+              messages: [...messages],
+              env: context.cloudflare?.env,
+              apiKeys,
+              providerSettings,
+              promptId,
+              contextOptimization,
+              onFinish(resp) {
+                if (resp.usage) {
+                  logger.debug('createSummary token usage', JSON.stringify(resp.usage));
+                  cumulativeUsage.completionTokens += resp.usage.completionTokens || 0;
+                  cumulativeUsage.promptTokens += resp.usage.promptTokens || 0;
+                  cumulativeUsage.totalTokens += resp.usage.totalTokens || 0;
+                }
+              },
+            });
+          } catch (error) {
+            logger.warn(`Error creating summary: ${error.message}. Continuing without summary.`);
+          }
 
           dataStream.writeMessageAnnotation({
             type: 'chatSummary',
@@ -183,8 +199,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             order: progressCounter++,
             message: 'Code Files Selected',
           } satisfies ProgressAnnotation);
-
-          // logger.debug('Code Files Selected');
         }
 
         const options: StreamingOptions = {
@@ -277,33 +291,106 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
 
-        const result = await streamText({
-          messages,
-          env: context.cloudflare?.env,
-          options,
-          apiKeys,
-          files,
-          providerSettings,
-          promptId,
-          contextOptimization,
-          contextFiles: filteredFiles,
-          summary,
-          messageSliceId,
-        });
+        // Configure retry logic for resilience
+        let attempts = 0;
+        const maxAttempts = 3;
+        let lastError = null;
+        
+        while (attempts < maxAttempts) {
+          try {
+            const result = await streamText({
+              messages: validatedMessages, // Use the validated messages
+              env: context.cloudflare?.env,
+              options,
+              apiKeys,
+              files,
+              providerSettings,
+              promptId,
+              contextOptimization,
+              contextFiles: filteredFiles,
+              summary,
+              messageSliceId,
+            });
 
-        (async () => {
-          for await (const part of result.fullStream) {
-            if (part.type === 'error') {
-              const error: any = part.error;
-              logger.error(`${error}`);
+            result.mergeIntoDataStream(dataStream);
 
-              return;
+            (async () => {
+              let hasEncounteredError = false;
+              for await (const part of result.fullStream) {
+                if (part.type === 'error') {
+                  const error: any = part.error;
+                  logger.error(`${error}`);
+                  hasEncounteredError = true;
+                  
+                  // Notify the client about the error
+                  dataStream.writeData({
+                    type: 'progress',
+                    label: 'error',
+                    status: 'error',
+                    order: progressCounter++,
+                    message: `Error: ${error.message || 'Unknown error occurred'}`,
+                  } satisfies ProgressAnnotation);
+                  
+                  return;
+                }
+              }
+              
+              // If no errors occurred, mark the response as complete
+              if (!hasEncounteredError) {
+                dataStream.writeData({
+                  type: 'progress',
+                  label: 'response',
+                  status: 'complete',
+                  order: progressCounter++,
+                  message: 'Response Complete',
+                } satisfies ProgressAnnotation);
+              }
+            })();
+            
+            // If we get here without throwing, break the retry loop
+            break;
+          } catch (error) {
+            attempts++;
+            lastError = error;
+            
+            // Only retry on specific errors that might be transient
+            if (error.message && (
+              error.message.includes('timeout') || 
+              error.message.includes('rate limit') || 
+              error.message.includes('429')
+            )) {
+              if (attempts < maxAttempts) {
+                const backoffMs = Math.min(1000 * Math.pow(2, attempts), 8000);
+                logger.warn(`Attempt ${attempts} failed: ${error.message}. Retrying in ${backoffMs}ms...`);
+                
+                // Notify the client we're retrying
+                dataStream.writeData({
+                  type: 'progress',
+                  label: 'retry',
+                  status: 'in-progress',
+                  order: progressCounter++,
+                  message: `Retrying... (${attempts}/${maxAttempts})`,
+                } satisfies ProgressAnnotation);
+                
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+                continue;
+              }
             }
+            
+            // For non-retryable errors or if we've exhausted retries, rethrow
+            throw error;
           }
-        })();
-        result.mergeIntoDataStream(dataStream);
+        }
+        
+        // If we've exhausted retries, throw the last error
+        if (attempts === maxAttempts && lastError) {
+          throw lastError;
+        }
       },
-      onError: (error: any) => `Custom error: ${error.message}`,
+      onError: (error: any) => {
+        logger.error(`Stream error: ${error.message || error}`);
+        return `Error: ${error.message || 'An unknown error occurred'}`;
+      },
     }).pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
@@ -367,3 +454,4 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     });
   }
 }
+

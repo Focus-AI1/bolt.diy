@@ -830,12 +830,12 @@ ${prdData.sections.map((section: PRDSection) => `${section.title}: ${section.con
     <div className={classNames(
       "flex flex-col h-full transition-all duration-200 ease-in-out", // Removed bg color here
       {
-        "mr-[calc(var(--workbench-width)_+_3rem)]": showWorkbench, // Add margin when workbench is open
+        "mr-[calc(var(--workbench-width)_+_1rem)]": showWorkbench, // Add margin when workbench is open
         "hidden": backgroundMode
       }
     )}>
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden ml-10">
         {/* Messages container - Aligned with PRDChat */}
         <div 
           ref={messagesContainerRef}
